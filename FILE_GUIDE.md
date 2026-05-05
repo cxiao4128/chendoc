@@ -203,7 +203,7 @@
 | 文件 | 用途 |
 | --- | --- |
 | `apps/admin/src/pages/admin/App.vue` | 根 Vue 组件，包住整个后台应用。 |
-| `apps/admin/src/pages/admin/AdminLayout.vue` | 管理员文档区主布局，组合桌面/移动 shell 和子路由；`/admin` 默认跳到 `/admin/docs`。 |
+| `apps/admin/src/pages/admin/AdminLayout.vue` | 登录后文档区主布局，组合桌面/移动 shell 和子路由；`/admin` 默认跳到 `/admin/docs`。 |
 | `apps/admin/src/pages/admin/admin-layout.css` | 管理后台主布局样式。 |
 | `apps/admin/src/pages/login/LoginPage.vue` | 登录页面。 |
 | `apps/admin/src/pages/login/login.css` | 登录页面样式。 |
@@ -217,6 +217,8 @@
 | `apps/admin/src/pages/docs/trash.css` | 回收站样式。 |
 | `apps/admin/src/pages/invites/InvitePage.vue` | 邀请码管理页面。 |
 | `apps/admin/src/pages/invites/invite.css` | 邀请码页面样式。 |
+| `apps/admin/src/pages/reviews/ShareReviewPage.vue` | 管理员审核普通用户公开分享申请的页面。 |
+| `apps/admin/src/pages/reviews/share-review.css` | 分享审核页面样式。 |
 | `apps/admin/src/pages/settings/SettingsPage.vue` | 站点基础设置页面。 |
 | `apps/admin/src/pages/settings/settings.css` | 站点设置页面样式。 |
 | `apps/admin/src/pages/settings/SettingsStoragePage.vue` | R2 存储设置页面。 |
