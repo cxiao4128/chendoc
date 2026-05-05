@@ -1,0 +1,21 @@
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 44px 20px;
+  color: var(--cd-muted);
+  text-align: center;
+}
+
+.empty-state svg {
+  color: var(--cd-faint);
+}
+
+.empty-state strong {
+  color: var(--cd-text);
+}
+
+.empty-state p {
+  max-width: 420px;
+  margin: 0;
+}

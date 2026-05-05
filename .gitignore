@@ -1,0 +1,15 @@
+node_modules/
+dist/
+apps/admin/dist/
+server/dist/
+server/public/admin/
+data/
+.env
+.env.local
+.env.*.local
+release/
+*.zip
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

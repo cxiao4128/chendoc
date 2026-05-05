@@ -1,0 +1,86 @@
+.share-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(31, 30, 27, 0.28);
+}
+
+.share-dialog__panel {
+  position: relative;
+  width: min(520px, 100%);
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--cd-shadow);
+  padding: 22px;
+}
+
+.share-dialog__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.share-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.share-dialog p {
+  margin: 0 0 16px;
+  color: var(--cd-muted);
+}
+
+.share-dialog__box {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+.share-dialog__toggle {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  color: var(--cd-text);
+  font-size: 14px;
+}
+
+.share-dialog__toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.share-dialog__box code {
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: 7px;
+  background: var(--cd-surface);
+  padding: 9px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-dialog__box code.is-disabled {
+  color: var(--cd-muted);
+}
+
+.share-dialog__skeleton {
+  height: 42px;
+}
+
+@media (max-width: 620px) {
+  .share-dialog__box {
+    grid-template-columns: 1fr;
+  }
+}

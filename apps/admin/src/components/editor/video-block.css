@@ -1,0 +1,16 @@
+.video-block {
+  margin: 18px 0;
+}
+
+.video-block video {
+  width: 100%;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #111;
+}
+
+.video-block figcaption {
+  margin-top: 6px;
+  color: var(--cd-muted);
+  font-size: 13px;
+}

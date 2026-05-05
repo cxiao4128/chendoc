@@ -1,0 +1,254 @@
+.app-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: var(--cd-sidebar);
+  max-width: 88vw;
+  border-right: 1px solid var(--cd-border);
+  background: #fbfbfc;
+  padding: 18px 12px;
+}
+
+.app-sidebar.is-collapsed {
+  width: 72px;
+}
+
+.app-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 20px;
+}
+
+.app-sidebar__brand button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  border: 1px solid var(--cd-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--cd-muted);
+}
+
+.app-sidebar__mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--cd-accent);
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.app-sidebar__mark img,
+.app-sidebar__account-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.app-sidebar__brand strong,
+.app-sidebar__brand small {
+  display: block;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__brand {
+  justify-content: center;
+  padding: 4px 0 20px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__brand div,
+.app-sidebar.is-collapsed .app-sidebar__nav span,
+.app-sidebar.is-collapsed .app-sidebar__account div,
+.app-sidebar.is-collapsed .app-sidebar__account button span {
+  display: none;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__brand {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__brand button {
+  margin-left: 0;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__nav a {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-sidebar__brand small {
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.app-sidebar__nav {
+  display: grid;
+  gap: 6px;
+}
+
+.app-sidebar__nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 40px;
+  border-radius: 7px;
+  padding: 0 11px;
+  color: var(--cd-muted);
+  font-weight: 650;
+}
+
+.app-sidebar__nav span,
+.app-sidebar__account strong,
+.app-sidebar__account small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar__nav a:hover,
+.app-sidebar__nav a.router-link-active {
+  background: #fff;
+  color: var(--cd-text);
+}
+
+.app-sidebar__account {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px 10px;
+  align-items: center;
+  margin-top: auto;
+  border-top: 1px solid var(--cd-border);
+  padding: 14px 6px 2px;
+}
+
+.app-sidebar__account-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--cd-accent-soft);
+  color: var(--cd-accent);
+  overflow: hidden;
+}
+
+.app-sidebar__account strong,
+.app-sidebar__account small {
+  display: block;
+}
+
+.app-sidebar__account strong {
+  color: var(--cd-text);
+  font-size: 13px;
+}
+
+.app-sidebar__account small {
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.app-sidebar__account button {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--cd-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--cd-muted);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.app-sidebar__account button:hover {
+  border-color: var(--cd-accent);
+  color: var(--cd-text);
+}
+
+.app-sidebar.is-collapsed .app-sidebar__account {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding-inline: 0;
+}
+
+.app-sidebar.is-collapsed .app-sidebar__account button {
+  width: 40px;
+  padding: 0;
+}
+
+.app-sidebar__scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-sidebar {
+    width: min(320px, 86vw);
+    max-width: 320px;
+    box-shadow: 16px 0 36px rgba(31, 35, 41, 0.16);
+    padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
+    transform: translateX(-100%);
+    transition: transform 160ms ease-out;
+  }
+
+  .app-sidebar.is-collapsed {
+    width: min(320px, 86vw);
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar__brand div,
+  .app-sidebar.is-collapsed .app-sidebar__nav span,
+  .app-sidebar.is-collapsed .app-sidebar__account div,
+  .app-sidebar.is-collapsed .app-sidebar__account button span {
+    display: block;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar__brand {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 4px 10px 20px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar__brand button {
+    margin-left: auto;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar__nav a {
+    justify-content: flex-start;
+    padding: 0 11px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar__account {
+    grid-template-columns: 34px 1fr;
+    justify-items: stretch;
+    padding: 14px 6px 2px;
+  }
+
+  .app-sidebar.is-collapsed .app-sidebar__account button {
+    width: auto;
+    padding: 0 12px;
+  }
+
+  .app-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .app-sidebar__scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: block;
+    border: 0;
+    background: rgba(31, 35, 41, 0.24);
+  }
+}

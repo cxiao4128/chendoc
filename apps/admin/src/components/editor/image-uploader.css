@@ -1,0 +1,14 @@
+.image-uploader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.image-uploader input {
+  display: none;
+}
+
+.image-uploader span {
+  color: var(--cd-danger);
+  font-size: 13px;
+}

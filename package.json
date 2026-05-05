@@ -1,0 +1,28 @@
+{
+  "name": "chendoc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ChenDoc / Chen Shu lightweight private documentation system.",
+  "workspaces": [
+    "apps/admin",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:admin\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:admin": "npm --prefix apps/admin run dev",
+    "build": "npm --prefix apps/admin run build && node scripts/copy-admin-dist.js && npm --prefix server run build",
+    "start": "npm --prefix server run start",
+    "test": "npm --workspace @chendoc/server run test",
+    "test:server": "npm --workspace @chendoc/server run test",
+    "db:migrate": "npm --prefix server run db:migrate",
+    "db:backup": "node scripts/backup-sqlite.js",
+    "deploy:preflight": "node scripts/preflight-deploy.js",
+    "admin:init": "npm --prefix server run admin:init",
+    "r2:import": "npm --prefix server run r2:import"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
