@@ -15,10 +15,10 @@ npm start
 
 ## 初始化管理员
 
-管理员账号由 `npm run admin:init` 创建。默认用户名是 `xchen`，也可以通过 `.env` 中的 `DEFAULT_ADMIN_USERNAME` 修改。
+管理员账号由 `npm run admin:init` 创建。默认用户名是 ``，也可以通过 `.env` 中的 `DEFAULT_ADMIN_USERNAME` 修改。
 
 系统不再提供默认管理员密码。生产环境和执行 `npm run admin:init` 前，必须在 `.env` 中设置 `DEFAULT_ADMIN_PASSWORD`。默认要求至少 12 位、同时包含大小写字母、数字和符号的唯一强密码。
-如果必须兼容历史密码，例如 `1314520x`，可以显式设置 `CHENDOC_ALLOW_WEAK_ADMIN_PASSWORD=1` 放行旧密码。
+如果必须兼容历史密码，例如 ``，可以显式设置 `CHENDOC_ALLOW_WEAK_ADMIN_PASSWORD=1` 放行旧密码。
 
 如果管理员账号已经存在，`npm run admin:init` 只会确保账号是 `admin` 且处于启用状态，不会重置已有密码。需要明确轮换或重置管理员密码时再执行：
 
