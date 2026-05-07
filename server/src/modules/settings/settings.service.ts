@@ -1,8 +1,8 @@
 import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { settings } from "../../db/schema.js";
+import { operationLogs, settings, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { createR2Client } from "../../config/r2.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
@@ -86,6 +86,26 @@ export function listSettings(mask = true) {
     encrypted: row.encrypted,
     updatedAt: row.updatedAt
   }));
+}
+
+export function listOperationLogs(limit = 80) {
+  return db
+    .select({
+      id: operationLogs.id,
+      userId: operationLogs.userId,
+      username: users.username,
+      action: operationLogs.action,
+      targetType: operationLogs.targetType,
+      targetId: operationLogs.targetId,
+      ip: operationLogs.ip,
+      userAgent: operationLogs.userAgent,
+      createdAt: operationLogs.createdAt
+    })
+    .from(operationLogs)
+    .leftJoin(users, eq(operationLogs.userId, users.id))
+    .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
+    .limit(limit)
+    .all();
 }
 
 export function getSiteConfig(): SiteConfig {

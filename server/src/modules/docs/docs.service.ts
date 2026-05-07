@@ -3,9 +3,12 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import { docs, docVersions, shares, uploads } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
+import { documentReviewHash } from "../../utils/documentReviewHash.js";
 import { sanitizeDocumentHtml } from "../../utils/sanitize.js";
 
 type Actor = { id: number; role: "admin" | "user" };
+const VERSION_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_DOC_VERSIONS = 50;
 
 const docCreateSchema = z.object({
   title: z.string().trim().min(1).max(160),
@@ -46,12 +49,75 @@ function normalizeDocRecord<T extends { status: "draft" | "published" | "archive
   return { ...doc, status: normalizeDocStatus(doc.status) };
 }
 
+function safeShareRecord(share: typeof shares.$inferSelect | undefined | null) {
+  if (!share) return null;
+  return {
+    id: share.id,
+    docId: share.docId,
+    shareCode: share.shareCode,
+    customSlug: share.customSlug,
+    isEnabled: share.isEnabled,
+    reviewStatus: share.reviewStatus,
+    reviewNote: share.reviewNote,
+    reviewContentHash: share.reviewContentHash,
+    requestedBy: share.requestedBy,
+    reviewedBy: share.reviewedBy,
+    reviewedAt: share.reviewedAt,
+    hasPassword: !!share.passwordHash,
+    viewCount: share.viewCount,
+    expireAt: share.expireAt,
+    createdAt: share.createdAt,
+    updatedAt: share.updatedAt
+  };
+}
+
+function shouldCreateVersion(docId: number, current: { title: string; contentJson: string; contentHtml: string }, next: { title?: string; contentJson?: string; contentHtml?: string }) {
+  const titleChanged = next.title !== undefined && next.title !== current.title;
+  const jsonChanged = next.contentJson !== undefined && next.contentJson !== current.contentJson;
+  const htmlChanged = next.contentHtml !== undefined && next.contentHtml !== current.contentHtml;
+  if (!titleChanged && !jsonChanged && !htmlChanged) return false;
+
+  const latest = db
+    .select({ createdAt: docVersions.createdAt })
+    .from(docVersions)
+    .where(eq(docVersions.docId, docId))
+    .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
+    .limit(1)
+    .get();
+  if (!latest) return true;
+  return Date.now() - latest.createdAt.getTime() >= VERSION_SNAPSHOT_INTERVAL_MS;
+}
+
+function pruneDocVersions(docId: number) {
+  db.delete(docVersions)
+    .where(sql`${docVersions.id} in (
+      select id from doc_versions
+      where doc_id = ${docId}
+      order by created_at desc, id desc
+      limit -1 offset ${MAX_DOC_VERSIONS}
+    )`)
+    .run();
+}
+
+function createVersionSnapshot(docId: number, current: { title: string; contentJson: string; contentHtml: string }, userId: number) {
+  db.insert(docVersions).values({
+    docId,
+    title: current.title,
+    contentJson: current.contentJson,
+    contentHtml: current.contentHtml,
+    createdBy: userId,
+    createdAt: now()
+  }).run();
+  pruneDocVersions(docId);
+}
+
 function listSelect() {
   return {
     id: docs.id,
     spaceId: docs.spaceId,
     parentId: docs.parentId,
     title: docs.title,
+    summary: docs.summary,
     status: docs.status,
     pinned: docs.pinned,
     sort: docs.sort,
@@ -142,7 +208,7 @@ export function getDoc(id: number, actor?: Actor) {
   if (!doc) throw new Error("文档不存在");
   assertCanAccessDoc(actor, doc);
   const share = db.select().from(shares).where(eq(shares.docId, doc.id)).limit(1).get();
-  return { ...normalizeDocRecord(doc), share };
+  return { ...normalizeDocRecord(doc), share: safeShareRecord(share) };
 }
 
 export function updateDoc(id: number, userId: number, input: unknown, actor?: Actor) {
@@ -154,16 +220,13 @@ export function updateDoc(id: number, userId: number, input: unknown, actor?: Ac
       ? body.contentJson
       : JSON.stringify(body.contentJson);
   const contentHtml = body.contentHtml === undefined ? undefined : sanitizeDocumentHtml(body.contentHtml);
+  const titleChanged = body.title !== undefined && body.title !== current.title;
+  const jsonChanged = contentJson !== undefined && contentJson !== current.contentJson;
+  const htmlChanged = contentHtml !== undefined && contentHtml !== current.contentHtml;
+  const reviewRelevantChanged = titleChanged || jsonChanged || htmlChanged;
 
-  if (contentJson !== undefined || contentHtml !== undefined || body.title !== undefined) {
-    db.insert(docVersions).values({
-      docId: id,
-      title: current.title,
-      contentJson: current.contentJson,
-      contentHtml: current.contentHtml,
-      createdBy: userId,
-      createdAt: now()
-    }).run();
+  if (shouldCreateVersion(id, current, { title: body.title, contentJson, contentHtml })) {
+    createVersionSnapshot(id, current, userId);
   }
 
   const patch: Partial<typeof docs.$inferInsert> = {
@@ -181,11 +244,16 @@ export function updateDoc(id: number, userId: number, input: unknown, actor?: Ac
   if (body.sort !== undefined) patch.sort = body.sort;
 
   db.update(docs).set(patch).where(eq(docs.id, id)).run();
-  if (actor?.role === "user" && (contentJson !== undefined || contentHtml !== undefined || body.title !== undefined)) {
+  if (actor?.role === "user" && reviewRelevantChanged) {
     db.update(shares).set({
       isEnabled: false,
       reviewStatus: "pending",
       reviewNote: null,
+      reviewContentHash: documentReviewHash({
+        title: body.title ?? current.title,
+        contentJson: contentJson ?? current.contentJson,
+        contentHtml: contentHtml ?? current.contentHtml
+      }),
       requestedBy: userId,
       reviewedBy: null,
       reviewedAt: null,
@@ -206,6 +274,8 @@ export function restoreDoc(id: number, userId: number) {
 }
 
 export function hardDeleteDoc(id: number) {
+  const existing = db.select({ id: docs.id }).from(docs).where(eq(docs.id, id)).limit(1).get();
+  if (!existing) throw new Error("文档不存在");
   db.transaction((tx) => {
     tx.delete(shares).where(eq(shares.docId, id)).run();
     tx.delete(docVersions).where(eq(docVersions.docId, id)).run();
@@ -231,13 +301,13 @@ export function listDocVersions(docId: number, actor?: Actor) {
     })
     .from(docVersions)
     .where(eq(docVersions.docId, docId))
-    .orderBy(desc(docVersions.createdAt))
+    .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
     .limit(50)
     .all();
 }
 
 export function restoreDocVersion(docId: number, versionId: number, userId: number, actor?: Actor) {
-  getDoc(docId, actor);
+  const current = getDoc(docId, actor);
   const version = db
     .select()
     .from(docVersions)
@@ -245,6 +315,7 @@ export function restoreDocVersion(docId: number, versionId: number, userId: numb
     .limit(1)
     .get();
   if (!version) throw new Error("版本不存在");
+  createVersionSnapshot(docId, current, userId);
   db.update(docs).set({
     title: version.title,
     contentJson: version.contentJson,
@@ -257,6 +328,7 @@ export function restoreDocVersion(docId: number, versionId: number, userId: numb
       isEnabled: false,
       reviewStatus: "pending",
       reviewNote: null,
+      reviewContentHash: documentReviewHash(version),
       requestedBy: userId,
       reviewedBy: null,
       reviewedAt: null,

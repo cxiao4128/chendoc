@@ -25,6 +25,7 @@ const username = ref("");
 const password = ref("");
 const captchaCode = ref("");
 const captchaId = ref("");
+const captchaInput = ref<{ refresh: () => Promise<void> } | null>(null);
 const remember = ref(true);
 const showPassword = ref(false);
 const loading = ref(false);
@@ -33,8 +34,8 @@ const usernameIntent = ref(false);
 const site = reactive({
   brandName: "陈书",
   shortName: "陈书",
-  logoUrl: defaultRemoteLogoUrl,
-  authWallpaperUrl: defaultRemoteWallpaperUrl,
+  logoUrl: bundledLogoUrl,
+  authWallpaperUrl: bundledWallpaperUrl,
   preferRemoteLogo: false,
   preferRemoteWallpaper: false,
   copyright: "Copyright © 2026 陈书. All rights reserved"
@@ -80,6 +81,7 @@ async function submit() {
     await router.push(String(route.query.redirect || "/admin/docs"));
   } catch (err) {
     error.value = err instanceof Error ? err.message : "登录失败，请检查账号或密码";
+    if (!shouldHideCaptcha.value) await (captchaInput.value?.refresh() ?? Promise.resolve()).catch(() => undefined);
   } finally {
     password.value = "";
     loading.value = false;
@@ -101,6 +103,7 @@ onMounted(async () => {
 
 <template>
   <main class="login-page" :style="authStyle">
+    <img class="login-page__wallpaper" :src="effectiveWallpaperUrl" alt="" fetchpriority="high" decoding="async" />
     <header class="auth-topbar">
       <RouterLink class="auth-brand" to="/login">
         <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" />
@@ -161,7 +164,7 @@ onMounted(async () => {
         </label>
 
         <template v-if="!shouldHideCaptcha">
-          <CaptchaInput v-model:code="captchaCode" v-model:captcha-id="captchaId" />
+          <CaptchaInput ref="captchaInput" v-model:code="captchaCode" v-model:captcha-id="captchaId" />
         </template>
         <p v-else class="auth-captcha-note is-admin">欢迎你小陈</p>
 

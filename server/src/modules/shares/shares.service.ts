@@ -6,6 +6,7 @@ import { db } from "../../db/client.js";
 import { docs, shares, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { now } from "../../utils/date.js";
+import { documentReviewHash } from "../../utils/documentReviewHash.js";
 import { hashPassword, verifyPassword } from "../../utils/password.js";
 
 type Actor = { id: number; role: "admin" | "user" };
@@ -93,6 +94,8 @@ function docWithOwner(docId: number) {
     .select({
       id: docs.id,
       title: docs.title,
+      contentJson: docs.contentJson,
+      contentHtml: docs.contentHtml,
       createdBy: docs.createdBy,
       deletedAt: docs.deletedAt,
       ownerRole: users.role,
@@ -141,6 +144,7 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
 
   const isAdminDoc = !userOwned;
   const isAdminApprovingUserDoc = userOwned && actor.role === "admin";
+  const reviewContentHash = userOwned ? documentReviewHash(doc) : null;
   const createdAt = now();
   const result = db.insert(shares).values({
     docId,
@@ -150,6 +154,7 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
     isEnabled: isAdminDoc || isAdminApprovingUserDoc ? body.isEnabled ?? false : false,
     reviewStatus: isAdminDoc || isAdminApprovingUserDoc ? "approved" : "pending",
     reviewNote: null,
+    reviewContentHash,
     requestedBy: userOwned ? doc.createdBy ?? actor.id : null,
     reviewedBy: isAdminApprovingUserDoc ? actor.id : null,
     reviewedAt: isAdminApprovingUserDoc ? createdAt : null,
@@ -178,9 +183,13 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
       if (body.isEnabled && current.reviewStatus === "approved") {
         patch.isEnabled = true;
       } else if (body.isEnabled) {
+        if (current.reviewStatus === "rejected" && current.reviewContentHash === documentReviewHash(doc)) {
+          throw new Error("未通过文档需更新内容后才可再次提交");
+        }
         patch.isEnabled = false;
         patch.reviewStatus = "pending";
         patch.reviewNote = null;
+        patch.reviewContentHash = documentReviewHash(doc);
         patch.requestedBy = actor.id;
         patch.reviewedBy = null;
         patch.reviewedAt = null;
@@ -201,6 +210,7 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
     if (userOwned && body.isEnabled) {
       patch.reviewStatus = "approved";
       patch.reviewNote = null;
+      patch.reviewContentHash = documentReviewHash(doc);
       patch.reviewedBy = actor.id;
       patch.reviewedAt = now();
     }
@@ -229,6 +239,7 @@ export function adminSharePayload(share: typeof shares.$inferSelect) {
     isEnabled: share.isEnabled,
     reviewStatus: share.reviewStatus,
     reviewNote: share.reviewNote,
+    reviewContentHash: share.reviewContentHash,
     requestedBy: share.requestedBy,
     reviewedBy: share.reviewedBy,
     reviewedAt: share.reviewedAt,
@@ -279,11 +290,13 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
   const body = reviewShareSchema.parse(input);
   const { share: current, doc } = shareWithDoc(id);
   if (!isUserOwnedDoc(doc)) throw new Error("管理员文档不需要审核");
+  if (current.reviewStatus !== "pending") throw new Error("只能审核待审核文档");
 
   const patch: Partial<typeof shares.$inferInsert> = {
     reviewStatus: body.action === "approve" ? "approved" : "rejected",
     isEnabled: body.action === "approve",
     reviewNote: body.note ?? null,
+    reviewContentHash: documentReviewHash(doc),
     reviewedBy: adminId,
     reviewedAt: now(),
     updatedAt: now()

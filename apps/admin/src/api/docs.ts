@@ -5,6 +5,7 @@ export interface DocSummary {
   spaceId: number | null;
   parentId: number | null;
   title: string;
+  summary?: string | null;
   status: "draft" | "published" | "archived";
   pinned?: boolean;
   sort: number;

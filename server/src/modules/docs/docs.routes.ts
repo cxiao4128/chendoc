@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import {
   createDoc,
   getDoc,
@@ -26,7 +27,17 @@ export async function docsRoutes(app: FastifyInstance) {
     const query = z.object({ q: z.string().optional() }).parse(request.query);
     return { docs: listDocs(request.user!, query.q) };
   });
-  app.post("/api/docs", { preHandler: authenticate }, async (request) => ({ doc: createDoc(request.user!.id, request.body) }));
+  app.post("/api/docs", { preHandler: authenticate }, async (request) => {
+    const doc = createDoc(request.user!.id, request.body);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.create",
+      targetType: "doc",
+      targetId: doc.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { doc };
+  });
   app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async () => ({ docs: listTrashDocs() }));
   app.get("/api/docs/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
@@ -39,20 +50,50 @@ export async function docsRoutes(app: FastifyInstance) {
   app.delete("/api/docs/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     softDeleteDoc(params.id, request.user!.id, request.user!);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.soft_delete",
+      targetType: "doc",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
     return { ok: true };
   });
   app.post("/api/admin/docs/:id/restore", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { doc: restoreDoc(params.id, request.user!.id) };
+    const doc = restoreDoc(params.id, request.user!.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.restore",
+      targetType: "doc",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { doc };
   });
   app.delete("/api/admin/docs/:id/hard", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     hardDeleteDoc(params.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.hard_delete",
+      targetType: "doc",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
     return { ok: true };
   });
   app.post("/api/docs/:id/publish", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { doc: publishDoc(params.id, request.user!.id) };
+    const doc = publishDoc(params.id, request.user!.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.publish",
+      targetType: "doc",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { doc };
   });
   app.get("/api/docs/:id/versions", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
@@ -63,6 +104,14 @@ export async function docsRoutes(app: FastifyInstance) {
       id: z.coerce.number().int().positive(),
       versionId: z.coerce.number().int().positive()
     }).parse(request.params);
-    return { doc: restoreDocVersion(params.id, params.versionId, request.user!.id, request.user!) };
+    const doc = restoreDocVersion(params.id, params.versionId, request.user!.id, request.user!);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.version.restore",
+      targetType: "doc",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { doc };
   });
 }

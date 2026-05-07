@@ -8,6 +8,7 @@ interface CachedServerKey {
 interface AuthSession {
   sessionId: string;
   sessionKey: string;
+  expireAt: number;
 }
 
 export interface ResponseDecryptor {
@@ -24,6 +25,26 @@ interface EncryptedResponseEnvelope {
 let cachedPublicKeyResponse: PublicKeyResponse | null = null;
 let cachedServerKey: CachedServerKey | null = null;
 let authSession: AuthSession | null = null;
+const AUTH_SESSION_STORAGE_KEY = "chendoc_auth_session";
+const PERSISTED_SESSION_MS = 2 * 60 * 60 * 1000;
+
+function loadStoredAuthSession() {
+  if (authSession) return authSession;
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as AuthSession;
+    if (!stored.sessionId || !stored.sessionKey || stored.expireAt <= Date.now()) {
+      localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+      return null;
+    }
+    authSession = stored;
+    return authSession;
+  } catch {
+    localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+    return null;
+  }
+}
 
 function pemToArrayBuffer(pem: string) {
   const base64 = pem
@@ -147,35 +168,42 @@ export async function createEncryptedPayload(payload: unknown) {
 }
 
 export function setAuthSession(sessionId: string, sessionKey: string) {
-  authSession = { sessionId, sessionKey };
+  authSession = { sessionId, sessionKey, expireAt: Date.now() + PERSISTED_SESSION_MS };
+  try {
+    localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(authSession));
+  } catch {
+    // Keep the in-memory session if the browser blocks persistent storage.
+  }
 }
 
 export function clearAuthSession() {
   authSession = null;
+  localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
 }
 
 export function getSessionId() {
-  return authSession?.sessionId || "";
+  return loadStoredAuthSession()?.sessionId || "";
 }
 
 export async function createEncryptedAuthorization() {
-  if (!authSession) return "";
+  const session = loadStoredAuthSession();
+  if (!session) return "";
 
-  const keyBytes = new Uint8Array(base64ToArrayBuffer(authSession.sessionKey));
+  const keyBytes = new Uint8Array(base64ToArrayBuffer(session.sessionKey));
   const nonce = crypto.getRandomValues(new Uint8Array(16));
   const aesKey = await importAesKey(keyBytes, ["encrypt"]);
   const payload = {
-    sid: authSession.sessionId,
+    sid: session.sessionId,
     t: Date.now()
   };
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: await deriveAuthIv(keyBytes, authSession.sessionId, nonce), tagLength: 128 },
+    { name: "AES-GCM", iv: await deriveAuthIv(keyBytes, session.sessionId, nonce), tagLength: 128 },
     aesKey,
     new TextEncoder().encode(JSON.stringify(payload))
   );
   const packed = concatBytes(
     new Uint8Array([1]),
-    uuidToBytes(authSession.sessionId),
+    uuidToBytes(session.sessionId),
     nonce,
     new Uint8Array(ciphertext)
   );

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
-import { ArrowLeft, BookOpen, Copy, ExternalLink, Link2, PanelRightOpen, RotateCcw, Trash2, X } from "lucide-vue-next";
+import { ArrowLeft, BookOpen, Copy, ExternalLink, Link2, PanelRightOpen, RefreshCw, RotateCcw, Trash2, X } from "lucide-vue-next";
 import ChendocEditor from "../../components/editor/ChendocEditor.vue";
 import DocTree from "../../components/docs/DocTree.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
@@ -17,6 +17,10 @@ interface TocItem {
   text: string;
   level: 1 | 2 | 3;
 }
+
+type DocStoreCompat = {
+  detailError?: unknown;
+};
 
 const route = useRoute();
 const router = useRouter();
@@ -45,6 +49,8 @@ const shareStatus = ref("");
 const shareHasPassword = ref(false);
 const sharePanelOpen = ref(false);
 const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions">(null);
+const localDetailError = ref("");
+const saveError = ref("");
 let saveInterval: number | undefined;
 let shareSaveTimer: number | undefined;
 let saving = false;
@@ -52,8 +58,10 @@ let queuedWhileSaving = false;
 let syncingShare = false;
 
 const docId = computed(() => Number(route.params.id));
-const current = computed(() => docs.current);
+const current = computed(() => docs.current?.id === docId.value ? docs.current : null);
 const editorKey = computed(() => `${current.value?.id || 0}-${editorRefresh.value}`);
+const detailErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).detailError) || localDetailError.value);
+const saveErrorText = computed(() => saveError.value || "保存失败，当前编辑内容仍保留在本地。");
 const shareUrl = computed(() => {
   if (!share.value?.isEnabled) return "";
   return `${location.origin}/r/${share.value.customSlug || share.value.shareCode}`;
@@ -91,6 +99,23 @@ const mobileDocBadge = computed(() => {
 });
 const currentStatusText = computed(() => current.value?.status === "published" ? "已发布" : "草稿");
 
+function normalizeError(error: unknown) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && "value" in error) return normalizeError((error as { value: unknown }).value);
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string") {
+    return String((error as { message: string }).message);
+  }
+  return "操作失败，请稍后重试。";
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : typeof error === "object" && !!error && "name" in error && (error as { name?: unknown }).name === "AbortError";
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
@@ -98,6 +123,7 @@ function formatDate(value: string) {
 function markDirty() {
   if (hydrating.value || !current.value) return;
   dirty.value = true;
+  saveError.value = "";
   saveState.value = "pending";
 }
 
@@ -119,22 +145,56 @@ async function loadVersions(docIdValue: number) {
   versions.value = response.versions;
 }
 
+async function loadEditorList() {
+  try {
+    await docs.loadList();
+  } catch {
+    // The editor can still load the requested document if the side list fails.
+  }
+}
+
+async function loadRelatedDocData(docIdValue: number) {
+  const [shareResult, versionsResult] = await Promise.allSettled([loadShare(docIdValue), loadVersions(docIdValue)]);
+  if (shareResult.status === "rejected") {
+    share.value = null;
+    shareStatus.value = "分享信息加载失败，可稍后重试。";
+  }
+  if (versionsResult.status === "rejected") {
+    versions.value = [];
+  }
+}
+
 async function load() {
+  const requestedDocId = docId.value;
   share.value = null;
   sharePanelOpen.value = false;
   copied.value = false;
   toc.value = [];
   versions.value = [];
   mobileSheet.value = null;
+  localDetailError.value = "";
+  saveError.value = "";
   hydrating.value = true;
-  await docs.loadList();
-  const doc = await docs.loadDoc(docId.value);
-  title.value = doc.title;
-  draft.value = null;
-  dirty.value = false;
-  saveState.value = "idle";
-  await Promise.all([loadShare(doc.id), loadVersions(doc.id)]);
-  hydrating.value = false;
+  void loadEditorList();
+  try {
+    const doc = await docs.loadDoc(requestedDocId);
+    if (requestedDocId !== docId.value) return;
+    title.value = doc.title;
+    draft.value = null;
+    dirty.value = false;
+    saveState.value = "idle";
+    await loadRelatedDocData(doc.id);
+  } catch (error) {
+    if (!isAbortError(error) && requestedDocId === docId.value) {
+      localDetailError.value = normalizeError(error) || "文档详情加载失败，请稍后重试。";
+    }
+  } finally {
+    if (requestedDocId === docId.value) hydrating.value = false;
+  }
+}
+
+function retryLoadDetail() {
+  void load();
 }
 
 async function createDoc() {
@@ -158,27 +218,62 @@ function onEditorChange(payload: { contentJson: string; contentHtml: string }) {
 
 async function save() {
   if (!current.value || saving || !dirty.value) return;
+  const targetDocId = current.value.id;
+  const titleSnapshot = title.value;
+  const draftSnapshot = draft.value;
   saving = true;
   saveState.value = "saving";
+  saveError.value = "";
   try {
-    await docs.saveDoc(current.value.id, {
-      title: title.value.trim() || "未命名文档",
-      ...(draft.value ?? {})
+    await docs.saveDoc(targetDocId, {
+      title: titleSnapshot.trim() || "未命名文档",
+      ...(draftSnapshot ?? {})
     });
     savedAt.value = new Date().toLocaleTimeString();
-    draft.value = null;
-    dirty.value = false;
-    saveState.value = "saved";
-    void loadVersions(current.value.id);
-  } catch {
+    if (current.value?.id === targetDocId && title.value === titleSnapshot && draft.value === draftSnapshot) {
+      draft.value = null;
+      dirty.value = false;
+      saveState.value = "saved";
+    } else if (current.value?.id === targetDocId) {
+      dirty.value = true;
+      saveState.value = "pending";
+    }
+    void loadVersions(targetDocId);
+  } catch (error) {
+    saveError.value = normalizeError(error) || "保存失败，请检查网络后重试。";
+    dirty.value = true;
     saveState.value = "error";
   } finally {
     saving = false;
-    if (queuedWhileSaving) {
-      queuedWhileSaving = false;
-      markDirty();
-    }
+    const shouldDrainQueuedSave = queuedWhileSaving && saveState.value !== "error";
+    queuedWhileSaving = false;
+    if (shouldDrainQueuedSave && dirty.value) void save();
   }
+}
+
+function retrySave() {
+  void save();
+}
+
+function waitForCurrentSave() {
+  return new Promise<void>((resolve) => {
+    const check = () => {
+      if (!saving) {
+        resolve();
+        return;
+      }
+      window.setTimeout(check, 50);
+    };
+    check();
+  });
+}
+
+async function flushPendingSave() {
+  if (saving) {
+    queuedWhileSaving = true;
+    await waitForCurrentSave();
+  }
+  if (dirty.value) await save();
 }
 
 async function ensureShare() {
@@ -189,7 +284,7 @@ async function ensureShare() {
   return created.share;
 }
 
-async function saveShare(passwordConfirmed = false) {
+async function saveShare(passwordConfirmed = false, clearPassword = false) {
   if (!current.value) return;
   shareLoading.value = true;
   try {
@@ -197,9 +292,10 @@ async function saveShare(passwordConfirmed = false) {
     if (!target) return;
     const patch: SharePatch = {
       isEnabled: shareEnabled.value,
-      expireAt: null,
-      password: passwordConfirmed && sharePassword.value.trim() ? sharePassword.value.trim() : null
+      expireAt: null
     };
+    if (passwordConfirmed && sharePassword.value.trim()) patch.password = sharePassword.value.trim();
+    if (clearPassword) patch.password = null;
     if (auth.isAdmin) {
       patch.customSlug = shareSlug.value.trim() || null;
       const shareCode = Number(shareCodeInput.value.trim());
@@ -231,7 +327,7 @@ async function saveShare(passwordConfirmed = false) {
 function confirmSharePassword() {
   if (!sharePassword.value.trim()) {
     shareStatus.value = "密码为空，当前按无密码分享";
-    void saveShare(false);
+    void saveShare(false, true);
     return;
   }
   void saveShare(true);
@@ -239,7 +335,7 @@ function confirmSharePassword() {
 
 function clearSharePassword() {
   sharePassword.value = "";
-  void saveShare(false);
+  void saveShare(false, true);
 }
 
 function onPasswordInput() {
@@ -277,7 +373,14 @@ async function copyShare() {
 
 async function restoreVersion(version: DocVersion) {
   if (!current.value) return;
-  await save();
+  if (dirty.value || saving) {
+    await flushPendingSave();
+    if (dirty.value) {
+      saveError.value = saveError.value || "当前内容还没有保存成功，保存后再恢复历史版本。";
+      saveState.value = "error";
+      return;
+    }
+  }
   await restoreDocVersionApi(current.value.id, version.id);
   await docs.loadDoc(current.value.id);
   const doc = docs.current;
@@ -326,14 +429,15 @@ onMounted(() => {
   window.addEventListener("beforeunload", beforeUnload);
 });
 
-onBeforeRouteLeave((_to, _from, next) => {
-  if (!dirty.value) {
+onBeforeRouteLeave(async (_to, _from, next) => {
+  if (!dirty.value && !saving) {
     next();
     return;
   }
   if (window.confirm("当前文档还有未保存内容，确定离开吗？")) {
-    void save();
-    next();
+    await flushPendingSave();
+    if (dirty.value) next(false);
+    else next();
   } else {
     next(false);
   }
@@ -367,6 +471,12 @@ onBeforeUnmount(() => {
         <span class="cd-skeleton" />
       </div>
 
+      <div v-else-if="detailErrorText" class="doc-editor-page__error is-mobile">
+        <strong>文档详情加载失败</strong>
+        <p>{{ detailErrorText }}</p>
+        <button class="cd-button primary" type="button" @click="retryLoadDetail"><RefreshCw :size="16" />重试</button>
+      </div>
+
       <template v-else-if="current">
         <section class="doc-editor-page__mobile-summary">
           <input v-model="title" class="doc-editor-page__mobile-title" aria-label="文档标题" />
@@ -375,6 +485,13 @@ onBeforeUnmount(() => {
             <span>{{ currentStatusText }}</span>
           </div>
         </section>
+
+        <div v-if="saveState === 'error'" class="doc-editor-page__save-error is-mobile">
+          <span>{{ saveErrorText }}</span>
+          <button class="cd-button primary" type="button" :disabled="saveState === 'saving' || !dirty" @click="retrySave">
+            <RefreshCw :size="16" />重试保存
+          </button>
+        </div>
 
         <div class="doc-editor-page__mobile-actions">
           <button type="button" @click="mobileSheet = 'docs'">
@@ -540,6 +657,12 @@ onBeforeUnmount(() => {
           <span class="cd-skeleton" />
         </div>
 
+        <div v-else-if="detailErrorText" class="doc-editor-page__error">
+          <strong>文档详情加载失败</strong>
+          <p>{{ detailErrorText }}</p>
+          <button class="cd-button primary" type="button" @click="retryLoadDetail"><RefreshCw :size="16" />重试</button>
+        </div>
+
         <template v-else-if="current">
           <header class="doc-editor-page__bar">
             <input v-model="title" class="doc-editor-page__title" aria-label="文档标题" />
@@ -557,6 +680,13 @@ onBeforeUnmount(() => {
               <Trash2 :size="16" />删除
             </button>
           </header>
+
+          <div v-if="saveState === 'error'" class="doc-editor-page__save-error">
+            <span>{{ saveErrorText }}</span>
+            <button class="cd-button primary" type="button" :disabled="saveState === 'saving' || !dirty" @click="retrySave">
+              <RefreshCw :size="16" />重试保存
+            </button>
+          </div>
 
           <div class="doc-editor-page__body" :class="{ 'has-aside': sharePanelOpen }">
             <div class="doc-editor-page__canvas">

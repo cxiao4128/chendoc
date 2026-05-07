@@ -60,12 +60,13 @@ export async function login(input: unknown) {
   const body = parseEncryptedJson(input, loginPayloadSchema);
   const password = body.password;
   const user = db.select().from(users).where(eq(users.username, body.username)).limit(1).get();
+  const shouldSkipCaptcha = user ? canSkipLoginCaptcha(user) : false;
 
-  if (!user || user.status !== "active" || !(await verifyPassword(password, user.passwordHash))) {
+  if (!shouldSkipCaptcha && (!body.captchaId || !body.captchaCode || !verifyCaptcha(body.captchaId, body.captchaCode))) {
     throw new Error("登录失败，请检查账号、密码或验证码");
   }
 
-  if (!canSkipLoginCaptcha(user) && (!body.captchaId || !body.captchaCode || !verifyCaptcha(body.captchaId, body.captchaCode))) {
+  if (!user || user.status !== "active" || !(await verifyPassword(password, user.passwordHash))) {
     throw new Error("登录失败，请检查账号、密码或验证码");
   }
 

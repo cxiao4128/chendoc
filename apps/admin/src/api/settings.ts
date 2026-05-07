@@ -20,12 +20,28 @@ export interface SiteConfigView {
   copyright: string;
 }
 
+export interface OperationLogView {
+  id: number;
+  userId?: number | null;
+  username?: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  ip?: string | null;
+  userAgent?: string | null;
+  createdAt: string;
+}
+
 export function getPublicSiteConfigApi() {
   return request<{ config: SiteConfigView }>("/api/public/settings/site");
 }
 
 export function getSiteConfigApi() {
   return request<{ config: SiteConfigView }>("/api/settings/site");
+}
+
+export function listOperationLogsApi() {
+  return request<{ logs: OperationLogView[] }>("/api/settings/operation-logs");
 }
 
 export function saveSiteConfigApi(config: SiteConfigView) {
