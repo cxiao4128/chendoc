@@ -32,6 +32,30 @@ export interface OperationLogView {
   createdAt: string;
 }
 
+export interface ManagedUserDocView {
+  id: number;
+  title: string;
+  status: "draft" | "published" | "archived";
+  deletedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface ManagedUserView {
+  id: number;
+  username: string;
+  role: "admin" | "user";
+  status: "active" | "disabled";
+  createdAt: string;
+  updatedAt: string;
+  docCount: number;
+  deletedDocCount: number;
+  lastIp?: string | null;
+  lastActiveAt?: string | null;
+  recentIps: string[];
+  docs?: ManagedUserDocView[];
+}
+
 export function getPublicSiteConfigApi() {
   return request<{ config: SiteConfigView }>("/api/public/settings/site");
 }
@@ -42,6 +66,30 @@ export function getSiteConfigApi() {
 
 export function listOperationLogsApi() {
   return request<{ logs: OperationLogView[] }>("/api/settings/operation-logs");
+}
+
+export function listManagedUsersApi() {
+  return request<{ users: ManagedUserView[] }>("/api/admin/users");
+}
+
+export function getManagedUserApi(id: number) {
+  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}`);
+}
+
+export function promoteManagedUserApi(id: number) {
+  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}/promote`, { method: "POST" });
+}
+
+export function disableManagedUserApi(id: number) {
+  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}/disable`, { method: "POST" });
+}
+
+export function enableManagedUserApi(id: number) {
+  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}/enable`, { method: "POST" });
+}
+
+export function deleteManagedUserApi(id: number) {
+  return request<{ ok: true }>(`/api/admin/users/${id}`, { method: "DELETE" });
 }
 
 export function saveSiteConfigApi(config: SiteConfigView) {

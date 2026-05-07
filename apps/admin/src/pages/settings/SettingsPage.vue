@@ -7,16 +7,30 @@ import {
   KeyRound,
   Paintbrush,
   RefreshCw,
+  ShieldCheck,
   ScrollText,
   Server,
-  Trash2
+  Trash2,
+  UserCog
 } from "lucide-vue-next";
-import { getSiteConfigApi, listOperationLogsApi, saveSiteConfigApi, type OperationLogView } from "../../api/settings";
+import {
+  deleteManagedUserApi,
+  disableManagedUserApi,
+  enableManagedUserApi,
+  getManagedUserApi,
+  getSiteConfigApi,
+  listManagedUsersApi,
+  listOperationLogsApi,
+  promoteManagedUserApi,
+  saveSiteConfigApi,
+  type ManagedUserView,
+  type OperationLogView
+} from "../../api/settings";
 import { defaultRemoteLogoUrl, defaultRemoteWallpaperUrl } from "../../config/site-assets";
 import { useIsMobileViewport } from "../../composables/useViewport";
 import "./settings.css";
 
-type ActivePanel = "logs" | "appearance" | null;
+type ActivePanel = "logs" | "appearance" | "users" | null;
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
 const APP_VERSION = "v1.01";
@@ -49,7 +63,11 @@ const actionTextMap: Record<string, string> = {
   "share.update": "更新分享",
   "share.delete": "删除分享",
   "share.review.approve": "通过分享审核",
-  "share.review.reject": "拒绝分享审核"
+  "share.review.reject": "拒绝分享审核",
+  "user.promote_admin": "提级为超级管理员",
+  "user.disable_login": "禁止用户登录",
+  "user.enable_login": "恢复用户登录",
+  "user.delete": "注销用户"
 };
 
 const targetTextMap: Record<string, string> = {
@@ -84,6 +102,13 @@ const activePanel = ref<ActivePanel>(null);
 const operationLogs = ref<OperationLogView[]>([]);
 const logsLoading = ref(false);
 const logsLoaded = ref(false);
+const users = ref<ManagedUserView[]>([]);
+const usersLoading = ref(false);
+const usersLoaded = ref(false);
+const selectedUser = ref<ManagedUserView | null>(null);
+const selectedUserLoading = ref(false);
+const userActionLoading = ref<number | null>(null);
+const userMessage = ref("");
 const updateState = ref<UpdateState>("idle");
 const updateMessage = ref("");
 
@@ -114,6 +139,7 @@ async function loadOperationLogs(force = false) {
 function openPanel(panel: ActivePanel) {
   activePanel.value = activePanel.value === panel ? null : panel;
   if (activePanel.value === "logs") void loadOperationLogs();
+  if (activePanel.value === "users") void loadUsers();
 }
 
 async function save() {
@@ -146,6 +172,90 @@ function logTargetText(log: OperationLogView) {
 
 function logActorText(log: OperationLogView) {
   return log.username || (log.userId ? `用户 #${log.userId}` : "系统");
+}
+
+async function loadUsers(force = false) {
+  if (usersLoading.value || (usersLoaded.value && !force)) return;
+  usersLoading.value = true;
+  userMessage.value = "";
+  try {
+    users.value = (await listManagedUsersApi()).users;
+    usersLoaded.value = true;
+    if (!selectedUser.value && users.value.length) await selectUser(users.value[0].id);
+  } finally {
+    usersLoading.value = false;
+  }
+}
+
+async function selectUser(id: number) {
+  selectedUserLoading.value = true;
+  userMessage.value = "";
+  try {
+    selectedUser.value = (await getManagedUserApi(id)).user;
+  } finally {
+    selectedUserLoading.value = false;
+  }
+}
+
+function roleText(role: "admin" | "user") {
+  return role === "admin" ? "超级管理员" : "普通用户";
+}
+
+function statusText(status: "active" | "disabled") {
+  return status === "active" ? "可登录" : "已禁止登录";
+}
+
+async function refreshSelectedUser(nextUser?: ManagedUserView) {
+  await loadUsers(true);
+  if (nextUser) selectedUser.value = nextUser;
+  else if (selectedUser.value) await selectUser(selectedUser.value.id);
+}
+
+async function promoteUser(user: ManagedUserView) {
+  userActionLoading.value = user.id;
+  try {
+    const response = await promoteManagedUserApi(user.id);
+    userMessage.value = `${user.username} 已提级为超级管理员`;
+    await refreshSelectedUser(response.user);
+  } finally {
+    userActionLoading.value = null;
+  }
+}
+
+async function disableUser(user: ManagedUserView) {
+  userActionLoading.value = user.id;
+  try {
+    const response = await disableManagedUserApi(user.id);
+    userMessage.value = `${user.username} 已禁止登录`;
+    await refreshSelectedUser(response.user);
+  } finally {
+    userActionLoading.value = null;
+  }
+}
+
+async function enableUser(user: ManagedUserView) {
+  userActionLoading.value = user.id;
+  try {
+    const response = await enableManagedUserApi(user.id);
+    userMessage.value = `${user.username} 已恢复登录`;
+    await refreshSelectedUser(response.user);
+  } finally {
+    userActionLoading.value = null;
+  }
+}
+
+async function deleteUser(user: ManagedUserView) {
+  if (!window.confirm(`确认注销用户「${user.username}」吗？账号会删除，但文档会保留。`)) return;
+  userActionLoading.value = user.id;
+  try {
+    await deleteManagedUserApi(user.id);
+    userMessage.value = `${user.username} 已注销`;
+    selectedUser.value = null;
+    await loadUsers(true);
+    if (users.value.length) await selectUser(users.value[0].id);
+  } finally {
+    userActionLoading.value = null;
+  }
 }
 
 function canonicalVersion(value: string) {
@@ -237,6 +347,10 @@ onMounted(() => {
         <Paintbrush :size="21" />
         <div><strong>站点外观</strong><span>调整品牌、Logo、登录壁纸和版权信息</span></div>
       </button>
+      <button class="settings-page__card" :class="{ 'is-active': activePanel === 'users' }" type="button" @click="openPanel('users')">
+        <UserCog :size="21" />
+        <div><strong>用户管理</strong><span>查看用户 IP、后台文档和登录权限</span></div>
+      </button>
     </div>
 
     <section v-if="activePanel === 'logs'" class="settings-page__panel">
@@ -284,6 +398,83 @@ onMounted(() => {
       <label class="cd-label">版权信息<input v-model.trim="site.copyright" class="cd-input" /></label>
       <p v-if="message" class="settings-page__save-message">{{ message }}</p>
     </form>
+
+    <section v-if="activePanel === 'users'" class="settings-page__panel settings-page__users">
+      <div class="settings-page__panel-head">
+        <div>
+          <small>账号与权限</small>
+          <h2>用户管理</h2>
+        </div>
+        <button class="cd-button" type="button" :disabled="usersLoading" @click="loadUsers(true)">
+          <RefreshCw :size="16" />{{ usersLoading ? "刷新中" : "刷新" }}
+        </button>
+      </div>
+      <p v-if="userMessage" class="settings-page__save-message">{{ userMessage }}</p>
+      <div v-if="usersLoading && !users.length" class="settings-page__logs-empty">加载中...</div>
+      <div v-else-if="!users.length" class="settings-page__logs-empty">暂无用户</div>
+      <div v-else class="settings-page__user-layout">
+        <div class="settings-page__user-list">
+          <button
+            v-for="user in users"
+            :key="user.id"
+            class="settings-page__user-row"
+            :class="{ 'is-active': selectedUser?.id === user.id }"
+            type="button"
+            @click="selectUser(user.id)"
+          >
+            <strong>{{ user.username }}</strong>
+            <span>{{ roleText(user.role) }} · {{ statusText(user.status) }}</span>
+            <small>文档 {{ user.docCount }} 篇 · 最近 IP {{ user.lastIp || "暂无" }}</small>
+          </button>
+        </div>
+
+        <article class="settings-page__user-detail">
+          <div v-if="selectedUserLoading" class="settings-page__logs-empty">加载用户详情中...</div>
+          <template v-else-if="selectedUser">
+            <header>
+              <div>
+                <small>用户 #{{ selectedUser.id }}</small>
+                <h3>{{ selectedUser.username }}</h3>
+              </div>
+              <span :class="{ 'is-disabled': selectedUser.status === 'disabled' }">
+                {{ roleText(selectedUser.role) }} · {{ statusText(selectedUser.status) }}
+              </span>
+            </header>
+            <div class="settings-page__user-meta">
+              <span>最近 IP：{{ selectedUser.lastIp || "暂无" }}</span>
+              <span>最近活动：{{ selectedUser.lastActiveAt ? formatLogDate(selectedUser.lastActiveAt) : "暂无" }}</span>
+              <span>全部 IP：{{ selectedUser.recentIps.length ? selectedUser.recentIps.join("、") : "暂无" }}</span>
+              <span>文档：{{ selectedUser.docCount }} 篇，回收站 {{ selectedUser.deletedDocCount }} 篇</span>
+            </div>
+            <div class="settings-page__user-actions">
+              <button class="cd-button primary" type="button" :disabled="selectedUser.role === 'admin' || userActionLoading === selectedUser.id" @click="promoteUser(selectedUser)">
+                <ShieldCheck :size="16" />提级为超级管理员
+              </button>
+              <button v-if="selectedUser.status === 'active'" class="cd-button" type="button" :disabled="userActionLoading === selectedUser.id" @click="disableUser(selectedUser)">
+                禁止登录
+              </button>
+              <button v-else class="cd-button" type="button" :disabled="userActionLoading === selectedUser.id" @click="enableUser(selectedUser)">
+                恢复登录
+              </button>
+              <button class="cd-button danger" type="button" :disabled="userActionLoading === selectedUser.id" @click="deleteUser(selectedUser)">
+                注销用户
+              </button>
+            </div>
+            <div class="settings-page__user-docs">
+              <h4>后台文档</h4>
+              <p v-if="!selectedUser.docs?.length" class="settings-page__logs-empty">暂无文档</p>
+              <template v-else>
+                <RouterLink v-for="doc in selectedUser.docs" :key="doc.id" :to="`/admin/docs/${doc.id}`">
+                  <strong>{{ doc.title }}</strong>
+                  <span>{{ doc.deletedAt ? "已在回收站" : "正常" }} · {{ formatLogDate(doc.updatedAt) }}</span>
+                </RouterLink>
+              </template>
+            </div>
+          </template>
+          <div v-else class="settings-page__logs-empty">请选择用户</div>
+        </article>
+      </div>
+    </section>
 
     <section class="settings-page__version">
       <div class="settings-page__version-copy">

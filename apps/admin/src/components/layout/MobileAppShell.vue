@@ -118,7 +118,7 @@ async function createDoc() {
           <div>
             <small>当前账号</small>
             <strong>{{ auth.user?.username || "已登录" }}</strong>
-            <span>{{ auth.user?.role === "admin" ? "管理员权限已启用" : "只显示你的文档" }}</span>
+            <span>{{ auth.user?.role === "admin" ? "超级管理员权限已启用" : "只显示你的文档" }}</span>
           </div>
           <img :src="logoUrl" alt="" />
         </section>

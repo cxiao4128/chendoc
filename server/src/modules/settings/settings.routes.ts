@@ -3,7 +3,22 @@ import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
-import { getR2Config, getSiteConfig, listOperationLogs, listSettings, saveR2Config, saveSiteConfig, setSetting, testR2Connection } from "./settings.service.js";
+import {
+  deleteManagedUser,
+  disableManagedUser,
+  enableManagedUser,
+  getManagedUser,
+  getR2Config,
+  getSiteConfig,
+  listManagedUsers,
+  listOperationLogs,
+  listSettings,
+  promoteManagedUser,
+  saveR2Config,
+  saveSiteConfig,
+  setSetting,
+  testR2Connection
+} from "./settings.service.js";
 
 export async function settingsRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
@@ -13,6 +28,65 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.get("/api/settings", { preHandler: adminOnly }, async () => ({ settings: listSettings() }));
 
   app.get("/api/settings/operation-logs", { preHandler: adminOnly }, async () => ({ logs: listOperationLogs() }));
+
+  app.get("/api/admin/users", { preHandler: adminOnly }, async () => ({ users: listManagedUsers() }));
+
+  app.get("/api/admin/users/:id", { preHandler: adminOnly }, async (request) => {
+    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    return { user: getManagedUser(params.id) };
+  });
+
+  app.post("/api/admin/users/:id/promote", { preHandler: adminOnly }, async (request) => {
+    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const user = promoteManagedUser(params.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "user.promote_admin",
+      targetType: "user",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { user };
+  });
+
+  app.post("/api/admin/users/:id/disable", { preHandler: adminOnly }, async (request) => {
+    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const user = disableManagedUser(params.id, request.user!.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "user.disable_login",
+      targetType: "user",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { user };
+  });
+
+  app.post("/api/admin/users/:id/enable", { preHandler: adminOnly }, async (request) => {
+    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const user = enableManagedUser(params.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "user.enable_login",
+      targetType: "user",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { user };
+  });
+
+  app.delete("/api/admin/users/:id", { preHandler: adminOnly }, async (request) => {
+    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    deleteManagedUser(params.id, request.user!.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "user.delete",
+      targetType: "user",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
+    return { ok: true };
+  });
 
   app.get("/api/settings/site", { preHandler: adminOnly }, async () => ({ config: getSiteConfig() }));
 
