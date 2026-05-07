@@ -86,6 +86,7 @@ export function migrate() {
       is_enabled INTEGER NOT NULL DEFAULT 1,
       review_status TEXT NOT NULL DEFAULT 'approved',
       review_note TEXT,
+      review_content_hash TEXT,
       requested_by INTEGER REFERENCES users(id),
       reviewed_by INTEGER REFERENCES users(id),
       reviewed_at INTEGER,
@@ -141,9 +142,12 @@ export function migrate() {
 
     CREATE INDEX IF NOT EXISTS docs_parent_idx ON docs(parent_id);
     CREATE INDEX IF NOT EXISTS docs_deleted_idx ON docs(deleted_at);
+    CREATE INDEX IF NOT EXISTS docs_space_idx ON docs(space_id);
+    CREATE INDEX IF NOT EXISTS docs_updated_idx ON docs(updated_at);
     CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS auth_sessions_expire_idx ON auth_sessions(expire_at);
     CREATE INDEX IF NOT EXISTS shares_doc_idx ON shares(doc_id);
+    CREATE INDEX IF NOT EXISTS doc_versions_doc_created_idx ON doc_versions(doc_id, created_at);
     CREATE INDEX IF NOT EXISTS operation_logs_target_idx ON operation_logs(target_type, target_id);
     CREATE INDEX IF NOT EXISTS operation_logs_user_idx ON operation_logs(user_id);
   `);
@@ -153,12 +157,14 @@ export function migrate() {
   if (!hasColumn("summary")) sqlite.exec("ALTER TABLE docs ADD COLUMN summary TEXT");
   if (!hasColumn("tags")) sqlite.exec("ALTER TABLE docs ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
   if (!hasColumn("pinned")) sqlite.exec("ALTER TABLE docs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS docs_pinned_idx ON docs(pinned)");
 
   const shareColumns = sqlite.prepare("PRAGMA table_info(shares)").all() as Array<{ name: string }>;
   const hasShareColumn = (name: string) => shareColumns.some((column) => column.name === name);
   if (!hasShareColumn("custom_slug")) sqlite.exec("ALTER TABLE shares ADD COLUMN custom_slug TEXT");
   if (!hasShareColumn("review_status")) sqlite.exec("ALTER TABLE shares ADD COLUMN review_status TEXT NOT NULL DEFAULT 'approved'");
   if (!hasShareColumn("review_note")) sqlite.exec("ALTER TABLE shares ADD COLUMN review_note TEXT");
+  if (!hasShareColumn("review_content_hash")) sqlite.exec("ALTER TABLE shares ADD COLUMN review_content_hash TEXT");
   if (!hasShareColumn("requested_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN requested_by INTEGER REFERENCES users(id)");
   if (!hasShareColumn("reviewed_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_by INTEGER REFERENCES users(id)");
   if (!hasShareColumn("reviewed_at")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_at INTEGER");

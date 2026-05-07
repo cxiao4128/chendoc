@@ -5,6 +5,7 @@ import { authenticate } from "../../middleware/auth.js";
 import { loginRateLimit, registerRateLimit } from "../../middleware/rateLimit.js";
 import { users } from "../../db/schema.js";
 import { db } from "../../db/client.js";
+import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { changePassword, login, register } from "./auth.service.js";
 import { encryptResponse } from "../crypto/crypto.service.js";
 
@@ -39,14 +40,36 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       return encrypted(request, await login(request.body));
     } catch {
+      writeAuditLog({
+        userId: null,
+        action: "auth.login.failure",
+        targetType: "auth",
+        targetId: "login",
+        ...auditMetaFromRequest(request)
+      });
       return sendEncrypted(reply, request, 401, { message: "登录失败，请检查账号、密码或验证码" });
     }
   });
 
   app.post("/api/auth/register", { config: { rateLimit: registerRateLimit } }, async (request, reply) => {
     try {
-      return encrypted(request, await register(request.body));
+      const result = await register(request.body);
+      writeAuditLog({
+        userId: result.user.id,
+        action: "auth.register.success",
+        targetType: "user",
+        targetId: result.user.id,
+        ...auditMetaFromRequest(request)
+      });
+      return encrypted(request, result);
     } catch (error) {
+      writeAuditLog({
+        userId: null,
+        action: "auth.register.failure",
+        targetType: "auth",
+        targetId: "register",
+        ...auditMetaFromRequest(request)
+      });
       return sendEncrypted(reply, request, 400, { message: error instanceof Error ? error.message : "注册失败" });
     }
   });
@@ -67,6 +90,13 @@ export async function authRoutes(app: FastifyInstance) {
     }).parse(request.body);
     try {
       await changePassword(request.user!.id, body.currentEncryptedPassword, body.newEncryptedPassword, body.keyId);
+      writeAuditLog({
+        userId: request.user!.id,
+        action: "auth.password.change",
+        targetType: "user",
+        targetId: request.user!.id,
+        ...auditMetaFromRequest(request)
+      });
       return { ok: true };
     } catch (error) {
       return reply.code(400).send({ message: error instanceof Error ? error.message : "修改密码失败" });

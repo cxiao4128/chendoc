@@ -62,15 +62,22 @@ function createSvg(code: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="48" viewBox="0 0 150 48" role="img" aria-label="captcha"><defs><linearGradient id="captcha-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#edf6ff"/><stop offset=".52" stop-color="#ffffff"/><stop offset="1" stop-color="#e9fff9"/></linearGradient><filter id="ink-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation=".7" flood-color="#ffffff" flood-opacity=".95"/></filter></defs><rect width="150" height="48" rx="12" fill="url(#captcha-bg)"/><path d="M0 42 C31 28 42 44 72 26 S119 8 150 23" stroke="#cfe0ff" stroke-width="9" fill="none" opacity=".46"/><path d="M-2 10 C28 24 55 4 84 15 S124 35 152 18" stroke="#c8f4ec" stroke-width="7" fill="none" opacity=".5"/>${dots}${slices}<g fill="#18233f" filter="url(#ink-shadow)" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="25" font-weight="850" letter-spacing="1">${text}</g></svg>`;
 }
 
+function timestampFromCaptchaId(captchaId: string) {
+  const value = Number(captchaId.split("-", 1)[0]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export function createCaptcha() {
-  const captchaId = randomUUID();
+  const issuedAt = Date.now();
+  const captchaId = `${issuedAt}-${randomUUID()}`;
   const code = createCode();
+  const createdAt = new Date(issuedAt);
   db.insert(captchas).values({
     id: captchaId,
     codeHash: hashCode(captchaId, code),
     tryCount: 0,
     expireAt: minutesFromNow(5),
-    createdAt: now()
+    createdAt
   }).run();
 
   return { captchaId, image: svgToDataUri(createSvg(code)) };
@@ -78,16 +85,19 @@ export function createCaptcha() {
 
 export function verifyCaptcha(captchaId: string, captchaCode: string) {
   const record = db.select().from(captchas).where(eq(captchas.id, captchaId)).limit(1).get();
-  if (!record || record.usedAt || record.expireAt.getTime() < Date.now() || record.tryCount >= 5) {
+  const issuedAt = timestampFromCaptchaId(captchaId);
+  if (
+    !record ||
+    !issuedAt ||
+    Math.abs(record.createdAt.getTime() - issuedAt) > 30 * 1000 ||
+    record.usedAt ||
+    record.expireAt.getTime() < Date.now() ||
+    record.tryCount >= 5
+  ) {
     return false;
   }
 
   const ok = record.codeHash === hashCode(captchaId, captchaCode.trim());
-  if (!ok) {
-    db.update(captchas).set({ tryCount: record.tryCount + 1 }).where(eq(captchas.id, captchaId)).run();
-    return false;
-  }
-
-  db.update(captchas).set({ usedAt: now() }).where(eq(captchas.id, captchaId)).run();
-  return true;
+  db.update(captchas).set({ tryCount: record.tryCount + 1, usedAt: now() }).where(eq(captchas.id, captchaId)).run();
+  return ok;
 }

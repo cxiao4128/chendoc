@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import {
   adminSharePayload,
   createOrGetShare,
@@ -21,14 +22,31 @@ export async function sharesRoutes(app: FastifyInstance) {
 
   app.post("/api/docs/:id/share", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const existingShare = getShareByDoc(params.id, request.user!);
     const share = await createOrGetShare(params.id, request.body, request.user!);
     if (!share) throw new Error("分享创建失败");
+    if (!existingShare) {
+      writeAuditLog({
+        userId: request.user!.id,
+        action: "share.create",
+        targetType: "share",
+        targetId: share.id,
+        ...auditMetaFromRequest(request)
+      });
+    }
     return { share: adminSharePayload(share) };
   });
 
   app.patch("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     await updateShare(params.id, request.body, request.user!);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "share.update",
+      targetType: "share",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
     return { ok: true };
   });
 
@@ -41,6 +59,13 @@ export async function sharesRoutes(app: FastifyInstance) {
   app.delete("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     deleteShare(params.id, request.user!);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: "share.delete",
+      targetType: "share",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
     return { ok: true };
   });
 
@@ -48,7 +73,15 @@ export async function sharesRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/share-reviews/:id/review", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const body = z.object({ action: z.enum(["approve", "reject"]) }).passthrough().parse(request.body);
     await reviewUserShare(params.id, request.body, request.user!.id);
+    writeAuditLog({
+      userId: request.user!.id,
+      action: body.action === "approve" ? "share.review.approve" : "share.review.reject",
+      targetType: "share",
+      targetId: params.id,
+      ...auditMetaFromRequest(request)
+    });
     return { ok: true };
   });
 

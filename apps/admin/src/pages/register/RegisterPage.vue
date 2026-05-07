@@ -15,6 +15,7 @@ const confirmPassword = ref("");
 const inviteCode = ref("");
 const captchaCode = ref("");
 const captchaId = ref("");
+const captchaInput = ref<{ refresh: () => Promise<void> } | null>(null);
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref("");
@@ -22,8 +23,8 @@ const success = ref("");
 const site = reactive({
   brandName: "陈书",
   shortName: "陈书",
-  logoUrl: defaultRemoteLogoUrl,
-  authWallpaperUrl: defaultRemoteWallpaperUrl,
+  logoUrl: bundledLogoUrl,
+  authWallpaperUrl: bundledWallpaperUrl,
   preferRemoteLogo: false,
   preferRemoteWallpaper: false,
   copyright: "Copyright © 2026 陈书. All rights reserved"
@@ -59,6 +60,7 @@ async function submit() {
     setTimeout(() => router.push("/login"), 700);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "注册失败，请检查注册卡密和验证码";
+    await (captchaInput.value?.refresh() ?? Promise.resolve()).catch(() => undefined);
   } finally {
     password.value = "";
     confirmPassword.value = "";
@@ -77,6 +79,7 @@ onMounted(async () => {
 
 <template>
   <main class="register-page" :style="authStyle">
+    <img class="register-page__wallpaper" :src="effectiveWallpaperUrl" alt="" fetchpriority="high" decoding="async" />
     <header class="auth-topbar">
       <RouterLink class="auth-brand" to="/login">
         <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" />
@@ -130,7 +133,7 @@ onMounted(async () => {
           </div>
         </label>
 
-        <CaptchaInput v-model:code="captchaCode" v-model:captcha-id="captchaId" />
+        <CaptchaInput ref="captchaInput" v-model:code="captchaCode" v-model:captcha-id="captchaId" />
         <p v-if="error" class="cd-error" role="alert">{{ error }}</p>
         <p v-if="success" class="register-page__success">{{ success }}</p>
         <button class="auth-submit" type="submit" :disabled="loading">

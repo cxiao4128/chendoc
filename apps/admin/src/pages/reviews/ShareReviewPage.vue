@@ -7,13 +7,22 @@ import "./share-review.css";
 const shares = ref<ShareReviewItem[]>([]);
 const loading = ref(false);
 const keyword = ref("");
+const statusFilter = ref<"all" | "pending" | "approved" | "rejected">("pending");
 const savingId = ref<number | null>(null);
 const editState = reactive<Record<number, { shareCode: string; note: string }>>({});
 
+const statusOptions = [
+  { value: "pending", label: "待审核" },
+  { value: "approved", label: "通过文档" },
+  { value: "rejected", label: "未通过" },
+  { value: "all", label: "全部" }
+] as const;
+
 const filteredShares = computed(() => {
   const q = keyword.value.trim().toLowerCase();
-  if (!q) return shares.value;
   return shares.value.filter((item) => {
+    if (statusFilter.value !== "all" && item.reviewStatus !== statusFilter.value) return false;
+    if (!q) return true;
     return (
       item.docTitle.toLowerCase().includes(q) ||
       String(item.shareCode).includes(q) ||
@@ -21,6 +30,11 @@ const filteredShares = computed(() => {
     );
   });
 });
+
+function statusCount(status: typeof statusOptions[number]["value"]) {
+  if (status === "all") return shares.value.length;
+  return shares.value.filter((item) => item.reviewStatus === status).length;
+}
 
 function statusText(status?: string) {
   if (status === "approved") return "已通过";
@@ -60,6 +74,7 @@ async function load() {
 }
 
 async function review(item: ShareReviewItem, action: "approve" | "reject") {
+  if (item.reviewStatus !== "pending") return;
   const state = ensureEdit(item);
   const shareCode = Number(state.shareCode.trim());
   savingId.value = item.id;
@@ -95,6 +110,19 @@ onMounted(load);
       <input v-model.trim="keyword" placeholder="搜索文档、用户或分享数字" />
     </form>
 
+    <div class="share-review-page__filters" role="tablist" aria-label="审核状态">
+      <button
+        v-for="option in statusOptions"
+        :key="option.value"
+        type="button"
+        :class="{ 'is-active': statusFilter === option.value }"
+        @click="statusFilter = option.value"
+      >
+        {{ option.label }}
+        <span>{{ statusCount(option.value) }}</span>
+      </button>
+    </div>
+
     <div v-if="loading" class="share-review-page__loading">
       <span v-for="item in 5" :key="item" class="cd-skeleton" />
     </div>
@@ -124,13 +152,13 @@ onMounted(load);
         <div class="share-review-page__form">
           <label>
             <span>分享数字</span>
-            <input v-model.trim="ensureEdit(item).shareCode" inputmode="numeric" />
+            <input v-model.trim="ensureEdit(item).shareCode" inputmode="numeric" :disabled="item.reviewStatus !== 'pending'" />
           </label>
           <label>
             <span>审核备注</span>
-            <input v-model.trim="ensureEdit(item).note" placeholder="驳回时建议说明原因" />
+            <input v-model.trim="ensureEdit(item).note" placeholder="驳回时建议说明原因" :disabled="item.reviewStatus !== 'pending'" />
           </label>
-          <div class="share-review-page__actions">
+          <div v-if="item.reviewStatus === 'pending'" class="share-review-page__actions">
             <button class="cd-button primary" type="button" :disabled="savingId === item.id" @click="review(item, 'approve')">
               <Check :size="16" />通过并发布
             </button>
@@ -138,6 +166,9 @@ onMounted(load);
               <X :size="16" />驳回
             </button>
           </div>
+          <p v-else class="share-review-page__locked">
+            {{ item.reviewStatus === "approved" ? "文档已通过，不可重复点击审核。" : "文档未通过，用户更新文档内容后才可再次提交。" }}
+          </p>
         </div>
       </article>
     </div>

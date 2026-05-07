@@ -7,6 +7,8 @@ import { authSessions } from "../../db/schema.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { now } from "../../utils/date.js";
 
+const MIN_AUTH_SESSION_MS = 60 * 60 * 1000;
+
 const authPayloadSchema = z.object({
   sid: z.string().min(8),
   t: z.number().int().positive()
@@ -14,7 +16,7 @@ const authPayloadSchema = z.object({
 
 function parseDurationMs(value: string) {
   const match = value.trim().match(/^(\d+)\s*(ms|s|m|h|d)?$/i);
-  if (!match) return 2 * 60 * 60 * 1000;
+  if (!match) return 2 * MIN_AUTH_SESSION_MS;
   const amount = Number(match[1]);
   const unit = (match[2] ?? "s").toLowerCase();
   const multipliers: Record<string, number> = {
@@ -24,7 +26,7 @@ function parseDurationMs(value: string) {
     h: 60 * 60 * 1000,
     d: 24 * 60 * 60 * 1000
   };
-  return amount * multipliers[unit];
+  return Math.max(amount * multipliers[unit], MIN_AUTH_SESSION_MS);
 }
 
 function base64UrlDecode(value: string) {

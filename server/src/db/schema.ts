@@ -81,7 +81,10 @@ export const docs = sqliteTable("docs", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
   docParentIdx: index("docs_parent_idx").on(table.parentId),
-  docDeletedIdx: index("docs_deleted_idx").on(table.deletedAt)
+  docDeletedIdx: index("docs_deleted_idx").on(table.deletedAt),
+  docSpaceIdx: index("docs_space_idx").on(table.spaceId),
+  docPinnedIdx: index("docs_pinned_idx").on(table.pinned),
+  docUpdatedIdx: index("docs_updated_idx").on(table.updatedAt)
 }));
 
 export const shares = sqliteTable("shares", {
@@ -93,6 +96,7 @@ export const shares = sqliteTable("shares", {
   isEnabled: integer("is_enabled", { mode: "boolean" }).notNull().default(true),
   reviewStatus: text("review_status", { enum: ["pending", "approved", "rejected"] }).notNull().default("approved"),
   reviewNote: text("review_note"),
+  reviewContentHash: text("review_content_hash"),
   requestedBy: integer("requested_by").references(() => users.id),
   reviewedBy: integer("reviewed_by").references(() => users.id),
   reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
@@ -125,7 +129,9 @@ export const docVersions = sqliteTable("doc_versions", {
   contentHtml: text("content_html").notNull(),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
-});
+}, (table) => ({
+  docVersionsDocCreatedIdx: index("doc_versions_doc_created_idx").on(table.docId, table.createdAt)
+}));
 
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),

@@ -19,6 +19,8 @@ async function refresh() {
   input.value?.focus();
 }
 
+defineExpose({ refresh });
+
 function normalizeCode(event: Event) {
   code.value = (event.target as HTMLInputElement).value
     .toUpperCase()

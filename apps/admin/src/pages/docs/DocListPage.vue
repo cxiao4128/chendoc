@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Plus, Search, Trash2 } from "lucide-vue-next";
+import { Plus, RefreshCw, Search, Trash2 } from "lucide-vue-next";
 import EmptyState from "../../components/common/EmptyState.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
 import { useDocStore } from "../../stores/doc";
 import "./doc-list.css";
+
+type DocPreview = {
+  title: string;
+  summary?: string | null;
+  excerpt?: string | null;
+  snippet?: string | null;
+  contentText?: string | null;
+  contentHtml?: string | null;
+};
+
+type DocStoreCompat = {
+  listError?: unknown;
+};
 
 const route = useRoute();
 const router = useRouter();
@@ -15,6 +28,8 @@ const isMobile = useIsMobileViewport();
 const query = computed(() => String(route.query.q || "").trim());
 const visibleDocs = computed(() => docs.docs);
 const searchKeyword = ref(query.value);
+const localListError = ref("");
+const listErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).listError) || localListError.value);
 
 async function createDoc() {
   const doc = await docs.createDoc("未命名文档");
@@ -34,8 +49,61 @@ function shareStatusText(doc: { shareCode?: number | null; customSlug?: string |
   return sharePath(doc);
 }
 
-function load() {
-  void docs.loadList(query.value);
+function normalizeError(error: unknown) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && "value" in error) return normalizeError((error as { value: unknown }).value);
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string") {
+    return String((error as { message: string }).message);
+  }
+  return "文档列表加载失败，请稍后重试。";
+}
+
+function normalizePreview(value: string) {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clampPreview(text: string, keyword: string) {
+  const limit = 132;
+  if (text.length <= limit) return text;
+  if (!keyword) return `${text.slice(0, limit)}…`;
+  const index = text.toLowerCase().indexOf(keyword.toLowerCase());
+  if (index < 0) return `${text.slice(0, limit)}…`;
+  const start = Math.max(0, index - 36);
+  const end = Math.min(text.length, index + keyword.length + 84);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+}
+
+function docPreviewText(doc: DocPreview) {
+  const source = doc.summary || doc.excerpt || doc.snippet || doc.contentText || doc.contentHtml || "";
+  const text = normalizePreview(source);
+  if (!text) return "";
+  return clampPreview(text, query.value);
+}
+
+async function load() {
+  localListError.value = "";
+  try {
+    await docs.loadList(query.value);
+  } catch (error) {
+    localListError.value = normalizeError(error) || "文档列表加载失败，请稍后重试。";
+  }
+}
+
+function retryLoad() {
+  void load();
 }
 
 function statusText(status: string) {
@@ -82,6 +150,12 @@ watch(query, (value) => {
         <span v-for="i in 5" :key="i" class="cd-skeleton" />
       </div>
 
+      <div v-else-if="listErrorText" class="doc-list-page__error is-mobile">
+        <strong>文档列表加载失败</strong>
+        <p>{{ listErrorText }}</p>
+        <button class="cd-button primary" type="button" @click="retryLoad"><RefreshCw :size="16" />重试</button>
+      </div>
+
       <EmptyState v-else-if="!visibleDocs.length" title="没有找到文档" description="可以新建一篇文档，或换个关键词搜索。">
         <button class="cd-button primary" type="button" @click="createDoc"><Plus :size="16" />新建文档</button>
       </EmptyState>
@@ -92,6 +166,7 @@ watch(query, (value) => {
             <strong>{{ doc.title }}</strong>
             <span>{{ statusText(doc.status) }}</span>
           </div>
+          <p v-if="query && docPreviewText(doc)" class="doc-list-page__mobile-preview">{{ docPreviewText(doc) }}</p>
           <p>{{ formatDate(doc.updatedAt) }}</p>
           <code>{{ shareStatusText(doc) }}</code>
         </RouterLink>
@@ -115,13 +190,22 @@ watch(query, (value) => {
         <span v-for="i in 6" :key="i" class="cd-skeleton" />
       </div>
 
+      <div v-else-if="listErrorText" class="doc-list-page__error">
+        <strong>文档列表加载失败</strong>
+        <p>{{ listErrorText }}</p>
+        <button class="cd-button primary" type="button" @click="retryLoad"><RefreshCw :size="16" />重试</button>
+      </div>
+
       <EmptyState v-else-if="!visibleDocs.length" title="没有找到文档" description="可以新建一篇文档，或换个关键词搜索。">
         <button class="cd-button primary" type="button" @click="createDoc"><Plus :size="16" />新建文档</button>
       </EmptyState>
 
       <div v-else class="doc-list-page__table">
         <RouterLink v-for="doc in visibleDocs" :key="doc.id" :to="`/admin/docs/${doc.id}`" class="doc-list-page__row">
-          <strong>{{ doc.title }}</strong>
+          <span class="doc-list-page__row-title">
+            <strong>{{ doc.title }}</strong>
+            <small v-if="query && docPreviewText(doc)">{{ docPreviewText(doc) }}</small>
+          </span>
           <span>{{ statusText(doc.status) }}</span>
           <span>{{ formatDate(doc.updatedAt) }}</span>
           <code>{{ shareStatusText(doc) }}</code>

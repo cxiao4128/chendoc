@@ -1,45 +1,149 @@
 # ChenDoc / 陈书
 
-ChenDoc 是适合单机部署的轻量私有文档系统。前端使用 Vue 3 + Vite + TypeScript + Pinia + Vue Router + TipTap，后端使用 Node.js 20+ + Fastify + TypeScript + Drizzle ORM + SQLite。
+ChenDoc 是一个轻量的私有文档系统，适合部署在个人服务器或小团队内部使用。它提供文档编辑、公开分享、分享审核、注册卡密、回收站、R2 对象存储配置、操作日志和后台系统管理。
 
-## 常用命令
+当前版本：`v1.01`
+
+## 技术栈
+
+- 前端：Vue 3、Vite、TypeScript、Pinia、Vue Router、TipTap
+- 后端：Node.js 20+、Fastify、TypeScript、Drizzle ORM、SQLite
+- 存储：SQLite 保存业务数据，Cloudflare R2/S3 兼容对象存储保存上传文件
+
+## 功能概览
+
+- 文档创建、编辑、搜索、回收站和历史版本
+- 文档公开分享、访问密码、分享码和自定义短链接
+- 普通用户公开分享审核
+- 注册卡密管理
+- R2 配置保存、连接测试和上传测试
+- 系统管理页：操作日志、站点外观、版本号、更新检查、开源链接
+- 管理端登录、注册、验证码和加密会话
+
+## 环境要求
+
+- Node.js `20` 或更高版本
+- npm
+- Linux 服务器建议使用 Nginx 或宝塔反向代理到 `http://127.0.0.1:8985`
+
+## 本地开发
+
+```bash
+npm install
+npm run dev
+```
+
+默认前端开发服务运行在 `5175`，后端运行在 `.env` 中配置的 `PORT`。
+
+## 构建与运行
 
 ```bash
 npm install
 npm run build
 npm run db:migrate
-npm run admin:init
-npm run r2:import
 npm start
 ```
 
+## 环境变量
+
+复制模板后填写真实配置：
+
+```bash
+cp .env.example .env
+```
+
+重点配置：
+
+- `PUBLIC_SITE_URL`：站点公网地址
+- `DATABASE_URL`：SQLite 数据库路径
+- `JWT_SECRET`：登录会话密钥
+- `CONFIG_ENCRYPTION_KEY`：配置加密密钥
+- `RSA_PRIVATE_KEY_ENCRYPTION_KEY`：RSA 私钥加密密钥
+- `DEFAULT_ADMIN_USERNAME`：初始化管理员用户名
+- `DEFAULT_ADMIN_PASSWORD`：初始化管理员密码
+- `R2_*`：Cloudflare R2 或 S3 兼容存储配置
+
+不要提交 `.env`。生产环境请使用唯一强密钥和唯一强密码。
+
 ## 初始化管理员
 
-管理员账号由 `npm run admin:init` 创建。默认用户名是 ``，也可以通过 `.env` 中的 `DEFAULT_ADMIN_USERNAME` 修改。
+管理员账号由脚本创建：
 
-系统不再提供默认管理员密码。生产环境和执行 `npm run admin:init` 前，必须在 `.env` 中设置 `DEFAULT_ADMIN_PASSWORD`。默认要求至少 12 位、同时包含大小写字母、数字和符号的唯一强密码。
-如果必须兼容历史密码，例如 ``，可以显式设置 `CHENDOC_ALLOW_WEAK_ADMIN_PASSWORD=1` 放行旧密码。
+```bash
+npm run admin:init
+```
 
-如果管理员账号已经存在，`npm run admin:init` 只会确保账号是 `admin` 且处于启用状态，不会重置已有密码。需要明确轮换或重置管理员密码时再执行：
+初始化前请在 `.env` 中设置：
+
+```bash
+DEFAULT_ADMIN_USERNAME=你的管理员用户名
+DEFAULT_ADMIN_PASSWORD=你的管理员强密码
+```
+
+如果管理员账号已经存在，初始化脚本只会确认账号为管理员且处于启用状态，不会重置已有密码。需要主动重置时再执行：
 
 ```bash
 CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 ```
 
-## 部署提示
+## 部署
 
-`deploy.sh` 默认不会初始化或重置管理员账号。首次部署需要显式启用：
-
-```bash
-CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
-```
-
-后续重复部署直接运行：
+服务器部署推荐使用仓库内脚本：
 
 ```bash
 bash ./deploy.sh
 ```
 
-如果历史环境曾使用过默认弱密码，请立即轮换管理员密码、`JWT_SECRET`、`CONFIG_ENCRYPTION_KEY`、`RSA_PRIVATE_KEY_ENCRYPTION_KEY` 和 R2 Access Key / Secret。
+首次部署并初始化管理员：
 
-更多内容见 `docs/部署说明.md`、`docs/R2配置说明.md`、`docs/安全审计.md`、`docs/接口说明.md`。
+```bash
+CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
+```
+
+脚本会执行依赖安装、构建、数据库迁移，并启动服务。部署完成后把 Nginx 或宝塔反向代理指向：
+
+```text
+http://127.0.0.1:8985
+```
+
+## R2 配置
+
+可以在后台 `系统设置 -> R2 设置` 中填写和测试对象存储配置。也可以使用环境变量或导入脚本维护配置。
+
+上传链路依赖 R2 配置完整可用。修改 R2 密钥后建议在后台先执行连接测试和上传测试。
+
+## 常用命令
+
+```bash
+npm run dev              # 本地开发
+npm run build            # 构建前端和后端
+npm run test             # 运行后端测试
+npm run db:migrate       # 数据库迁移
+npm run admin:init       # 初始化或修复管理员账号
+npm run r2:import        # 导入 R2 配置
+npm run db:backup        # 备份 SQLite 数据库
+```
+
+## 目录说明
+
+```text
+apps/admin/              Vue 管理后台
+server/                  Fastify 后端和数据库模块
+scripts/                 构建、部署、备份脚本
+docs/                    项目说明文档
+data/                    运行数据和 SQLite 数据库，不提交
+server/public/admin/     构建后由后端托管的前端产物
+```
+
+更详细的文件地图见 `FILE_GUIDE.md`。
+
+## 安全提示
+
+- 不要公开 `.env`、数据库、日志和部署机密钥。
+- 首次部署后请确认管理员密码、JWT 密钥、配置加密密钥、RSA 私钥加密密钥均已替换。
+- R2 Access Key / Secret 只保存在服务端配置中，前端不会直接暴露密钥。
+- 公开分享权限和分享审核逻辑建议在上线前跑一遍测试。
+
+## 开源地址
+
+[https://github.com/cxiao4128/chendoc](https://github.com/cxiao4128/chendoc)
