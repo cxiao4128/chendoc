@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, Settings, Ticket, Trash2 } from "lucide-vue-next";
+import { BookOpen, ClipboardCheck, Settings, Trash2 } from "lucide-vue-next";
 
 export interface AdminNavItem {
   to: string;
@@ -17,7 +17,6 @@ export const adminNavItems: AdminNavItem[] = [
   { to: "/admin/docs", label: "文档", icon: BookOpen },
   { to: "/admin/trash", label: "回收站", icon: Trash2, adminOnly: true },
   { to: "/admin/share-reviews", label: "审核", icon: ClipboardCheck, adminOnly: true },
-  { to: "/admin/invites", label: "邀请码", icon: Ticket, adminOnly: true },
   { to: "/admin/settings", label: "系统设置", icon: Settings, adminOnly: true }
 ];
 

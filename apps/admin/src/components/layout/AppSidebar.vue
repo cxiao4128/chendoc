@@ -39,7 +39,7 @@ const visibleLinks = computed(() => adminNavItems.filter((item) => !item.adminOn
       </span>
       <div>
         <strong>{{ auth.user?.username || "已登录" }}</strong>
-        <small>{{ auth.user?.role === "admin" ? "管理员权限" : "个人文档" }}</small>
+        <small>{{ auth.user?.role === "admin" ? "超级管理员权限" : "个人文档" }}</small>
       </div>
       <button type="button" title="退出登录" aria-label="退出登录" @click="logout">
         <LogOut :size="16" />

@@ -151,6 +151,126 @@
   grid-column: 1 / -1;
 }
 
+.settings-page__users {
+  gap: 12px;
+}
+
+.settings-page__user-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.settings-page__user-list,
+.settings-page__user-detail,
+.settings-page__user-docs {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-page__user-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid rgba(221, 227, 236, 0.9);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--cd-text);
+  padding: 11px 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-page__user-row:hover,
+.settings-page__user-row.is-active {
+  border-color: rgba(36, 91, 219, 0.42);
+  background: var(--cd-accent-soft);
+}
+
+.settings-page__user-row span,
+.settings-page__user-row small,
+.settings-page__user-detail small,
+.settings-page__user-detail header span,
+.settings-page__user-meta,
+.settings-page__user-docs a span {
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.settings-page__user-detail {
+  min-width: 0;
+  border: 1px solid rgba(221, 227, 236, 0.9);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.settings-page__user-detail header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-page__user-detail h3,
+.settings-page__user-docs h4 {
+  margin: 0;
+  color: var(--cd-text);
+}
+
+.settings-page__user-detail h3 {
+  margin-top: 3px;
+  font-size: 18px;
+}
+
+.settings-page__user-detail header span {
+  border-radius: 999px;
+  background: var(--cd-success-soft);
+  color: var(--cd-success);
+  padding: 5px 9px;
+  font-weight: 760;
+}
+
+.settings-page__user-detail header span.is-disabled {
+  background: var(--cd-danger-soft);
+  color: var(--cd-danger);
+}
+
+.settings-page__user-meta {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--cd-border);
+  border-bottom: 1px solid var(--cd-border);
+  margin-top: 12px;
+  padding: 12px 0;
+}
+
+.settings-page__user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-page__user-docs {
+  margin-top: 14px;
+}
+
+.settings-page__user-docs a {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(221, 227, 236, 0.9);
+  border-radius: 8px;
+  color: var(--cd-text);
+  padding: 10px 12px;
+}
+
+.settings-page__user-docs a:hover {
+  border-color: rgba(36, 91, 219, 0.42);
+  background: var(--cd-accent-soft);
+}
+
 .settings-page__toggle {
   display: flex;
   gap: 10px;
@@ -216,6 +336,15 @@
 
   .settings-page__log-row {
     grid-template-columns: 1fr;
+  }
+
+  .settings-page__user-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page__user-detail header,
+  .settings-page__user-actions {
+    flex-direction: column;
   }
 
   .settings-page__version-actions {
