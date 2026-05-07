@@ -33,7 +33,7 @@ import "./settings.css";
 type ActivePanel = "logs" | "appearance" | "users" | null;
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v1.01";
+const APP_VERSION = "v1.02";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -260,7 +260,7 @@ async function deleteUser(user: ManagedUserView) {
 
 function canonicalVersion(value: string) {
   const raw = value.trim().toLowerCase().replace(/^v/, "");
-  if (raw === "1.01") return "1.0.1";
+  if (raw === "1.02") return "1.0.2";
   return raw;
 }
 
