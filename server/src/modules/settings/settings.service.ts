@@ -1,5 +1,5 @@
 import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import { authSessions, docs, docVersions, invites, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
@@ -8,6 +8,7 @@ import { createR2Client } from "../../config/r2.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { maskSecret } from "../../utils/maskSecret.js";
 import { now } from "../../utils/date.js";
+import { isSuperAdminUser } from "../../utils/superAdmin.js";
 
 const sensitiveKeys = new Set(["r2.access_key_id", "r2.secret_access_key"]);
 
@@ -38,6 +39,13 @@ type ManagedUser = {
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
+};
+
+type UserActor = {
+  id: number;
+  username: string;
+  role: "admin" | "user";
+  isSuperAdmin?: boolean;
 };
 
 const defaultRemoteLogoUrl = "https://cc.jy920.asia/chendoc-health/ChatGPT%20Image%202026%E5%B9%B44%E6%9C%8829%E6%97%A5%2019_47_58.png";
@@ -112,6 +120,7 @@ export function listOperationLogs(limit = 80) {
     })
     .from(operationLogs)
     .leftJoin(users, eq(operationLogs.userId, users.id))
+    .where(ne(operationLogs.action, "share.update"))
     .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
     .limit(limit)
     .all();
@@ -172,6 +181,7 @@ function managedUserPayload(user: ManagedUser, includeDocs = false) {
     id: user.id,
     username: user.username,
     role: user.role,
+    isSuperAdmin: isSuperAdminUser(user),
     status: user.status,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -195,10 +205,22 @@ function activeAdminCount() {
     .all().length;
 }
 
-function assertCanDisableOrDeleteUser(target: ManagedUser, actorId: number) {
-  if (target.id === actorId) throw new Error("不能操作当前登录账号");
+function assertCanManageAdminUser(target: ManagedUser, actor: UserActor) {
+  if (target.role === "admin" && !actor.isSuperAdmin) {
+    throw new Error("只有超级管理员可以操作管理员账号");
+  }
+}
+
+function assertCanPromoteUser(target: ManagedUser, actor: UserActor) {
+  if (!actor.isSuperAdmin) throw new Error("只有超级管理员可以提级用户");
+  if (target.role === "admin") throw new Error("该用户已经是管理员");
+}
+
+function assertCanDisableOrDeleteUser(target: ManagedUser, actor: UserActor) {
+  if (target.id === actor.id) throw new Error("不能操作当前登录账号");
+  assertCanManageAdminUser(target, actor);
   if (target.role === "admin" && target.status === "active" && activeAdminCount() <= 1) {
-    throw new Error("至少保留一个启用的超级管理员");
+    throw new Error("至少保留一个启用的管理员");
   }
 }
 
@@ -222,29 +244,33 @@ export function getManagedUser(id: number) {
   return managedUserPayload(getManagedUserRecord(id), true);
 }
 
-export function promoteManagedUser(id: number) {
+export function promoteManagedUser(id: number, actor: UserActor) {
+  const user = getManagedUserRecord(id);
+  assertCanPromoteUser(user, actor);
   const updatedAt = now();
   db.update(users).set({ role: "admin", status: "active", updatedAt }).where(eq(users.id, id)).run();
   db.delete(authSessions).where(eq(authSessions.userId, id)).run();
   return getManagedUser(id);
 }
 
-export function disableManagedUser(id: number, actorId: number) {
+export function disableManagedUser(id: number, actor: UserActor) {
   const user = getManagedUserRecord(id);
-  assertCanDisableOrDeleteUser(user, actorId);
+  assertCanDisableOrDeleteUser(user, actor);
   db.update(users).set({ status: "disabled", updatedAt: now() }).where(eq(users.id, id)).run();
   db.delete(authSessions).where(eq(authSessions.userId, id)).run();
   return getManagedUser(id);
 }
 
-export function enableManagedUser(id: number) {
+export function enableManagedUser(id: number, actor: UserActor) {
+  const user = getManagedUserRecord(id);
+  assertCanManageAdminUser(user, actor);
   db.update(users).set({ status: "active", updatedAt: now() }).where(eq(users.id, id)).run();
   return getManagedUser(id);
 }
 
-export function deleteManagedUser(id: number, actorId: number) {
+export function deleteManagedUser(id: number, actor: UserActor) {
   const user = getManagedUserRecord(id);
-  assertCanDisableOrDeleteUser(user, actorId);
+  assertCanDisableOrDeleteUser(user, actor);
   db.transaction((tx) => {
     tx.delete(authSessions).where(eq(authSessions.userId, id)).run();
     tx.update(operationLogs).set({ userId: null }).where(eq(operationLogs.userId, id)).run();

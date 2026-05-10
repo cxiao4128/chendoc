@@ -11,6 +11,11 @@ defineEmits<{ close: []; toggleCollapse: [] }>();
 
 const { auth, logout } = useAuth();
 const visibleLinks = computed(() => adminNavItems.filter((item) => !item.adminOnly || auth.isAdmin));
+const roleLabel = computed(() => {
+  if (auth.user?.isSuperAdmin) return "超级管理员";
+  if (auth.user?.role === "admin") return "管理员";
+  return "普通用户";
+});
 </script>
 
 <template>
@@ -39,7 +44,7 @@ const visibleLinks = computed(() => adminNavItems.filter((item) => !item.adminOn
       </span>
       <div>
         <strong>{{ auth.user?.username || "已登录" }}</strong>
-        <small>{{ auth.user?.role === "admin" ? "超级管理员权限" : "个人文档" }}</small>
+        <small>{{ roleLabel }}</small>
       </div>
       <button type="button" title="退出登录" aria-label="退出登录" @click="logout">
         <LogOut :size="16" />

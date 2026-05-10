@@ -11,6 +11,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   const isLoggedIn = computed(() => !!token.value && !!user.value);
   const isAdmin = computed(() => user.value?.role === "admin");
+  const isSuperAdmin = computed(() => !!user.value?.isSuperAdmin);
   const canAccessAdmin = computed(() => isAdmin.value);
 
   function setSession(sessionId: string, sessionKey: string, nextUser: UserProfile) {
@@ -42,5 +43,5 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  return { token, user, ready, isLoggedIn, isAdmin, canAccessAdmin, setSession, logout, fetchMe };
+  return { token, user, ready, isLoggedIn, isAdmin, isSuperAdmin, canAccessAdmin, setSession, logout, fetchMe };
 });

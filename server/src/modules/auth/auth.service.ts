@@ -8,6 +8,7 @@ import { hashPassword, validateUserRegistration, verifyPassword } from "../../ut
 import { decryptSubmittedPassword, decryptSubmittedPayload } from "../crypto/crypto.service.js";
 import { verifyCaptcha } from "../captcha/captcha.service.js";
 import { cleanupExpiredAuthSessions, createAuthSession } from "./session.service.js";
+import { isSuperAdminUser } from "../../utils/superAdmin.js";
 
 export const encryptedRequestSchema = z.object({
   keyId: z.string().min(8),
@@ -49,7 +50,7 @@ function parseEncryptedJson<T extends z.ZodTypeAny>(input: unknown, schema: T): 
 }
 
 function publicUser(user: { id: number; username: string; role: "admin" | "user"; status: string }) {
-  return { id: user.id, username: user.username, role: user.role, status: user.status };
+  return { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) };
 }
 
 function canSkipLoginCaptcha(user: { username: string; role: "admin" | "user" }) {

@@ -45,6 +45,7 @@ export interface ManagedUserView {
   id: number;
   username: string;
   role: "admin" | "user";
+  isSuperAdmin?: boolean;
   status: "active" | "disabled";
   createdAt: string;
   updatedAt: string;

@@ -18,7 +18,11 @@ const appTitle = "陈书";
 const routeMeta = computed(() => getAdminRouteMeta(route.path));
 const isEditorRoute = computed(() => /^\/admin\/docs\/\d+/.test(route.path));
 const visibleLinks = computed(() => adminNavItems.filter((item) => !item.adminOnly || auth.isAdmin));
-const roleText = computed(() => auth.user?.role === "admin" ? "管理员空间" : "个人文档");
+const roleText = computed(() => {
+  if (auth.user?.isSuperAdmin) return "超级管理员";
+  if (auth.user?.role === "admin") return "管理员";
+  return "普通用户";
+});
 const mobileTabs = computed(() => {
   const tabs = [{ to: "/admin/docs", label: "文档", icon: BookOpen }];
   if (!auth.isAdmin) return tabs;
@@ -118,7 +122,7 @@ async function createDoc() {
           <div>
             <small>当前账号</small>
             <strong>{{ auth.user?.username || "已登录" }}</strong>
-            <span>{{ auth.user?.role === "admin" ? "超级管理员权限已启用" : "只显示你的文档" }}</span>
+            <span>{{ roleText }}</span>
           </div>
           <img :src="logoUrl" alt="" />
         </section>

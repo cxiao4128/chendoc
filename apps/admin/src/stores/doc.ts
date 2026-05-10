@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { DocDetail, DocSummary } from "../api/docs";
-import { createDocApi, getDocApi, listDocsApi, updateDocApi } from "../api/docs";
+import { bulkDeleteDocsApi, createDocApi, getDocApi, listDocsApi, updateDocApi } from "../api/docs";
 import { getApiErrorMessage } from "../api/request";
 
 const DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -126,6 +126,18 @@ export const useDocStore = defineStore("doc", () => {
     }
   }
 
+  async function bulkDeleteDocs(ids: number[]) {
+    detailError.value = null;
+    const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
+    if (!uniqueIds.length) return [];
+    const response = await bulkDeleteDocsApi(uniqueIds);
+    const deletedIdSet = new Set(response.deletedIds);
+    docs.value = docs.value.filter((item) => !deletedIdSet.has(item.id));
+    for (const id of deletedIdSet) detailCache.delete(id);
+    if (current.value && deletedIdSet.has(current.value.id)) current.value = null;
+    return response.deletedIds;
+  }
+
   return {
     docs,
     current,
@@ -138,6 +150,7 @@ export const useDocStore = defineStore("doc", () => {
     loadList,
     loadDoc,
     createDoc,
-    saveDoc
+    saveDoc,
+    bulkDeleteDocs
   };
 });
