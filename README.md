@@ -1,6 +1,6 @@
 # ChenDoc / Chen Shu
 
-Current version: `v1.03`
+Current version: `v1.04`
 
 English is shown by default. Open the Chinese section at the bottom if you prefer Chinese.
 
@@ -96,7 +96,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 Download the deployment archive from GitHub Releases, extract it inside your deployment directory, and run:
 
 ```bash
-unzip -o chendoc-v1.03-*.zip
+unzip -o chendoc-v1.04-*.zip
 cp .env.example .env
 # Edit .env for production settings.
 bash ./deploy.sh
@@ -245,7 +245,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 从 GitHub Release 下载部署压缩包后，在你的部署目录内解压并执行：
 
 ```bash
-unzip -o chendoc-v1.03-*.zip
+unzip -o chendoc-v1.04-*.zip
 cp .env.example .env
 # 编辑 .env，填写生产环境配置
 bash ./deploy.sh
