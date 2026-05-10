@@ -40,13 +40,6 @@ export async function sharesRoutes(app: FastifyInstance) {
   app.patch("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     await updateShare(params.id, request.body, request.user!);
-    writeAuditLog({
-      userId: request.user!.id,
-      action: "share.update",
-      targetType: "share",
-      targetId: params.id,
-      ...auditMetaFromRequest(request)
-    });
     return { ok: true };
   });
 

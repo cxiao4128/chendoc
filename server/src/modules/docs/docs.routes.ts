@@ -5,6 +5,7 @@ import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import {
   createDoc,
+  bulkSoftDeleteDocs,
   getDoc,
   hardDeleteDoc,
   listDocs,
@@ -37,6 +38,22 @@ export async function docsRoutes(app: FastifyInstance) {
       ...auditMetaFromRequest(request)
     });
     return { doc };
+  });
+  app.post("/api/docs/bulk-delete", { preHandler: authenticate }, async (request) => {
+    const body = z.object({
+      ids: z.array(z.number().int().positive()).min(1).max(200)
+    }).parse(request.body);
+    const deletedIds = bulkSoftDeleteDocs(body.ids, request.user!.id, request.user!);
+    if (deletedIds.length) {
+      writeAuditLog({
+        userId: request.user!.id,
+        action: "doc.bulk_soft_delete",
+        targetType: "doc",
+        targetId: `count:${deletedIds.length}`,
+        ...auditMetaFromRequest(request)
+      });
+    }
+    return { ok: true, deletedIds };
   });
   app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async () => ({ docs: listTrashDocs() }));
   app.get("/api/docs/:id", { preHandler: authenticate }, async (request) => {

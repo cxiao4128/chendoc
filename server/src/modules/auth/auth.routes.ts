@@ -6,6 +6,7 @@ import { loginRateLimit, registerRateLimit } from "../../middleware/rateLimit.js
 import { users } from "../../db/schema.js";
 import { db } from "../../db/client.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
+import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { changePassword, login, register } from "./auth.service.js";
 import { encryptResponse } from "../crypto/crypto.service.js";
 
@@ -79,7 +80,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) {
       return encrypted(request, { user: null });
     }
-    return encrypted(request, { user: { id: user.id, username: user.username, role: user.role, status: user.status } });
+    return encrypted(request, { user: { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) } });
   });
 
   app.post("/api/auth/change-password", { preHandler: authenticate }, async (request, reply) => {

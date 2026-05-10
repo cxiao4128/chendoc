@@ -268,6 +268,29 @@ export function softDeleteDoc(id: number, userId: number, actor?: Actor) {
   db.update(docs).set({ deletedAt: now(), updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)).run();
 }
 
+export function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) {
+  const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
+  const deletedIds: number[] = [];
+  const deletedAt = now();
+
+  db.transaction((tx) => {
+    for (const id of uniqueIds) {
+      const doc = tx
+        .select({ id: docs.id, createdBy: docs.createdBy })
+        .from(docs)
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .limit(1)
+        .get();
+      if (!doc) continue;
+      assertCanAccessDoc(actor, doc);
+      const result = tx.update(docs).set({ deletedAt, updatedBy: userId, updatedAt: deletedAt }).where(eq(docs.id, id)).run();
+      if (result.changes > 0) deletedIds.push(id);
+    }
+  });
+
+  return deletedIds;
+}
+
 export function restoreDoc(id: number, userId: number) {
   db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)).run();
   return getDoc(id);

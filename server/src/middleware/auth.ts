@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { users } from "../db/schema.js";
 import type { JwtUser } from "../config/jwt.js";
 import { verifyAuthSessionHeader } from "../modules/auth/session.service.js";
+import { isSuperAdminUser } from "../utils/superAdmin.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -23,7 +24,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     if (!user || user.status !== "active") {
       return reply.code(401).send({ message: "未登录或登录已过期" });
     }
-    request.user = { id: user.id, username: user.username, role: user.role };
+    request.user = { id: user.id, username: user.username, role: user.role, isSuperAdmin: isSuperAdminUser(user) };
   } catch {
     return reply.code(401).send({ message: "未登录或登录已过期" });
   }

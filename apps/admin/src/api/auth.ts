@@ -6,6 +6,7 @@ export interface UserProfile {
   username: string;
   role: "admin" | "user";
   status: string;
+  isSuperAdmin?: boolean;
 }
 
 export async function loginApi(body: Record<string, unknown>) {

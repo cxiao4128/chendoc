@@ -65,6 +65,13 @@ export function deleteDocApi(id: number) {
   return request<{ ok: true }>(`/api/docs/${id}`, { method: "DELETE" });
 }
 
+export function bulkDeleteDocsApi(ids: number[]) {
+  return request<{ ok: true; deletedIds: number[] }>("/api/docs/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids })
+  });
+}
+
 export function restoreDocApi(id: number) {
   return request<{ doc: DocDetail }>(`/api/admin/docs/${id}/restore`, { method: "POST" });
 }

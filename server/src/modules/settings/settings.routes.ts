@@ -38,7 +38,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/users/:id/promote", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = promoteManagedUser(params.id);
+    const user = promoteManagedUser(params.id, request.user!);
     writeAuditLog({
       userId: request.user!.id,
       action: "user.promote_admin",
@@ -51,7 +51,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/users/:id/disable", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = disableManagedUser(params.id, request.user!.id);
+    const user = disableManagedUser(params.id, request.user!);
     writeAuditLog({
       userId: request.user!.id,
       action: "user.disable_login",
@@ -64,7 +64,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/users/:id/enable", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = enableManagedUser(params.id);
+    const user = enableManagedUser(params.id, request.user!);
     writeAuditLog({
       userId: request.user!.id,
       action: "user.enable_login",
@@ -77,7 +77,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.delete("/api/admin/users/:id", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    deleteManagedUser(params.id, request.user!.id);
+    deleteManagedUser(params.id, request.user!);
     writeAuditLog({
       userId: request.user!.id,
       action: "user.delete",

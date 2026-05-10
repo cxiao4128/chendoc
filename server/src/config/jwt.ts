@@ -5,6 +5,7 @@ export interface JwtUser {
   id: number;
   username: string;
   role: "admin" | "user";
+  isSuperAdmin?: boolean;
 }
 
 export function signJwt(user: JwtUser) {

@@ -28,12 +28,13 @@ import {
 } from "../../api/settings";
 import { defaultRemoteLogoUrl, defaultRemoteWallpaperUrl } from "../../config/site-assets";
 import { useIsMobileViewport } from "../../composables/useViewport";
+import { useAuthStore } from "../../stores/auth";
 import "./settings.css";
 
 type ActivePanel = "logs" | "appearance" | "users" | null;
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v1.04";
+const APP_VERSION = "v1.05";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -46,6 +47,7 @@ const actionTextMap: Record<string, string> = {
   "danger.doc.delete": "删除文档",
   "doc.create": "新建文档",
   "doc.soft_delete": "移入回收站",
+  "doc.bulk_soft_delete": "批量删除文档",
   "doc.restore": "恢复文档",
   "doc.hard_delete": "永久删除文档",
   "doc.publish": "发布文档",
@@ -60,11 +62,10 @@ const actionTextMap: Record<string, string> = {
   "settings.r2.test": "测试 R2 连接",
   "settings.r2.test_upload": "测试 R2 上传",
   "share.create": "创建分享",
-  "share.update": "更新分享",
   "share.delete": "删除分享",
   "share.review.approve": "通过分享审核",
   "share.review.reject": "拒绝分享审核",
-  "user.promote_admin": "提级为超级管理员",
+  "user.promote_admin": "提级为管理员",
   "user.disable_login": "禁止用户登录",
   "user.enable_login": "恢复用户登录",
   "user.delete": "注销用户"
@@ -98,6 +99,7 @@ const site = reactive({
 const saving = ref(false);
 const message = ref("");
 const isMobile = useIsMobileViewport();
+const auth = useAuthStore();
 const activePanel = ref<ActivePanel>(null);
 const operationLogs = ref<OperationLogView[]>([]);
 const logsLoading = ref(false);
@@ -197,8 +199,9 @@ async function selectUser(id: number) {
   }
 }
 
-function roleText(role: "admin" | "user") {
-  return role === "admin" ? "超级管理员" : "普通用户";
+function roleText(user: Pick<ManagedUserView, "role" | "isSuperAdmin">) {
+  if (user.isSuperAdmin) return "超级管理员";
+  return user.role === "admin" ? "管理员" : "普通用户";
 }
 
 function statusText(status: "active" | "disabled") {
@@ -215,11 +218,21 @@ async function promoteUser(user: ManagedUserView) {
   userActionLoading.value = user.id;
   try {
     const response = await promoteManagedUserApi(user.id);
-    userMessage.value = `${user.username} 已提级为超级管理员`;
+    userMessage.value = `${user.username} 已提级为管理员`;
     await refreshSelectedUser(response.user);
   } finally {
     userActionLoading.value = null;
   }
+}
+
+function canPromoteUser(user: ManagedUserView) {
+  return auth.isSuperAdmin && user.role !== "admin";
+}
+
+function canManageUser(user: ManagedUserView) {
+  if (user.id === auth.user?.id) return false;
+  if (user.role === "admin" && !auth.isSuperAdmin) return false;
+  return true;
 }
 
 async function disableUser(user: ManagedUserView) {
@@ -350,7 +363,7 @@ onMounted(() => {
       </button>
       <button class="settings-page__card" :class="{ 'is-active': activePanel === 'users' }" type="button" @click="openPanel('users')">
         <UserCog :size="21" />
-        <div><strong>用户管理</strong><span>查看用户 IP、后台文档和登录权限</span></div>
+        <div><strong>用户管理</strong><span>查看用户 IP、后台文档和登录状态</span></div>
       </button>
     </div>
 
@@ -403,7 +416,7 @@ onMounted(() => {
     <section v-if="activePanel === 'users'" class="settings-page__panel settings-page__users">
       <div class="settings-page__panel-head">
         <div>
-          <small>账号与权限</small>
+          <small>账号管理</small>
           <h2>用户管理</h2>
         </div>
         <button class="cd-button" type="button" :disabled="usersLoading" @click="loadUsers(true)">
@@ -424,7 +437,7 @@ onMounted(() => {
             @click="selectUser(user.id)"
           >
             <strong>{{ user.username }}</strong>
-            <span>{{ roleText(user.role) }} · {{ statusText(user.status) }}</span>
+            <span>{{ roleText(user) }} · {{ statusText(user.status) }}</span>
             <small>文档 {{ user.docCount }} 篇 · 最近 IP {{ user.lastIp || "暂无" }}</small>
           </button>
         </div>
@@ -438,7 +451,7 @@ onMounted(() => {
                 <h3>{{ selectedUser.username }}</h3>
               </div>
               <span :class="{ 'is-disabled': selectedUser.status === 'disabled' }">
-                {{ roleText(selectedUser.role) }} · {{ statusText(selectedUser.status) }}
+                {{ roleText(selectedUser) }} · {{ statusText(selectedUser.status) }}
               </span>
             </header>
             <div class="settings-page__user-meta">
@@ -448,16 +461,16 @@ onMounted(() => {
               <span>文档：{{ selectedUser.docCount }} 篇，回收站 {{ selectedUser.deletedDocCount }} 篇</span>
             </div>
             <div class="settings-page__user-actions">
-              <button class="cd-button primary" type="button" :disabled="selectedUser.role === 'admin' || userActionLoading === selectedUser.id" @click="promoteUser(selectedUser)">
-                <ShieldCheck :size="16" />提级为超级管理员
+              <button v-if="selectedUser.role !== 'admin'" class="cd-button primary" type="button" :disabled="!canPromoteUser(selectedUser) || userActionLoading === selectedUser.id" @click="promoteUser(selectedUser)">
+                <ShieldCheck :size="16" />提级为管理员
               </button>
-              <button v-if="selectedUser.status === 'active'" class="cd-button" type="button" :disabled="userActionLoading === selectedUser.id" @click="disableUser(selectedUser)">
+              <button v-if="selectedUser.status === 'active'" class="cd-button" type="button" :disabled="!canManageUser(selectedUser) || userActionLoading === selectedUser.id" @click="disableUser(selectedUser)">
                 禁止登录
               </button>
-              <button v-else class="cd-button" type="button" :disabled="userActionLoading === selectedUser.id" @click="enableUser(selectedUser)">
+              <button v-else class="cd-button" type="button" :disabled="!canManageUser(selectedUser) || userActionLoading === selectedUser.id" @click="enableUser(selectedUser)">
                 恢复登录
               </button>
-              <button class="cd-button danger" type="button" :disabled="userActionLoading === selectedUser.id" @click="deleteUser(selectedUser)">
+              <button class="cd-button danger" type="button" :disabled="!canManageUser(selectedUser) || userActionLoading === selectedUser.id" @click="deleteUser(selectedUser)">
                 注销用户
               </button>
             </div>
