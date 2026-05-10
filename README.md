@@ -1,17 +1,194 @@
 # ChenDoc / Chen Shu
 
-Current version: `v1.05`
+当前版本 / Current version: `v1.05`
 
-## 更新日志
+语言 / Language: [中文](#中文) | [English](#english)
+
+## 更新日志 / Changelog
+
+### 中文更新
 
 版本号：`v1.05`
-本次更新内容：新增文档批量删除；操作日志不再统计更新分享；用户管理区分超级管理员、管理员和普通用户，并限制提级只能由超级管理员提为管理员。
-更新时间：2026-05-10 22:17:48 +08:00
-文档官网：https://d.w92.pw/
 
-English is shown by default. Open the Chinese section at the bottom if you prefer Chinese.
+本次更新内容：
+
+- 新增文档批量删除。
+- 操作日志不再统计更新分享。
+- 用户管理区分超级管理员、管理员和普通用户。
+- 提级只能由超级管理员提为管理员。
+
+更新时间：2026-05-10 22:17:48 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+### English Changelog
+
+Version: `v1.05`
+
+Changes in this release:
+
+- Added bulk document deletion.
+- Share update operations are no longer counted in operation logs.
+- User management now distinguishes super administrators, administrators, and regular users.
+- User promotion is limited to super administrators, and users can only be promoted to administrator.
+
+Updated at: 2026-05-10 22:17:48 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+## 中文
+
+[English](#english)
+
+ChenDoc 是一个轻量的私有文档系统，适合个人服务器、小团队或内部知识库使用。它提供文档编辑、公开分享、分享审核、注册卡密、回收站、R2/S3 兼容对象存储、操作日志和后台系统管理。
+
+### 功能
+
+- 文档创建、编辑、搜索、回收站和历史版本。
+- 公开分享、访问密码、分享码、自定义短链接和分享审核。
+- 注册卡密管理。
+- R2/S3 兼容对象存储配置、连接测试和上传测试。
+- 后台系统管理：操作日志、站点外观、用户管理、版本号、检查更新和开源链接。
+- 管理端登录、注册、验证码和加密会话。
+
+### 技术栈
+
+- 前端：Vue 3、Vite、TypeScript、Pinia、Vue Router、TipTap。
+- 后端：Node.js 20+、Fastify、TypeScript、Drizzle ORM、SQLite。
+- 存储：SQLite 保存业务数据，Cloudflare R2 或 S3 兼容对象存储保存上传文件。
+
+### 环境要求
+
+- Node.js 20 或更高版本。
+- npm。
+- Linux 服务器建议使用 Nginx、宝塔或其他反向代理，将站点代理到 `http://127.0.0.1:8985`。
+
+### 本地开发
+
+```bash
+npm install
+npm run dev
+```
+
+默认前端开发服务运行在 `5175`，后端端口由 `.env` 中的 `PORT` 控制。
+
+### 构建与运行
+
+```bash
+npm install
+npm run build
+npm run db:migrate
+npm start
+```
+
+### 环境变量
+
+复制模板后填写真实配置：
+
+```bash
+cp .env.example .env
+```
+
+重点配置：
+
+- `PUBLIC_SITE_URL`：站点公网地址。
+- `DATABASE_URL`：SQLite 数据库路径。
+- `JWT_SECRET`：登录会话密钥。
+- `CONFIG_ENCRYPTION_KEY`：配置加密密钥。
+- `RSA_PRIVATE_KEY_ENCRYPTION_KEY`：RSA 私钥加密密钥。
+- `DEFAULT_ADMIN_USERNAME`：初始化管理员用户名。
+- `DEFAULT_ADMIN_PASSWORD`：初始化管理员密码。
+- `R2_*`：Cloudflare R2 或 S3 兼容存储配置。
+
+不要提交 `.env`。生产环境请使用唯一强密钥和唯一强密码。
+
+### 初始化管理员
+
+管理员账号通过脚本创建：
+
+```bash
+npm run admin:init
+```
+
+初始化前请在 `.env` 中设置：
+
+```bash
+DEFAULT_ADMIN_USERNAME=你的管理员用户名
+DEFAULT_ADMIN_PASSWORD=你的管理员强密码
+```
+
+README 不展示默认管理员密码。请在 `.env` 中自行设置并妥善保存。
+
+如果管理员账号已经存在，初始化脚本只会确认账号为管理员并处于启用状态，不会重置已有密码。需要主动重置时再执行：
+
+```bash
+CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
+```
+
+### 部署
+
+从 GitHub Release 下载部署压缩包后，在部署目录内解压并执行：
+
+```bash
+unzip -o chendoc-v1.05-*.zip
+cp .env.example .env
+# 编辑 .env，填写生产环境配置
+bash ./deploy.sh
+```
+
+首次部署并初始化管理员时：
+
+```bash
+CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
+```
+
+部署脚本会检查环境、安装依赖、构建前后端、执行数据库迁移，并通过 PM2 启动服务。
+
+反向代理目标：
+
+```text
+http://127.0.0.1:8985
+```
+
+### 常用命令
+
+```bash
+npm run dev              # 本地开发
+npm run build            # 构建前端和后端
+npm run test             # 运行后端测试
+npm run db:migrate       # 数据库迁移
+npm run admin:init       # 初始化或修复管理员账号
+npm run r2:import        # 导入 R2 配置
+npm run db:backup        # 备份 SQLite 数据库
+bash ./deploy.sh         # 部署并重启服务
+bash ./start.sh          # 启动已构建服务
+bash ./stop.sh           # 停止服务
+```
+
+### 目录说明
+
+```text
+apps/admin/              Vue 管理后台
+server/                  Fastify 后端和数据库模块
+scripts/                 构建、部署、备份脚本
+data/                    运行数据和 SQLite 数据库，不提交
+server/public/admin/     构建后由后端托管的前端产物
+```
+
+### 安全提示
+
+- 不要公开 `.env`、数据库、日志和部署密钥。
+- 首次部署后请确认管理员密码、JWT 密钥、配置加密密钥和 RSA 私钥加密密钥均已替换。
+- R2 Access Key 和 Secret 只保存在服务端配置中，前端不会直接暴露密钥。
+- 上线前建议测试公开分享、分享审核、注册卡密和 R2 上传链路。
+
+### 开源地址
+
+[https://github.com/cxiao4128/chendoc](https://github.com/cxiao4128/chendoc)
 
 ## English
+
+[中文](#中文)
 
 ChenDoc is a lightweight private documentation system for personal servers, small teams, and internal knowledge bases. It includes document editing, public sharing, share review, invite codes, trash recovery, R2/S3-compatible object storage, audit logs, and system administration.
 
@@ -115,7 +292,9 @@ For the first deployment with admin initialization:
 CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
 ```
 
-The deployment script checks the environment, installs dependencies, builds the frontend and backend, runs database migrations, and starts the service through PM2. Reverse proxy target:
+The deployment script checks the environment, installs dependencies, builds the frontend and backend, runs database migrations, and starts the service through PM2.
+
+Reverse proxy target:
 
 ```text
 http://127.0.0.1:8985
@@ -153,153 +332,6 @@ server/public/admin/     Built frontend served by backend
 - R2 access keys are stored only on the server side and are not exposed directly to the frontend.
 - Before going live, test public sharing, share review, invite codes, and R2 upload behavior.
 
-## Open Source
+### Open Source
 
 [https://github.com/cxiao4128/chendoc](https://github.com/cxiao4128/chendoc)
-
-<details>
-<summary>中文说明</summary>
-
-## 中文
-
-ChenDoc 是一个轻量的私有文档系统，适合个人服务器、小团队或内部知识库使用。它提供文档编辑、公开分享、分享审核、注册卡密、回收站、R2/S3 兼容对象存储、操作日志和后台系统管理。
-
-### 功能
-
-- 文档创建、编辑、搜索、回收站和历史版本。
-- 公开分享、访问密码、分享码、自定义短链接和分享审核。
-- 注册卡密管理。
-- R2/S3 兼容对象存储配置、连接测试和上传测试。
-- 后台系统管理：操作日志、站点外观、用户管理、版本号、检查更新和开源链接。
-- 管理端登录、注册、验证码和加密会话。
-
-### 技术栈
-
-- 前端：Vue 3、Vite、TypeScript、Pinia、Vue Router、TipTap。
-- 后端：Node.js 20+、Fastify、TypeScript、Drizzle ORM、SQLite。
-- 存储：SQLite 保存业务数据，Cloudflare R2 或 S3 兼容对象存储保存上传文件。
-
-### 环境要求
-
-- Node.js 20 或更高版本。
-- npm。
-- Linux 服务器建议使用 Nginx、宝塔或其他反向代理，将站点代理到 `http://127.0.0.1:8985`。
-
-### 本地开发
-
-```bash
-npm install
-npm run dev
-```
-
-默认前端开发服务运行在 `5175`，后端端口由 `.env` 中的 `PORT` 控制。
-
-### 构建与运行
-
-```bash
-npm install
-npm run build
-npm run db:migrate
-npm start
-```
-
-### 环境变量
-
-复制模板后填写真实配置：
-
-```bash
-cp .env.example .env
-```
-
-重点配置：
-
-- `PUBLIC_SITE_URL`：站点公网地址。
-- `DATABASE_URL`：SQLite 数据库路径。
-- `JWT_SECRET`：登录会话密钥。
-- `CONFIG_ENCRYPTION_KEY`：配置加密密钥。
-- `RSA_PRIVATE_KEY_ENCRYPTION_KEY`：RSA 私钥加密密钥。
-- `DEFAULT_ADMIN_USERNAME`：初始化管理员用户名。
-- `DEFAULT_ADMIN_PASSWORD`：初始化管理员密码。
-- `R2_*`：Cloudflare R2 或 S3 兼容存储配置。
-
-不要提交 `.env`。生产环境请使用唯一强密钥和唯一强密码。
-
-### 初始化管理员
-
-管理员账号通过脚本创建：
-
-```bash
-npm run admin:init
-```
-
-初始化前请在 `.env` 中设置：
-
-```bash
-DEFAULT_ADMIN_USERNAME=你的管理员用户名
-DEFAULT_ADMIN_PASSWORD=你的管理员强密码
-```
-
-README 不展示默认管理员密码。请在 `.env` 中自行设置并妥善保存。
-
-如果管理员账号已经存在，初始化脚本只会确认账号为管理员并处于启用状态，不会重置已有密码。需要主动重置时再执行：
-
-```bash
-CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
-```
-
-### 部署
-
-从 GitHub Release 下载部署压缩包后，在你的部署目录内解压并执行：
-
-```bash
-unzip -o chendoc-v1.05-*.zip
-cp .env.example .env
-# 编辑 .env，填写生产环境配置
-bash ./deploy.sh
-```
-
-首次部署并初始化管理员时：
-
-```bash
-CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
-```
-
-部署脚本会检查环境、安装依赖、构建前后端、执行数据库迁移，并通过 PM2 启动服务。反向代理目标为：
-
-```text
-http://127.0.0.1:8985
-```
-
-### 常用命令
-
-```bash
-npm run dev              # 本地开发
-npm run build            # 构建前端和后端
-npm run test             # 运行后端测试
-npm run db:migrate       # 数据库迁移
-npm run admin:init       # 初始化或修复管理员账号
-npm run r2:import        # 导入 R2 配置
-npm run db:backup        # 备份 SQLite 数据库
-bash ./deploy.sh         # 部署并重启服务
-bash ./start.sh          # 启动已构建服务
-bash ./stop.sh           # 停止服务
-```
-
-### 目录说明
-
-```text
-apps/admin/              Vue 管理后台
-server/                  Fastify 后端和数据库模块
-scripts/                 构建、部署、备份脚本
-data/                    运行数据和 SQLite 数据库，不提交
-server/public/admin/     构建后由后端托管的前端产物
-```
-
-### 安全提示
-
-- 不要公开 `.env`、数据库、日志和部署机密钥。
-- 首次部署后请确认管理员密码、JWT 密钥、配置加密密钥和 RSA 私钥加密密钥均已替换。
-- R2 Access Key 和 Secret 只保存在服务端配置中，前端不会直接暴露密钥。
-- 上线前建议测试公开分享权限、分享审核、注册卡密和 R2 上传链路。
-
-</details>
