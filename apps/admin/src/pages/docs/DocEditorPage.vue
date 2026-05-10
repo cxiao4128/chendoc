@@ -51,11 +51,13 @@ const sharePanelOpen = ref(false);
 const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions">(null);
 const localDetailError = ref("");
 const saveError = ref("");
-let saveInterval: number | undefined;
+let saveTimer: number | undefined;
 let shareSaveTimer: number | undefined;
 let saving = false;
 let queuedWhileSaving = false;
 let syncingShare = false;
+
+const AUTO_SAVE_DELAY_MS = 900;
 
 const docId = computed(() => Number(route.params.id));
 const current = computed(() => docs.current?.id === docId.value ? docs.current : null);
@@ -125,6 +127,25 @@ function markDirty() {
   dirty.value = true;
   saveError.value = "";
   saveState.value = "pending";
+  scheduleSave();
+}
+
+function clearSaveTimer() {
+  if (!saveTimer) return;
+  window.clearTimeout(saveTimer);
+  saveTimer = undefined;
+}
+
+function scheduleSave() {
+  clearSaveTimer();
+  saveTimer = window.setTimeout(() => {
+    saveTimer = undefined;
+    if (saving) {
+      queuedWhileSaving = true;
+      return;
+    }
+    void save();
+  }, AUTO_SAVE_DELAY_MS);
 }
 
 async function loadShare(docIdValue: number) {
@@ -269,6 +290,7 @@ function waitForCurrentSave() {
 }
 
 async function flushPendingSave() {
+  clearSaveTimer();
   if (saving) {
     queuedWhileSaving = true;
     await waitForCurrentSave();
@@ -419,13 +441,6 @@ watch([shareEnabled, shareSlug, shareCodeInput], scheduleShareSave);
 
 onMounted(() => {
   void load();
-  saveInterval = window.setInterval(() => {
-    if (saving) {
-      queuedWhileSaving = true;
-      return;
-    }
-    void save();
-  }, 5000);
   window.addEventListener("beforeunload", beforeUnload);
 });
 
@@ -444,7 +459,7 @@ onBeforeRouteLeave(async (_to, _from, next) => {
 });
 
 onBeforeUnmount(() => {
-  if (saveInterval) window.clearInterval(saveInterval);
+  clearSaveTimer();
   if (shareSaveTimer) window.clearTimeout(shareSaveTimer);
   window.removeEventListener("beforeunload", beforeUnload);
   if (dirty.value) void save();

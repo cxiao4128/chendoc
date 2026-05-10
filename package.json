@@ -1,6 +1,6 @@
 {
   "name": "chendoc",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
   "description": "ChenDoc / Chen Shu lightweight private documentation system.",

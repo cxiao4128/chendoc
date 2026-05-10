@@ -99,6 +99,14 @@ function parseContent(value: string) {
   }
 }
 
+function stringifyContent(value: unknown) {
+  return JSON.stringify(value);
+}
+
+function currentEditorContent() {
+  return editor.value ? stringifyContent(editor.value.getJSON()) : "";
+}
+
 function fileFromPaste(event: ClipboardEvent) {
   const items = Array.from(event.clipboardData?.items || []);
   for (const item of items) {
@@ -372,9 +380,30 @@ const editor = ref<Editor | null>(new Editor({
   }
 }));
 
-watch(() => [props.docId, props.contentJson], () => {
-  editor.value?.commands.setContent(parseContent(props.contentJson));
-  window.setTimeout(() => collectToc());
+watch(() => [props.docId, props.contentJson] as const, ([nextDocId, nextContentJson], previous) => {
+  const next = editor.value;
+  if (!next) return;
+
+  const incomingContent = parseContent(nextContentJson);
+  const incomingJson = stringifyContent(incomingContent);
+  const editorJson = currentEditorContent();
+  const previousDocId = previous?.[0];
+  const previousJson = previous ? stringifyContent(parseContent(previous[1])) : "";
+  const isSameDoc = previousDocId === nextDocId;
+
+  if (isSameDoc && (editorJson === incomingJson || editorJson !== previousJson)) {
+    window.setTimeout(() => {
+      collectToc(next);
+      syncImageSelection(next);
+    });
+    return;
+  }
+
+  next.commands.setContent(incomingContent, false);
+  window.setTimeout(() => {
+    collectToc(next);
+    syncImageSelection(next);
+  });
 });
 
 onMounted(() => {
