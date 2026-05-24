@@ -13,8 +13,8 @@ function messageForReason(reason: "missing" | "disabled" | "expired" | "deleted"
   return "分享不存在。";
 }
 
-export function renderSharePage(shareKey: string | number, accessToken?: string) {
-  const resolved = resolvePublicShare(shareKey);
+export async function renderSharePage(shareKey: string | number, accessToken?: string) {
+  const resolved = await resolvePublicShare(shareKey);
   if (!resolved.ok) {
     return {
       statusCode: resolved.reason === "missing" || resolved.reason === "deleted" ? 404 : 403,
@@ -39,7 +39,7 @@ export function renderSharePage(shareKey: string | number, accessToken?: string)
     };
   }
 
-  const data = getPublicShare(shareKey, true);
+  const data = await getPublicShare(shareKey, true);
   if (!data) {
     return {
       statusCode: 404,

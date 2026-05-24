@@ -112,7 +112,14 @@ function optionalInt(name: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function databaseProvider(): "sqlite" | "mysql" {
+  const raw = (process.env.DATABASE_PROVIDER ?? "sqlite").trim().toLowerCase();
+  if (raw === "sqlite" || raw === "mysql") return raw;
+  throw new Error("DATABASE_PROVIDER must be sqlite or mysql.");
+}
+
 const defaultAdminUsername = process.env.DEFAULT_ADMIN_USERNAME ?? "xchen";
+const provider = databaseProvider();
 
 export const env = {
   paths: {
@@ -123,6 +130,7 @@ export const env = {
   host: process.env.HOST ?? "0.0.0.0",
   port: optionalInt("PORT", 8985),
   publicSiteUrl: process.env.PUBLIC_SITE_URL ?? `http://127.0.0.1:${process.env.PORT ?? 8985}`,
+  databaseProvider: provider,
   databaseUrl: process.env.DATABASE_URL ?? "./data/chendoc.sqlite",
   jwtSecret: requiredSecret("JWT_SECRET", 32),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "2h",

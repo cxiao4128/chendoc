@@ -23,23 +23,23 @@ import {
 export async function settingsRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
 
-  app.get("/api/public/settings/site", async () => ({ config: getSiteConfig() }));
+  app.get("/api/public/settings/site", async () => ({ config: await getSiteConfig() }));
 
-  app.get("/api/settings", { preHandler: adminOnly }, async () => ({ settings: listSettings() }));
+  app.get("/api/settings", { preHandler: adminOnly }, async () => ({ settings: await listSettings() }));
 
-  app.get("/api/settings/operation-logs", { preHandler: adminOnly }, async () => ({ logs: listOperationLogs() }));
+  app.get("/api/settings/operation-logs", { preHandler: adminOnly }, async () => ({ logs: await listOperationLogs() }));
 
-  app.get("/api/admin/users", { preHandler: adminOnly }, async () => ({ users: listManagedUsers() }));
+  app.get("/api/admin/users", { preHandler: adminOnly }, async () => ({ users: await listManagedUsers() }));
 
   app.get("/api/admin/users/:id", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { user: getManagedUser(params.id) };
+    return { user: await getManagedUser(params.id) };
   });
 
   app.post("/api/admin/users/:id/promote", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = promoteManagedUser(params.id, request.user!);
-    writeAuditLog({
+    const user = await promoteManagedUser(params.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "user.promote_admin",
       targetType: "user",
@@ -51,8 +51,8 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/users/:id/disable", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = disableManagedUser(params.id, request.user!);
-    writeAuditLog({
+    const user = await disableManagedUser(params.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "user.disable_login",
       targetType: "user",
@@ -64,8 +64,8 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/users/:id/enable", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = enableManagedUser(params.id, request.user!);
-    writeAuditLog({
+    const user = await enableManagedUser(params.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "user.enable_login",
       targetType: "user",
@@ -77,8 +77,8 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.delete("/api/admin/users/:id", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    deleteManagedUser(params.id, request.user!);
-    writeAuditLog({
+    await deleteManagedUser(params.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "user.delete",
       targetType: "user",
@@ -88,11 +88,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/api/settings/site", { preHandler: adminOnly }, async () => ({ config: getSiteConfig() }));
+  app.get("/api/settings/site", { preHandler: adminOnly }, async () => ({ config: await getSiteConfig() }));
 
   app.post("/api/settings/site", { preHandler: adminOnly }, async (request) => {
-    const config = saveSiteConfig(request.body);
-    writeAuditLog({
+    const config = await saveSiteConfig(request.body);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "settings.site.update",
       targetType: "settings",
@@ -110,8 +110,8 @@ export async function settingsRoutes(app: FastifyInstance) {
         type: z.enum(["string", "json", "number", "boolean"]).default("string")
       }))
     }).parse(request.body);
-    for (const item of body.items) setSetting(item.key, item.value, item.type);
-    writeAuditLog({
+    for (const item of body.items) await setSetting(item.key, item.value, item.type);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "settings.bulk_update",
       targetType: "settings",
@@ -121,11 +121,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/api/settings/storage/r2", { preHandler: adminOnly }, async () => ({ config: getR2Config(false) }));
+  app.get("/api/settings/storage/r2", { preHandler: adminOnly }, async () => ({ config: await getR2Config(false) }));
 
   app.post("/api/settings/storage/r2", { preHandler: adminOnly }, async (request) => {
-    const config = saveR2Config(request.body);
-    writeAuditLog({
+    const config = await saveR2Config(request.body);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "settings.r2.update",
       targetType: "settings",
@@ -138,7 +138,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.post("/api/settings/storage/r2/test", { preHandler: adminOnly }, async (request) => {
     const body = z.object({ upload: z.boolean().optional().default(false) }).parse(request.body ?? {});
     const result = await testR2Connection(body.upload);
-    writeAuditLog({
+    await writeAuditLog({
       userId: request.user!.id,
       action: body.upload ? "settings.r2.test_upload" : "settings.r2.test",
       targetType: "settings",

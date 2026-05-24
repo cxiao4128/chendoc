@@ -7,10 +7,9 @@ import { getPublicSiteConfigApi } from "../../api/settings";
 import {
   bundledLogoUrl,
   bundledWallpaperUrl,
-  defaultRemoteLogoUrl,
-  defaultRemoteWallpaperUrl,
   withBundledSiteAssets
 } from "../../config/site-assets";
+import { allowedPostLoginPath } from "../../router/access";
 import { useAuthStore } from "../../stores/auth";
 import "./login.css";
 
@@ -71,14 +70,14 @@ async function submit() {
     ? { captchaId: captchaId.value, captchaCode: captchaCode.value }
     : {};
   try {
-    const { loginApi } = await import("../../api/auth");
-    const response = await loginApi({
+    const { a0: submitCredential } = await import("../../api/auth");
+    const response = await submitCredential({
       username: username.value,
       password: password.value,
       ...captcha
     });
     auth.setSession(response.sessionId, response.sessionKey, response.user);
-    await router.push(String(route.query.redirect || "/admin/docs"));
+    await router.push(allowedPostLoginPath(response.user, route.query.redirect));
   } catch (err) {
     error.value = err instanceof Error ? err.message : "登录失败，请检查账号或密码";
     if (!shouldHideCaptcha.value) await (captchaInput.value?.refresh() ?? Promise.resolve()).catch(() => undefined);

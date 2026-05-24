@@ -1,10 +1,10 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { db } from "../../db/client.js";
+import { db, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { docs, operationLogs, shares } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
 
-export function findDocById(id: number) {
-  const doc = db
+export async function findDocById(id: number) {
+  const doc = await dbGet(db
     .select({
       id: docs.id,
       title: docs.title,
@@ -16,20 +16,19 @@ export function findDocById(id: number) {
     .from(docs)
     .leftJoin(shares, eq(docs.id, shares.docId))
     .where(eq(docs.id, id))
-    .limit(1)
-    .get();
+    .limit(1));
   return doc ?? null;
 }
 
-export function dangerDeleteDoc(input: {
+export async function dangerDeleteDoc(input: {
   id: number;
   userId: number;
   ip?: string;
   userAgent?: string;
 }) {
-  db.transaction((tx) => {
-    tx.update(docs).set({ deletedAt: now(), updatedAt: now() }).where(and(eq(docs.id, input.id), isNull(docs.deletedAt))).run();
-    tx.insert(operationLogs).values({
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.update(docs).set({ deletedAt: now(), updatedAt: now() }).where(and(eq(docs.id, input.id), isNull(docs.deletedAt))));
+    await dbRun(tx.insert(operationLogs).values({
       userId: input.userId,
       action: "danger.doc.delete",
       targetType: "doc",
@@ -37,6 +36,6 @@ export function dangerDeleteDoc(input: {
       ip: input.ip,
       userAgent: input.userAgent,
       createdAt: now()
-    }).run();
+    }));
   });
 }

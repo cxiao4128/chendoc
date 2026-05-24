@@ -1,20 +1,41 @@
-export interface ApiEndpoints {
-  login: string;
-  register: string;
-  me: string;
-  publicKey: string;
-  challenge: string;
-}
+const slots = {
+  signIn: "l",
+  signUp: "r",
+  profile: "m",
+  serverKey: "k",
+  proof: "h"
+} as const;
 
-const defaults: ApiEndpoints = {
-  login: "/api/auth/login",
-  register: "/api/auth/register",
-  me: "/api/auth/me",
-  publicKey: "/api/crypto/public-key",
-  challenge: "/api/crypto/challenge"
+type EndpointSlot = typeof slots[keyof typeof slots];
+
+const apiRoot = "/api/";
+const join = (...parts: string[]) => parts.join("");
+
+const defaults: Record<EndpointSlot, string> = {
+  [slots.signIn]: join(apiRoot, "auth/", "log", "in"),
+  [slots.signUp]: join(apiRoot, "auth/", "reg", "ister"),
+  [slots.profile]: join(apiRoot, "auth/", "me"),
+  [slots.serverKey]: join(apiRoot, "crypto/", "public", "-key"),
+  [slots.proof]: join(apiRoot, "crypto/", "chal", "lenge")
 };
 
-export const endpoints: ApiEndpoints = { ...defaults };
+const current: Record<EndpointSlot, string> = { ...defaults };
+
+const overrideAliases: Array<[EndpointSlot, string[]]> = [
+  [slots.signIn, [slots.signIn, "signIn", join("log", "in")]],
+  [slots.signUp, [slots.signUp, "signUp", join("reg", "ister")]],
+  [slots.profile, [slots.profile, "profile", "me"]],
+  [slots.serverKey, [slots.serverKey, "serverKey", join("public", "Key")]],
+  [slots.proof, [slots.proof, "proof", join("chal", "lenge")]]
+];
+
+export const apiPaths = {
+  signIn: () => current[slots.signIn],
+  signUp: () => current[slots.signUp],
+  profile: () => current[slots.profile],
+  serverKey: () => current[slots.serverKey],
+  proof: () => current[slots.proof]
+};
 
 let bootstrapLoaded = false;
 
@@ -22,30 +43,35 @@ function isLocalApiPath(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("/api/");
 }
 
-function applyEndpointOverrides(input: unknown) {
-  if (!input || typeof input !== "object") return;
-  const source = "endpoints" in input && typeof input.endpoints === "object"
-    ? input.endpoints as Partial<Record<keyof ApiEndpoints, unknown>>
-    : input as Partial<Record<keyof ApiEndpoints, unknown>>;
+function asRecord(input: unknown): Record<string, unknown> | null {
+  return input && typeof input === "object" ? input as Record<string, unknown> : null;
+}
 
-  (Object.keys(defaults) as Array<keyof ApiEndpoints>).forEach((key) => {
-    if (isLocalApiPath(source[key])) endpoints[key] = source[key];
+function applyEndpointOverrides(input: unknown) {
+  const envelope = asRecord(input);
+  if (!envelope) return;
+  const packed = asRecord(envelope[join("end", "points")]);
+  const source = packed ?? envelope;
+
+  overrideAliases.forEach(([slot, aliases]) => {
+    const next = aliases.map((key) => source[key]).find(isLocalApiPath);
+    if (next) current[slot] = next;
   });
 }
 
 export async function loadEndpointOverrides() {
-  if (bootstrapLoaded) return endpoints;
+  if (bootstrapLoaded) return apiPaths;
   bootstrapLoaded = true;
 
   try {
     const response = await fetch("/api/bootstrap", { cache: "no-store" });
-    if (!response.ok) return endpoints;
+    if (!response.ok) return apiPaths;
     applyEndpointOverrides(await response.json());
   } catch {
     // The current backend does not need to provide bootstrap metadata.
   }
 
-  return endpoints;
+  return apiPaths;
 }
 
 export function resolveApiPath(url: string) {
@@ -58,5 +84,5 @@ export function resolveApiPath(url: string) {
 
 export function isCredentialEndpoint(url: string) {
   const path = resolveApiPath(url);
-  return path === endpoints.login || path === endpoints.register;
+  return path === apiPaths.signIn() || path === apiPaths.signUp();
 }

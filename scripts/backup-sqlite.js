@@ -50,7 +50,8 @@ function readEnvFile(path) {
 }
 
 function resolveFromRoot(path) {
-  return isAbsolute(path) ? path : resolve(root, path);
+  const normalized = String(path).replace(/^file:/, "");
+  return isAbsolute(normalized) ? normalized : resolve(root, normalized);
 }
 
 function timestamp(date = new Date()) {

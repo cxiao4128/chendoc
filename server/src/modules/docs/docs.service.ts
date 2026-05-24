@@ -1,6 +1,6 @@
-import { and, desc, eq, isNotNull, isNull, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, like, or } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "../../db/client.js";
+import { castAsText, db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { docs, docVersions, shares, uploads } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
@@ -35,9 +35,9 @@ function normalizeSearch(query?: unknown) {
 
 let didNormalizeLegacyDraftStatuses = false;
 
-function normalizeLegacyDraftStatuses() {
+async function normalizeLegacyDraftStatuses() {
   if (didNormalizeLegacyDraftStatuses) return;
-  db.update(docs).set({ status: "published" }).where(eq(docs.status, "draft")).run();
+  await dbRun(db.update(docs).set({ status: "published" }).where(eq(docs.status, "draft")));
   didNormalizeLegacyDraftStatuses = true;
 }
 
@@ -71,44 +71,45 @@ function safeShareRecord(share: typeof shares.$inferSelect | undefined | null) {
   };
 }
 
-function shouldCreateVersion(docId: number, current: { title: string; contentJson: string; contentHtml: string }, next: { title?: string; contentJson?: string; contentHtml?: string }) {
+async function shouldCreateVersion(docId: number, current: { title: string; contentJson: string; contentHtml: string }, next: { title?: string; contentJson?: string; contentHtml?: string }) {
   const titleChanged = next.title !== undefined && next.title !== current.title;
   const jsonChanged = next.contentJson !== undefined && next.contentJson !== current.contentJson;
   const htmlChanged = next.contentHtml !== undefined && next.contentHtml !== current.contentHtml;
   if (!titleChanged && !jsonChanged && !htmlChanged) return false;
 
-  const latest = db
+  const latest = await dbGet<{ createdAt: Date }>(db
     .select({ createdAt: docVersions.createdAt })
     .from(docVersions)
     .where(eq(docVersions.docId, docId))
     .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
-    .limit(1)
-    .get();
+    .limit(1));
   if (!latest) return true;
   return Date.now() - latest.createdAt.getTime() >= VERSION_SNAPSHOT_INTERVAL_MS;
 }
 
-function pruneDocVersions(docId: number) {
-  db.delete(docVersions)
-    .where(sql`${docVersions.id} in (
-      select id from doc_versions
-      where doc_id = ${docId}
-      order by created_at desc, id desc
-      limit -1 offset ${MAX_DOC_VERSIONS}
-    )`)
-    .run();
+async function pruneDocVersions(docId: number) {
+  const stale = await dbAll<{ id: number }>(db
+    .select({ id: docVersions.id })
+    .from(docVersions)
+    .where(eq(docVersions.docId, docId))
+    .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
+    .limit(100000)
+    .offset(MAX_DOC_VERSIONS));
+  if (stale.length) {
+    await dbRun(db.delete(docVersions).where(inArray(docVersions.id, stale.map((row) => row.id))));
+  }
 }
 
-function createVersionSnapshot(docId: number, current: { title: string; contentJson: string; contentHtml: string }, userId: number) {
-  db.insert(docVersions).values({
+async function createVersionSnapshot(docId: number, current: { title: string; contentJson: string; contentHtml: string }, userId: number) {
+  await dbRun(db.insert(docVersions).values({
     docId,
     title: current.title,
     contentJson: current.contentJson,
     contentHtml: current.contentHtml,
     createdBy: userId,
     createdAt: now()
-  }).run();
-  pruneDocVersions(docId);
+  }));
+  await pruneDocVersions(docId);
 }
 
 function listSelect() {
@@ -142,8 +143,8 @@ function assertCanAccessDoc(actor: Actor | undefined, doc: { createdBy: number |
   if (!canAccessDoc(actor, doc)) throw new Error("文档不存在");
 }
 
-export function listDocs(actor: Actor, query?: unknown) {
-  normalizeLegacyDraftStatuses();
+export async function listDocs(actor: Actor, query?: unknown) {
+  await normalizeLegacyDraftStatuses();
   const q = normalizeSearch(query);
   const pattern = `%${q}%`;
   const accessWhere = actor.role === "admin" ? isNull(docs.deletedAt) : and(isNull(docs.deletedAt), eq(docs.createdBy, actor.id));
@@ -154,38 +155,36 @@ export function listDocs(actor: Actor, query?: unknown) {
         like(docs.title, pattern),
         like(docs.summary, pattern),
         like(docs.contentHtml, pattern),
-        like(sql<string>`CAST(${shares.shareCode} AS TEXT)`, pattern),
+        like(castAsText(shares.shareCode), pattern),
         like(shares.customSlug, pattern)
       )
     )
     : accessWhere;
 
-  return db
+  return (await dbAll(db
     .select(listSelect())
     .from(docs)
     .leftJoin(shares, eq(docs.id, shares.docId))
     .where(where)
-    .orderBy(desc(docs.pinned), desc(docs.updatedAt))
-    .all()
-    .map((doc) => normalizeDocRecord(doc));
+    .orderBy(desc(docs.pinned), desc(docs.updatedAt))))
+    .map((doc: any) => normalizeDocRecord(doc));
 }
 
-export function listTrashDocs() {
-  normalizeLegacyDraftStatuses();
-  return db
+export async function listTrashDocs() {
+  await normalizeLegacyDraftStatuses();
+  return (await dbAll(db
     .select(listSelect())
     .from(docs)
     .leftJoin(shares, eq(docs.id, shares.docId))
     .where(isNotNull(docs.deletedAt))
-    .orderBy(desc(docs.deletedAt))
-    .all()
-    .map((doc) => normalizeDocRecord(doc));
+    .orderBy(desc(docs.deletedAt))))
+    .map((doc: any) => normalizeDocRecord(doc));
 }
 
-export function createDoc(userId: number, input: unknown) {
+export async function createDoc(userId: number, input: unknown) {
   const body = docCreateSchema.parse(input);
   const createdAt = now();
-  const result = db.insert(docs).values({
+  const result = await dbRun(db.insert(docs).values({
     title: body.title,
     parentId: body.parentId ?? null,
     spaceId: body.spaceId ?? null,
@@ -198,22 +197,22 @@ export function createDoc(userId: number, input: unknown) {
     updatedBy: userId,
     createdAt,
     updatedAt: createdAt
-  }).run();
-  return getDoc(Number(result.lastInsertRowid));
+  }));
+  return await getDoc(Number(result.lastInsertRowid));
 }
 
-export function getDoc(id: number, actor?: Actor) {
-  normalizeLegacyDraftStatuses();
-  const doc = db.select().from(docs).where(and(eq(docs.id, id), isNull(docs.deletedAt))).limit(1).get();
+export async function getDoc(id: number, actor?: Actor) {
+  await normalizeLegacyDraftStatuses();
+  const doc = await dbGet<typeof docs.$inferSelect>(db.select().from(docs).where(and(eq(docs.id, id), isNull(docs.deletedAt))).limit(1));
   if (!doc) throw new Error("文档不存在");
   assertCanAccessDoc(actor, doc);
-  const share = db.select().from(shares).where(eq(shares.docId, doc.id)).limit(1).get();
+  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, doc.id)).limit(1));
   return { ...normalizeDocRecord(doc), share: safeShareRecord(share) };
 }
 
-export function updateDoc(id: number, userId: number, input: unknown, actor?: Actor) {
+export async function updateDoc(id: number, userId: number, input: unknown, actor?: Actor) {
   const body = docUpdateSchema.parse(input);
-  const current = getDoc(id, actor);
+  const current = await getDoc(id, actor);
   const contentJson = body.contentJson === undefined
     ? undefined
     : typeof body.contentJson === "string"
@@ -225,8 +224,8 @@ export function updateDoc(id: number, userId: number, input: unknown, actor?: Ac
   const htmlChanged = contentHtml !== undefined && contentHtml !== current.contentHtml;
   const reviewRelevantChanged = titleChanged || jsonChanged || htmlChanged;
 
-  if (shouldCreateVersion(id, current, { title: body.title, contentJson, contentHtml })) {
-    createVersionSnapshot(id, current, userId);
+  if (await shouldCreateVersion(id, current, { title: body.title, contentJson, contentHtml })) {
+    await createVersionSnapshot(id, current, userId);
   }
 
   const patch: Partial<typeof docs.$inferInsert> = {
@@ -243,9 +242,9 @@ export function updateDoc(id: number, userId: number, input: unknown, actor?: Ac
   if (body.status !== undefined) patch.status = normalizeDocStatus(body.status);
   if (body.sort !== undefined) patch.sort = body.sort;
 
-  db.update(docs).set(patch).where(eq(docs.id, id)).run();
+  await dbRun(db.update(docs).set(patch).where(eq(docs.id, id)));
   if (actor?.role === "user" && reviewRelevantChanged) {
-    db.update(shares).set({
+    await dbRun(db.update(shares).set({
       isEnabled: false,
       reviewStatus: "pending",
       reviewNote: null,
@@ -258,32 +257,31 @@ export function updateDoc(id: number, userId: number, input: unknown, actor?: Ac
       reviewedBy: null,
       reviewedAt: null,
       updatedAt: now()
-    }).where(eq(shares.docId, id)).run();
+    }).where(eq(shares.docId, id)));
   }
-  return getDoc(id, actor);
+  return await getDoc(id, actor);
 }
 
-export function softDeleteDoc(id: number, userId: number, actor?: Actor) {
-  getDoc(id, actor);
-  db.update(docs).set({ deletedAt: now(), updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)).run();
+export async function softDeleteDoc(id: number, userId: number, actor?: Actor) {
+  await getDoc(id, actor);
+  await dbRun(db.update(docs).set({ deletedAt: now(), updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
 }
 
-export function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) {
+export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) {
   const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
   const deletedIds: number[] = [];
   const deletedAt = now();
 
-  db.transaction((tx) => {
+  await dbTransaction(async (tx) => {
     for (const id of uniqueIds) {
-      const doc = tx
+      const doc = await dbGet<{ id: number; createdBy: number | null }>(tx
         .select({ id: docs.id, createdBy: docs.createdBy })
         .from(docs)
         .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
-        .limit(1)
-        .get();
+        .limit(1));
       if (!doc) continue;
       assertCanAccessDoc(actor, doc);
-      const result = tx.update(docs).set({ deletedAt, updatedBy: userId, updatedAt: deletedAt }).where(eq(docs.id, id)).run();
+      const result = await dbRun(tx.update(docs).set({ deletedAt, updatedBy: userId, updatedAt: deletedAt }).where(eq(docs.id, id)));
       if (result.changes > 0) deletedIds.push(id);
     }
   });
@@ -291,30 +289,30 @@ export function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) 
   return deletedIds;
 }
 
-export function restoreDoc(id: number, userId: number) {
-  db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)).run();
-  return getDoc(id);
+export async function restoreDoc(id: number, userId: number) {
+  await dbRun(db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
+  return await getDoc(id);
 }
 
-export function hardDeleteDoc(id: number) {
-  const existing = db.select({ id: docs.id }).from(docs).where(eq(docs.id, id)).limit(1).get();
+export async function hardDeleteDoc(id: number) {
+  const existing = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.id, id)).limit(1));
   if (!existing) throw new Error("文档不存在");
-  db.transaction((tx) => {
-    tx.delete(shares).where(eq(shares.docId, id)).run();
-    tx.delete(docVersions).where(eq(docVersions.docId, id)).run();
-    tx.update(uploads).set({ docId: null }).where(eq(uploads.docId, id)).run();
-    tx.delete(docs).where(eq(docs.id, id)).run();
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.delete(shares).where(eq(shares.docId, id)));
+    await dbRun(tx.delete(docVersions).where(eq(docVersions.docId, id)));
+    await dbRun(tx.update(uploads).set({ docId: null }).where(eq(uploads.docId, id)));
+    await dbRun(tx.delete(docs).where(eq(docs.id, id)));
   });
 }
 
-export function publishDoc(id: number, userId: number) {
-  db.update(docs).set({ status: "published", updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)).run();
-  return getDoc(id);
+export async function publishDoc(id: number, userId: number) {
+  await dbRun(db.update(docs).set({ status: "published", updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
+  return await getDoc(id);
 }
 
-export function listDocVersions(docId: number, actor?: Actor) {
-  getDoc(docId, actor);
-  return db
+export async function listDocVersions(docId: number, actor?: Actor) {
+  await getDoc(docId, actor);
+  return await dbAll(db
     .select({
       id: docVersions.id,
       docId: docVersions.docId,
@@ -325,29 +323,27 @@ export function listDocVersions(docId: number, actor?: Actor) {
     .from(docVersions)
     .where(eq(docVersions.docId, docId))
     .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
-    .limit(50)
-    .all();
+    .limit(50));
 }
 
-export function restoreDocVersion(docId: number, versionId: number, userId: number, actor?: Actor) {
-  const current = getDoc(docId, actor);
-  const version = db
+export async function restoreDocVersion(docId: number, versionId: number, userId: number, actor?: Actor) {
+  const current = await getDoc(docId, actor);
+  const version = await dbGet<typeof docVersions.$inferSelect>(db
     .select()
     .from(docVersions)
     .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, docId)))
-    .limit(1)
-    .get();
+    .limit(1));
   if (!version) throw new Error("版本不存在");
-  createVersionSnapshot(docId, current, userId);
-  db.update(docs).set({
+  await createVersionSnapshot(docId, current, userId);
+  await dbRun(db.update(docs).set({
     title: version.title,
     contentJson: version.contentJson,
     contentHtml: version.contentHtml,
     updatedBy: userId,
     updatedAt: now()
-  }).where(eq(docs.id, docId)).run();
+  }).where(eq(docs.id, docId)));
   if (actor?.role === "user") {
-    db.update(shares).set({
+    await dbRun(db.update(shares).set({
       isEnabled: false,
       reviewStatus: "pending",
       reviewNote: null,
@@ -356,7 +352,7 @@ export function restoreDocVersion(docId: number, versionId: number, userId: numb
       reviewedBy: null,
       reviewedAt: null,
       updatedAt: now()
-    }).where(eq(shares.docId, docId)).run();
+    }).where(eq(shares.docId, docId)));
   }
-  return getDoc(docId, actor);
+  return await getDoc(docId, actor);
 }

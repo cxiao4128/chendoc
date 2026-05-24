@@ -1,6 +1,6 @@
 import { and, desc, eq, lte, ne } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "../../db/client.js";
+import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { invites, users } from "../../db/schema.js";
 import { generateInviteCode } from "../../utils/inviteCode.js";
 import { now } from "../../utils/date.js";
@@ -17,25 +17,24 @@ function parseExpireAt(expireAt?: string | null) {
   return expireAt ? new Date(expireAt) : null;
 }
 
-function createUniqueCode() {
+async function createUniqueCode(queryDb: typeof db = db) {
   for (let i = 0; i < 20; i += 1) {
     const code = generateInviteCode(8);
-    const exists = db.select({ id: invites.id }).from(invites).where(eq(invites.code, code)).limit(1).get();
+    const exists = await dbGet<{ id: number }>(queryDb.select({ id: invites.id }).from(invites).where(eq(invites.code, code)).limit(1));
     if (!exists) return code;
   }
   throw new Error("邀请码生成失败，请重试");
 }
 
-export function refreshExpiredInvites() {
-  db.update(invites)
+export async function refreshExpiredInvites() {
+  await dbRun(db.update(invites)
     .set({ status: "expired", updatedAt: now() })
-    .where(and(eq(invites.status, "unused"), lte(invites.expireAt, now())))
-    .run();
+    .where(and(eq(invites.status, "unused"), lte(invites.expireAt, now()))));
 }
 
-export function listInvites() {
-  refreshExpiredInvites();
-  return db
+export async function listInvites() {
+  await refreshExpiredInvites();
+  return await dbAll(db
     .select({
       id: invites.id,
       code: invites.code,
@@ -50,53 +49,51 @@ export function listInvites() {
     })
     .from(invites)
     .leftJoin(users, eq(invites.usedBy, users.id))
-    .orderBy(desc(invites.createdAt))
-    .all();
+    .orderBy(desc(invites.createdAt)));
 }
 
-export function createInvite(adminId: number, input: z.infer<typeof inviteCreateSchema>) {
+export async function createInvite(adminId: number, input: z.infer<typeof inviteCreateSchema>) {
   const parsed = inviteCreateSchema.parse(input);
   const createdAt = now();
-  const code = createUniqueCode();
-  const result = db.insert(invites).values({
+  const code = await createUniqueCode();
+  const result = await dbRun(db.insert(invites).values({
     code,
     status: "unused",
     createdBy: adminId,
     expireAt: parseExpireAt(parsed.expireAt),
     createdAt,
     updatedAt: createdAt
-  }).run();
+  }));
   return { id: Number(result.lastInsertRowid), code };
 }
 
-export function createInviteBatch(adminId: number, input: z.infer<typeof inviteBatchSchema>) {
+export async function createInviteBatch(adminId: number, input: z.infer<typeof inviteBatchSchema>) {
   const parsed = inviteBatchSchema.parse(input);
   const created: Array<{ id: number; code: string }> = [];
-  db.transaction((tx) => {
+  await dbTransaction(async (tx) => {
     for (let i = 0; i < parsed.count; i += 1) {
-      const code = createUniqueCode();
+      const code = await createUniqueCode(tx);
       const createdAt = now();
-      const result = tx.insert(invites).values({
+      const result = await dbRun(tx.insert(invites).values({
         code,
         status: "unused",
         createdBy: adminId,
         expireAt: parseExpireAt(parsed.expireAt),
         createdAt,
         updatedAt: createdAt
-      }).run();
+      }));
       created.push({ id: Number(result.lastInsertRowid), code });
     }
   });
   return created;
 }
 
-export function disableInvite(id: number) {
-  db.update(invites)
+export async function disableInvite(id: number) {
+  await dbRun(db.update(invites)
     .set({ status: "disabled", updatedAt: now() })
-    .where(and(eq(invites.id, id), ne(invites.status, "used")))
-    .run();
+    .where(and(eq(invites.id, id), ne(invites.status, "used"))));
 }
 
-export function deleteInvite(id: number) {
-  db.delete(invites).where(eq(invites.id, id)).run();
+export async function deleteInvite(id: number) {
+  await dbRun(db.delete(invites).where(eq(invites.id, id)));
 }

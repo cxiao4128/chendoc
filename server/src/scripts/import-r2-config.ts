@@ -17,7 +17,7 @@ function readEnvLike(content: string, names: string[]) {
   return "";
 }
 
-function main() {
+async function main() {
   const content = readFileSync(sourcePath, "utf8");
   const accountId = readEnvLike(content, ["R2_ACCOUNT_ID"]);
   const bucket = readEnvLike(content, ["R2_BUCKET", "R2_BUCKET_NAME"]);
@@ -27,7 +27,7 @@ function main() {
   const endpoint = readEnvLike(content, ["R2_ENDPOINT"]) || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : "");
   const region = readEnvLike(content, ["R2_REGION"]) || "auto";
 
-  saveR2Config({
+  await saveR2Config({
     accountId,
     bucket,
     accessKeyId,
@@ -41,7 +41,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   console.error(error instanceof Error ? error.message : "R2 import failed.");
   process.exit(1);

@@ -2,15 +2,17 @@
 import { computed } from "vue";
 import { LogOut, Menu } from "lucide-vue-next";
 import { useAuth } from "../../composables/useAuth";
+import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import logoUrl from "../../assets/chendoc-logo.png";
-import { adminNavItems } from "./admin-nav";
+import { getWorkspaceNavItems } from "./admin-nav";
 import "./app-sidebar.css";
 
 defineProps<{ open: boolean; collapsed: boolean }>();
 defineEmits<{ close: []; toggleCollapse: [] }>();
 
 const { auth, logout } = useAuth();
-const visibleLinks = computed(() => adminNavItems.filter((item) => !item.adminOnly || auth.isAdmin));
+const { base } = useWorkspaceRoutes();
+const visibleLinks = computed(() => getWorkspaceNavItems(base.value, auth.canAccessAdmin));
 const roleLabel = computed(() => {
   if (auth.user?.isSuperAdmin) return "超级管理员";
   if (auth.user?.role === "admin") return "管理员";

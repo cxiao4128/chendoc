@@ -23,8 +23,8 @@ export const useAuthStore = defineStore("auth", () => {
   const ready = ref(false);
 
   const isLoggedIn = computed(() => !!token.value && !!user.value);
-  const isAdmin = computed(() => user.value?.role === "admin");
   const isSuperAdmin = computed(() => !!user.value?.isSuperAdmin);
+  const isAdmin = computed(() => user.value?.role === "admin" || isSuperAdmin.value);
   const canAccessAdmin = computed(() => isAdmin.value);
 
   function setSession(sessionId: string, sessionKey: string, nextUser: UserProfile) {
@@ -45,8 +45,8 @@ export const useAuthStore = defineStore("auth", () => {
       return null;
     }
     try {
-      const { meApi } = await import("../api/auth");
-      const response = await meApi();
+      const { a2: fetchProfile } = await import("../api/auth");
+      const response = await fetchProfile();
       user.value = response.user;
       return response.user;
     } catch {

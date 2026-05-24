@@ -22,11 +22,11 @@ export async function sharesRoutes(app: FastifyInstance) {
 
   app.post("/api/docs/:id/share", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const existingShare = getShareByDoc(params.id, request.user!);
+    const existingShare = await getShareByDoc(params.id, request.user!);
     const share = await createOrGetShare(params.id, request.body, request.user!);
     if (!share) throw new Error("分享创建失败");
     if (!existingShare) {
-      writeAuditLog({
+      await writeAuditLog({
         userId: request.user!.id,
         action: "share.create",
         targetType: "share",
@@ -45,14 +45,14 @@ export async function sharesRoutes(app: FastifyInstance) {
 
   app.get("/api/shares/doc/:docId", { preHandler: authenticate }, async (request) => {
     const params = z.object({ docId: z.coerce.number().int().positive() }).parse(request.params);
-    const share = getShareByDoc(params.docId, request.user!);
+    const share = await getShareByDoc(params.docId, request.user!);
     return { share: share ? adminSharePayload(share) : null };
   });
 
   app.delete("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    deleteShare(params.id, request.user!);
-    writeAuditLog({
+    await deleteShare(params.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "share.delete",
       targetType: "share",
@@ -62,13 +62,13 @@ export async function sharesRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/api/admin/share-reviews", { preHandler: adminOnly }, async () => ({ shares: listUserShareReviews() }));
+  app.get("/api/admin/share-reviews", { preHandler: adminOnly }, async () => ({ shares: await listUserShareReviews() }));
 
   app.post("/api/admin/share-reviews/:id/review", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const body = z.object({ action: z.enum(["approve", "reject"]) }).passthrough().parse(request.body);
     await reviewUserShare(params.id, request.body, request.user!.id);
-    writeAuditLog({
+    await writeAuditLog({
       userId: request.user!.id,
       action: body.action === "approve" ? "share.review.approve" : "share.review.reject",
       targetType: "share",
@@ -81,7 +81,7 @@ export async function sharesRoutes(app: FastifyInstance) {
   app.get("/api/public/r/:shareKey", async (request, reply) => {
     const params = z.object({ shareKey: z.string().trim().min(1).max(64) }).parse(request.params);
     const query = z.object({ accessToken: z.string().optional() }).parse(request.query);
-    const data = getPublicShare(params.shareKey);
+    const data = await getPublicShare(params.shareKey);
     if (!data) return reply.code(404).send({ message: "分享不存在或已关闭" });
     const authToken = request.headers.authorization?.startsWith("Bearer ")
       ? request.headers.authorization.slice("Bearer ".length)

@@ -1,4 +1,5 @@
 import { BookOpen, ClipboardCheck, Settings, Trash2 } from "lucide-vue-next";
+import type { WorkspaceBase } from "../../router/access";
 
 export interface AdminNavItem {
   to: string;
@@ -20,12 +21,24 @@ export const adminNavItems: AdminNavItem[] = [
   { to: "/admin/settings", label: "系统设置", icon: Settings, adminOnly: true }
 ];
 
+export const userNavItems: AdminNavItem[] = [
+  { to: "/users/docs", label: "文档", icon: BookOpen },
+  { to: "/users/trash", label: "回收站", icon: Trash2 }
+];
+
+export function getWorkspaceNavItems(base: WorkspaceBase, canAccessAdmin: boolean) {
+  if (base === "/users") return userNavItems;
+  return adminNavItems.filter((item) => !item.adminOnly || canAccessAdmin);
+}
+
 export function isAdminNavActive(currentPath: string, targetPath: string) {
   return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
 }
 
 export function getAdminRouteMeta(path: string): AdminRouteMeta {
-  if (/^\/admin\/docs\/\d+/.test(path)) {
+  const normalizedPath = path.replace(/^\/users(?=\/|$)/, "/admin");
+
+  if (/^\/admin\/docs\/\d+/.test(normalizedPath)) {
     return {
       eyebrow: "专注编辑",
       title: "文档工作台",
@@ -33,7 +46,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/docs")) {
+  if (normalizedPath.startsWith("/admin/docs")) {
     return {
       eyebrow: "内容中心",
       title: "文档空间",
@@ -41,7 +54,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/invites")) {
+  if (normalizedPath.startsWith("/admin/invites")) {
     return {
       eyebrow: "账户入口",
       title: "邀请码",
@@ -49,7 +62,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/share-reviews")) {
+  if (normalizedPath.startsWith("/admin/share-reviews")) {
     return {
       eyebrow: "用户发布",
       title: "分享审核",
@@ -57,7 +70,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/settings/storage")) {
+  if (normalizedPath.startsWith("/admin/settings/storage")) {
     return {
       eyebrow: "存储配置",
       title: "R2 对象存储",
@@ -65,7 +78,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/settings")) {
+  if (normalizedPath.startsWith("/admin/settings")) {
     return {
       eyebrow: "后台管理",
       title: "系统设置",
@@ -73,7 +86,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/trash")) {
+  if (normalizedPath.startsWith("/admin/trash")) {
     return {
       eyebrow: "回收站",
       title: "恢复中心",
@@ -81,7 +94,7 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     };
   }
 
-  if (path.startsWith("/admin/article-delete") || path.startsWith("/admin/danger")) {
+  if (normalizedPath.startsWith("/admin/article-delete") || normalizedPath.startsWith("/admin/danger")) {
     return {
       eyebrow: "高风险操作",
       title: "文章删除",

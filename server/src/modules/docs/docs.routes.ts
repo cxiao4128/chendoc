@@ -22,15 +22,15 @@ export async function docsRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
   app.get("/api/docs", { preHandler: authenticate }, async (request) => {
     const query = z.object({ q: z.string().optional() }).parse(request.query);
-    return { docs: listDocs(request.user!, query.q) };
+    return { docs: await listDocs(request.user!, query.q) };
   });
   app.get("/api/docs/search", { preHandler: authenticate }, async (request) => {
     const query = z.object({ q: z.string().optional() }).parse(request.query);
-    return { docs: listDocs(request.user!, query.q) };
+    return { docs: await listDocs(request.user!, query.q) };
   });
   app.post("/api/docs", { preHandler: authenticate }, async (request) => {
-    const doc = createDoc(request.user!.id, request.body);
-    writeAuditLog({
+    const doc = await createDoc(request.user!.id, request.body);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "doc.create",
       targetType: "doc",
@@ -43,9 +43,9 @@ export async function docsRoutes(app: FastifyInstance) {
     const body = z.object({
       ids: z.array(z.number().int().positive()).min(1).max(200)
     }).parse(request.body);
-    const deletedIds = bulkSoftDeleteDocs(body.ids, request.user!.id, request.user!);
+    const deletedIds = await bulkSoftDeleteDocs(body.ids, request.user!.id, request.user!);
     if (deletedIds.length) {
-      writeAuditLog({
+      await writeAuditLog({
         userId: request.user!.id,
         action: "doc.bulk_soft_delete",
         targetType: "doc",
@@ -55,19 +55,19 @@ export async function docsRoutes(app: FastifyInstance) {
     }
     return { ok: true, deletedIds };
   });
-  app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async () => ({ docs: listTrashDocs() }));
+  app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async () => ({ docs: await listTrashDocs() }));
   app.get("/api/docs/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { doc: getDoc(params.id, request.user!) };
+    return { doc: await getDoc(params.id, request.user!) };
   });
   app.patch("/api/docs/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { doc: updateDoc(params.id, request.user!.id, request.body, request.user!) };
+    return { doc: await updateDoc(params.id, request.user!.id, request.body, request.user!) };
   });
   app.delete("/api/docs/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    softDeleteDoc(params.id, request.user!.id, request.user!);
-    writeAuditLog({
+    await softDeleteDoc(params.id, request.user!.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "doc.soft_delete",
       targetType: "doc",
@@ -78,8 +78,8 @@ export async function docsRoutes(app: FastifyInstance) {
   });
   app.post("/api/admin/docs/:id/restore", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const doc = restoreDoc(params.id, request.user!.id);
-    writeAuditLog({
+    const doc = await restoreDoc(params.id, request.user!.id);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "doc.restore",
       targetType: "doc",
@@ -90,8 +90,8 @@ export async function docsRoutes(app: FastifyInstance) {
   });
   app.delete("/api/admin/docs/:id/hard", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    hardDeleteDoc(params.id);
-    writeAuditLog({
+    await hardDeleteDoc(params.id);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "doc.hard_delete",
       targetType: "doc",
@@ -102,8 +102,8 @@ export async function docsRoutes(app: FastifyInstance) {
   });
   app.post("/api/docs/:id/publish", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const doc = publishDoc(params.id, request.user!.id);
-    writeAuditLog({
+    const doc = await publishDoc(params.id, request.user!.id);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "doc.publish",
       targetType: "doc",
@@ -114,15 +114,15 @@ export async function docsRoutes(app: FastifyInstance) {
   });
   app.get("/api/docs/:id/versions", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { versions: listDocVersions(params.id, request.user!) };
+    return { versions: await listDocVersions(params.id, request.user!) };
   });
   app.post("/api/docs/:id/versions/:versionId/restore", { preHandler: authenticate }, async (request) => {
     const params = z.object({
       id: z.coerce.number().int().positive(),
       versionId: z.coerce.number().int().positive()
     }).parse(request.params);
-    const doc = restoreDocVersion(params.id, params.versionId, request.user!.id, request.user!);
-    writeAuditLog({
+    const doc = await restoreDocVersion(params.id, params.versionId, request.user!.id, request.user!);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "doc.version.restore",
       targetType: "doc",

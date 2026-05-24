@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
-import { db } from "../db/client.js";
+import { db, dbGet } from "../db/client.js";
 import { users } from "../db/schema.js";
 import type { JwtUser } from "../config/jwt.js";
 import { verifyAuthSessionHeader } from "../modules/auth/session.service.js";
@@ -19,8 +19,8 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   }
 
   try {
-    const session = verifyAuthSessionHeader(header);
-    const user = db.select().from(users).where(eq(users.id, session.userId)).limit(1).get();
+    const session = await verifyAuthSessionHeader(header);
+    const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, session.userId)).limit(1));
     if (!user || user.status !== "active") {
       return reply.code(401).send({ message: "未登录或登录已过期" });
     }

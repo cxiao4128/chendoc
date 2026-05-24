@@ -1,6 +1,9 @@
-import { sqlite } from "./client.js";
+import { databaseProvider, mysqlPool, sqlite } from "./client.js";
+import { MYSQL_CREATE_TABLES } from "./mysql-ddl.js";
 
-export function migrate() {
+function migrateSqlite() {
+  if (!sqlite) throw new Error("SQLite connection is not available.");
+
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,5 +174,20 @@ export function migrate() {
   sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS shares_custom_slug_unique ON shares(custom_slug)");
 }
 
-migrate();
-console.log("Database migration completed.");
+async function migrateMysql() {
+  if (!mysqlPool) throw new Error("MySQL connection is not available.");
+  for (const statement of MYSQL_CREATE_TABLES) {
+    await mysqlPool.query(statement);
+  }
+}
+
+export async function migrate() {
+  if (databaseProvider === "mysql") {
+    await migrateMysql();
+    return;
+  }
+  migrateSqlite();
+}
+
+await migrate();
+console.log(`Database migration completed for ${databaseProvider}.`);

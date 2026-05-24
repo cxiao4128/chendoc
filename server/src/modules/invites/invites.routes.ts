@@ -8,11 +8,11 @@ import { createInvite, createInviteBatch, deleteInvite, disableInvite, listInvit
 export async function invitesRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
 
-  app.get("/api/admin/invites", { preHandler: adminOnly }, async () => ({ invites: listInvites() }));
+  app.get("/api/admin/invites", { preHandler: adminOnly }, async () => ({ invites: await listInvites() }));
 
   app.post("/api/admin/invites", { preHandler: adminOnly }, async (request) => {
-    const invite = createInvite(request.user!.id, request.body as never);
-    writeAuditLog({
+    const invite = await createInvite(request.user!.id, request.body as never);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "invite.create",
       targetType: "invite",
@@ -23,8 +23,8 @@ export async function invitesRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/invites/batch", { preHandler: adminOnly }, async (request) => {
-    const invites = createInviteBatch(request.user!.id, request.body as never);
-    writeAuditLog({
+    const invites = await createInviteBatch(request.user!.id, request.body as never);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "invite.batch_create",
       targetType: "invite",
@@ -36,8 +36,8 @@ export async function invitesRoutes(app: FastifyInstance) {
 
   app.patch("/api/admin/invites/:id/disable", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    disableInvite(params.id);
-    writeAuditLog({
+    await disableInvite(params.id);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "invite.disable",
       targetType: "invite",
@@ -49,8 +49,8 @@ export async function invitesRoutes(app: FastifyInstance) {
 
   app.delete("/api/admin/invites/:id", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    deleteInvite(params.id);
-    writeAuditLog({
+    await deleteInvite(params.id);
+    await writeAuditLog({
       userId: request.user!.id,
       action: "invite.delete",
       targetType: "invite",

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createPublicKey, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, gt } from "drizzle-orm";
-import { db } from "../../db/client.js";
+import { db, dbGet, dbRun } from "../../db/client.js";
 import { cryptoKeys } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { daysFromNow, now } from "../../utils/date.js";
@@ -49,7 +49,7 @@ function rsaModulusLength(publicKeyPem: string) {
   }
 }
 
-function createAndStorePublicKey() {
+async function createAndStorePublicKey() {
   const { publicKey, privateKey } = generateKeyPairSync("rsa", {
     modulusLength: minimumRsaModulusLength,
     publicKeyEncoding: { type: "spki", format: "pem" },
@@ -57,45 +57,43 @@ function createAndStorePublicKey() {
   });
 
   const keyId = randomUUID();
-  db.insert(cryptoKeys).values({
+  await dbRun(db.insert(cryptoKeys).values({
     keyId,
     publicKey,
     privateKeyEncrypted: encryptValue(privateKey, env.rsaPrivateKeyEncryptionKey),
     status: "active",
     expireAt: daysFromNow(7),
     createdAt: now()
-  }).run();
+  }));
 
   return { keyId, publicKey };
 }
 
-export function getActivePublicKey() {
-  const current = db
+export async function getActivePublicKey() {
+  const current = await dbGet<typeof cryptoKeys.$inferSelect>(db
     .select()
     .from(cryptoKeys)
     .where(and(eq(cryptoKeys.status, "active"), gt(cryptoKeys.expireAt, now())))
     .orderBy(desc(cryptoKeys.createdAt))
-    .limit(1)
-    .get();
+    .limit(1));
 
   if (current && rsaModulusLength(current.publicKey) >= minimumRsaModulusLength) {
     return { keyId: current.keyId, publicKey: current.publicKey };
   }
 
   if (current) {
-    db.update(cryptoKeys).set({ status: "retired" }).where(eq(cryptoKeys.keyId, current.keyId)).run();
+    await dbRun(db.update(cryptoKeys).set({ status: "retired" }).where(eq(cryptoKeys.keyId, current.keyId)));
   }
 
-  return createAndStorePublicKey();
+  return await createAndStorePublicKey();
 }
 
-export function decryptSubmittedValue(keyId: string, encryptedValue: string) {
-  const record = db
+export async function decryptSubmittedValue(keyId: string, encryptedValue: string) {
+  const record = await dbGet<typeof cryptoKeys.$inferSelect>(db
     .select()
     .from(cryptoKeys)
     .where(and(eq(cryptoKeys.keyId, keyId), eq(cryptoKeys.status, "active"), gt(cryptoKeys.expireAt, now())))
-    .limit(1)
-    .get();
+    .limit(1));
 
   if (!record) {
     throw new Error("加密密钥已失效，请刷新页面重试");
@@ -105,8 +103,8 @@ export function decryptSubmittedValue(keyId: string, encryptedValue: string) {
   return decryptRsaOaepBase64(privateKey, encryptedValue);
 }
 
-export function decryptSubmittedPayload(input: HybridEncryptedPayload) {
-  const aesKeyBase64 = decryptSubmittedValue(input.keyId, input.key);
+export async function decryptSubmittedPayload(input: HybridEncryptedPayload) {
+  const aesKeyBase64 = await decryptSubmittedValue(input.keyId, input.key);
   const aesKey = Buffer.from(aesKeyBase64, "base64");
   if (aesKey.length !== 32) {
     throw new Error("Invalid encrypted payload key.");

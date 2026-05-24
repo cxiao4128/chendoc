@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import "../db/migrate.js";
-import { db } from "../db/client.js";
+import { db, dbGet, dbRun } from "../db/client.js";
 import { docs, shares, spaces, users } from "../db/schema.js";
 import { env } from "../config/env.js";
 import { now } from "../utils/date.js";
@@ -17,7 +17,7 @@ async function main() {
   }
   const adminPassword = env.defaultAdminPassword;
 
-  const existing = db.select().from(users).where(eq(users.username, env.defaultAdminUsername)).limit(1).get();
+  const existing = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.username, env.defaultAdminUsername)).limit(1));
   const shouldResetExistingPassword =
     flagEnabled("CHENDOC_RESET_ADMIN_PASSWORD") || flagEnabled("CHENDOC_FORCE_ADMIN_RESET");
   let passwordHash: string | null = null;
@@ -31,46 +31,46 @@ async function main() {
   if (existing) {
     adminId = existing.id;
     if (shouldResetExistingPassword) {
-      db.update(users).set({
+      await dbRun(db.update(users).set({
         passwordHash: await getPasswordHash(),
         role: "admin",
         status: "active",
         updatedAt: now()
-      }).where(eq(users.id, existing.id)).run();
+      }).where(eq(users.id, existing.id)));
       console.log(`Admin exists: ${env.defaultAdminUsername}. Password reset because CHENDOC_RESET_ADMIN_PASSWORD=1.`);
     } else {
-      db.update(users).set({
+      await dbRun(db.update(users).set({
         role: "admin",
         status: "active",
         updatedAt: now()
-      }).where(eq(users.id, existing.id)).run();
+      }).where(eq(users.id, existing.id)));
       console.log(`Admin exists: ${env.defaultAdminUsername}. Password unchanged. Set CHENDOC_RESET_ADMIN_PASSWORD=1 to reset it.`);
     }
   } else {
     const createdAt = now();
-    const result = db.insert(users).values({
+    const result = await dbRun(db.insert(users).values({
       username: env.defaultAdminUsername,
       passwordHash: await getPasswordHash(),
       role: "admin",
       status: "active",
       createdAt,
       updatedAt: createdAt
-    }).run();
+    }));
     adminId = Number(result.lastInsertRowid);
   }
 
-  const defaultSpace = db.select().from(spaces).limit(1).get();
-  const spaceId = defaultSpace?.id ?? Number(db.insert(spaces).values({
+  const defaultSpace = await dbGet<typeof spaces.$inferSelect>(db.select().from(spaces).limit(1));
+  const spaceId = defaultSpace?.id ?? Number((await dbRun(db.insert(spaces).values({
     name: "默认空间",
     description: "ChenDoc 初始空间",
     ownerId: adminId,
     createdAt: now(),
     updatedAt: now()
-  }).run().lastInsertRowid);
+  }))).lastInsertRowid);
 
-  const existingShare111 = db.select().from(shares).where(eq(shares.shareCode, 111)).limit(1).get();
+  const existingShare111 = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.shareCode, 111)).limit(1));
   if (!existingShare111) {
-    const docId = Number(db.insert(docs).values({
+    const docId = Number((await dbRun(db.insert(docs).values({
       spaceId,
       parentId: null,
       title: "欢迎使用 ChenDoc",
@@ -88,16 +88,16 @@ async function main() {
       updatedBy: adminId,
       createdAt: now(),
       updatedAt: now()
-    }).run().lastInsertRowid);
+    }))).lastInsertRowid);
 
-    db.insert(shares).values({
+    await dbRun(db.insert(shares).values({
       docId,
       shareCode: 111,
       isEnabled: false,
       viewCount: 0,
       createdAt: now(),
       updatedAt: now()
-    }).run();
+    }));
   }
 
   console.log(`Admin initialized: ${env.defaultAdminUsername}`);

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { authenticate } from "../../middleware/auth.js";
 import { loginRateLimit, registerRateLimit } from "../../middleware/rateLimit.js";
 import { users } from "../../db/schema.js";
-import { db } from "../../db/client.js";
+import { db, dbGet } from "../../db/client.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { changePassword, login, register } from "./auth.service.js";
@@ -41,7 +41,7 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       return encrypted(request, await login(request.body));
     } catch {
-      writeAuditLog({
+      await writeAuditLog({
         userId: null,
         action: "auth.login.failure",
         targetType: "auth",
@@ -55,7 +55,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/api/auth/register", { config: { rateLimit: registerRateLimit } }, async (request, reply) => {
     try {
       const result = await register(request.body);
-      writeAuditLog({
+      await writeAuditLog({
         userId: result.user.id,
         action: "auth.register.success",
         targetType: "user",
@@ -64,7 +64,7 @@ export async function authRoutes(app: FastifyInstance) {
       });
       return encrypted(request, result);
     } catch (error) {
-      writeAuditLog({
+      await writeAuditLog({
         userId: null,
         action: "auth.register.failure",
         targetType: "auth",
@@ -76,7 +76,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/auth/me", { preHandler: authenticate }, async (request) => {
-    const user = db.select().from(users).where(eq(users.id, request.user!.id)).limit(1).get();
+    const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, request.user!.id)).limit(1));
     if (!user) {
       return encrypted(request, { user: null });
     }
@@ -91,7 +91,7 @@ export async function authRoutes(app: FastifyInstance) {
     }).parse(request.body);
     try {
       await changePassword(request.user!.id, body.currentEncryptedPassword, body.newEncryptedPassword, body.keyId);
-      writeAuditLog({
+      await writeAuditLog({
         userId: request.user!.id,
         action: "auth.password.change",
         targetType: "user",

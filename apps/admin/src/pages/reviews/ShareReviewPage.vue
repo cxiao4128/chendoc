@@ -2,7 +2,6 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { Check, ExternalLink, RefreshCcw, Search, X } from "lucide-vue-next";
 import { listShareReviewsApi, reviewShareApi, type ShareReviewItem } from "../../api/shares";
-import "./share-review.css";
 
 const shares = ref<ShareReviewItem[]>([]);
 const loading = ref(false);

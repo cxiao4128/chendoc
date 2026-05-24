@@ -6,6 +6,7 @@ import ChendocEditor from "../../components/editor/ChendocEditor.vue";
 import DocTree from "../../components/docs/DocTree.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
+import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { deleteDocApi, listDocVersionsApi, restoreDocVersionApi, type DocVersion } from "../../api/docs";
 import { createShareApi, getShareByDocApi, updateShareApi, type ShareItem, type SharePatch } from "../../api/shares";
 import { useAuthStore } from "../../stores/auth";
@@ -27,6 +28,7 @@ const router = useRouter();
 const docs = useDocStore();
 const auth = useAuthStore();
 const isMobile = useIsMobileViewport();
+const { docsPath, docPath } = useWorkspaceRoutes();
 
 const title = ref("");
 const draft = ref<{ contentJson: string; contentHtml: string } | null>(null);
@@ -220,11 +222,11 @@ function retryLoadDetail() {
 
 async function createDoc() {
   const doc = await docs.createDoc("未命名文档");
-  router.push(`/admin/docs/${doc.id}`);
+  router.push(docPath(doc.id));
 }
 
 function selectDoc(id: number) {
-  router.push(`/admin/docs/${id}`);
+  router.push(docPath(id));
 }
 
 function selectDocFromSheet(id: number) {
@@ -423,7 +425,7 @@ async function remove() {
   if (!current.value) return;
   await deleteDocApi(current.value.id);
   await docs.loadList();
-  router.push("/admin/docs");
+  router.push(docsPath.value);
 }
 
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -470,7 +472,7 @@ onBeforeUnmount(() => {
   <section class="doc-editor-page" :class="{ 'is-mobile': isMobile }">
     <template v-if="isMobile">
       <header class="doc-editor-page__mobile-top">
-        <button class="doc-editor-page__mobile-back" type="button" aria-label="返回文档列表" @click="router.push('/admin/docs')">
+        <button class="doc-editor-page__mobile-back" type="button" aria-label="返回文档列表" @click="router.push(docsPath)">
           <ArrowLeft :size="18" />
         </button>
         <div class="doc-editor-page__mobile-headline">

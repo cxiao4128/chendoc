@@ -1,7 +1,7 @@
 import { buildAuthorization, clearAuthSession, getSessionId, saveAuthSession } from "../security/sessionToken";
 import { buildClientRiskHeader } from "../security/runtimeGuard";
 import { createResponseDecryptor, isEncryptedResponse } from "../security/responseCrypto";
-import { endpoints, isCredentialEndpoint, resolveApiPath } from "./endpoints";
+import { apiPaths, isCredentialEndpoint, resolveApiPath } from "./endpoints";
 
 const DEFAULT_ERROR_MESSAGE = "请求失败";
 
@@ -42,7 +42,7 @@ export interface SecureRequestOptions {
 
 function shouldRedirectUnauthorized(url: string) {
   const path = resolveApiPath(url);
-  return path !== endpoints.login && path !== endpoints.register;
+  return path !== apiPaths.signIn() && path !== apiPaths.signUp();
 }
 
 function redirectToLogin(url: string) {
@@ -58,7 +58,7 @@ function redirectToLogin(url: string) {
 export async function request<T>(url: string, options: RequestInit = {}, secure: SecureRequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   const responseDecryptor = secure.encryptedResponse ? await createResponseDecryptor() : null;
-  if (responseDecryptor) headers.set("X-Response-Public-Key", responseDecryptor.publicKeyHeader);
+  if (responseDecryptor) headers.set("X-Response-Public-Key", responseDecryptor.h);
 
   const riskHeader = buildClientRiskHeader();
   if (riskHeader) headers.set("X-Client-Risk", riskHeader);

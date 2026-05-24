@@ -6,7 +6,7 @@ import { extname } from "node:path";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import { db } from "../../db/client.js";
+import { db, dbGet, dbRun } from "../../db/client.js";
 import { uploads } from "../../db/schema.js";
 import { createR2Client, getR2CorsAllowedOrigins } from "../../config/r2.js";
 import { env } from "../../config/env.js";
@@ -243,7 +243,7 @@ function verifyUploadToken(token: string) {
 export async function createPresignedUpload(input: unknown) {
   const body = normalizeUploadInput(presignSchema.parse(input));
   validateFile(body);
-  const config = assertR2Ready();
+  const config = await assertR2Ready();
   const client = createR2Client(config);
   await ensureBrowserUploadCors(config, client);
   const key = objectKey(body.kind, body.fileName);
@@ -291,7 +291,7 @@ export async function completeUpload(userId: number, input: unknown) {
   }
 
   validateFile(tokenPayload);
-  const config = assertR2Ready();
+  const config = await assertR2Ready();
   const client = createR2Client(config);
   const uploadedObject = await client.send(new HeadObjectCommand({
     Bucket: config.bucket,
@@ -299,7 +299,7 @@ export async function completeUpload(userId: number, input: unknown) {
   }));
   validateCompletedObject(tokenPayload, uploadedObject);
   const publicUrl = publicUrlFromKey(config, tokenPayload.objectKey);
-  const result = db.insert(uploads).values({
+  const result = await dbRun(db.insert(uploads).values({
     userId,
     docId: tokenPayload.docId,
     objectKey: tokenPayload.objectKey,
@@ -309,20 +309,20 @@ export async function completeUpload(userId: number, input: unknown) {
     kind: tokenPayload.kind,
     originalName: tokenPayload.fileName,
     createdAt: now()
-  }).run();
+  }));
   return { id: Number(result.lastInsertRowid), publicUrl };
 }
 
 export async function deleteUpload(id: number) {
-  const upload = db.select().from(uploads).where(eq(uploads.id, id)).limit(1).get();
+  const upload = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.id, id)).limit(1));
   if (!upload) return { deleted: false };
 
-  const config = assertR2Ready();
+  const config = await assertR2Ready();
   const client = createR2Client(config);
   await client.send(new DeleteObjectCommand({
     Bucket: config.bucket,
     Key: upload.objectKey
   }));
-  db.delete(uploads).where(eq(uploads.id, id)).run();
+  await dbRun(db.delete(uploads).where(eq(uploads.id, id)));
   return { deleted: true };
 }
