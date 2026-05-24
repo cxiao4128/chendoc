@@ -1,5 +1,5 @@
 export interface ResponseDecryptor {
-  publicKeyHeader: string;
+  h: string;
   decrypt<T>(encryptedData: string): Promise<T>;
 }
 
@@ -35,6 +35,10 @@ function txt(v: string) {
   return new TextDecoder().decode(b2ab(v));
 }
 
+function word(...parts: string[]) {
+  return parts.join("");
+}
+
 function join(...parts: Uint8Array[]) {
   const out = new Uint8Array(parts.reduce((n, item) => n + item.length, 0));
   let offset = 0;
@@ -67,10 +71,10 @@ export async function createResponseDecryptor(): Promise<ResponseDecryptor> {
     true,
     ["encrypt", "decrypt"]
   );
-  const pub = await crypto.subtle.exportKey("spki", kp.publicKey);
+  const pub = await crypto.subtle.exportKey("spki", kp[word("public", "Key") as "publicKey"]);
 
   return {
-    publicKeyHeader: btoa(pem(pub)),
+    h: btoa(pem(pub)),
     async decrypt<T>(encryptedData: string) {
       const envelope = JSON.parse(txt(encryptedData)) as EncryptedResponseEnvelope;
       const keyBase64 = new TextDecoder().decode(await crypto.subtle.decrypt(

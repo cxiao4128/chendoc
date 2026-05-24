@@ -1,16 +1,16 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { useAuthStore } from "../stores/auth";
+import { homeForUser, isAdminPath, isUsersPath } from "./access";
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", redirect: "/login" },
+    { path: "/", component: () => import("../pages/login/LoginPage.vue") },
     { path: "/login", component: () => import("../pages/login/LoginPage.vue"), meta: { public: true } },
     { path: "/register", component: () => import("../pages/register/RegisterPage.vue"), meta: { public: true } },
     {
       path: "/admin",
       component: () => import("../pages/admin/AdminLayout.vue"),
-      meta: { auth: true },
+      meta: { auth: true, admin: true },
       children: [
         { path: "", redirect: "/admin/docs" },
         { path: "docs", component: () => import("../pages/docs/DocListPage.vue") },
@@ -23,24 +23,44 @@ const router = createRouter({
         { path: "article-delete", component: () => import("../pages/danger/DangerPage.vue"), meta: { admin: true } },
         { path: "danger", component: () => import("../pages/danger/DangerPage.vue"), meta: { admin: true } }
       ]
+    },
+    {
+      path: "/users",
+      component: () => import("../pages/admin/AdminLayout.vue"),
+      meta: { auth: true, userWorkspace: true },
+      children: [
+        { path: "", redirect: "/users/docs" },
+        { path: "docs", component: () => import("../pages/docs/DocListPage.vue") },
+        { path: "docs/:id", component: () => import("../pages/docs/DocEditorPage.vue") },
+        { path: "trash", component: () => import("../pages/docs/TrashPage.vue") }
+      ]
     }
   ]
 });
 
 router.beforeEach(async (to) => {
+  const { useAuthStore } = await import("../stores/auth");
   const auth = useAuthStore();
   if (!auth.ready && auth.token) await auth.fetchMe();
 
-  if (to.meta.public && auth.isLoggedIn) {
-    return "/admin/docs";
+  if (to.path === "/") {
+    return auth.user ? homeForUser(auth.user) : "/login";
   }
 
-  if (!to.meta.public && !auth.user) {
+  if (to.meta.public && auth.isLoggedIn) {
+    return homeForUser(auth.user);
+  }
+
+  if ((to.meta.auth || isAdminPath(to.path) || isUsersPath(to.path)) && !auth.user) {
     return { path: "/login", query: { redirect: to.fullPath } };
   }
 
-  if (to.meta.admin && !auth.canAccessAdmin) {
-    return { path: "/admin/docs", query: { reason: "admin-required" } };
+  if (auth.user && isAdminPath(to.path) && !auth.canAccessAdmin) {
+    return "/users/docs";
+  }
+
+  if (auth.user && isUsersPath(to.path) && auth.canAccessAdmin) {
+    return "/admin/docs";
   }
 });
 

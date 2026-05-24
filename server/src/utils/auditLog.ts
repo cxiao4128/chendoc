@@ -1,5 +1,5 @@
 import type { FastifyRequest } from "fastify";
-import { db } from "../db/client.js";
+import { db, dbRun } from "../db/client.js";
 import { operationLogs } from "../db/schema.js";
 import { now } from "./date.js";
 
@@ -19,8 +19,8 @@ export function auditMetaFromRequest(request: FastifyRequest) {
   };
 }
 
-export function writeAuditLog(input: AuditMeta) {
-  db.insert(operationLogs).values({
+export async function writeAuditLog(input: AuditMeta) {
+  await dbRun(db.insert(operationLogs).values({
     userId: input.userId ?? null,
     action: input.action,
     targetType: input.targetType,
@@ -28,5 +28,5 @@ export function writeAuditLog(input: AuditMeta) {
     ip: input.ip,
     userAgent: Array.isArray(input.userAgent) ? input.userAgent.join(", ") : input.userAgent,
     createdAt: now()
-  }).run();
+  }));
 }

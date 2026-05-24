@@ -1,6 +1,6 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { db } from "../../db/client.js";
+import { db, dbGet, dbRun } from "../../db/client.js";
 import { captchas } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { minutesFromNow, now } from "../../utils/date.js";
@@ -83,24 +83,24 @@ function timestampFromCaptchaId(captchaId: string) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export function createCaptcha() {
+export async function createCaptcha() {
   const issuedAt = Date.now();
   const captchaId = `${issuedAt}-${randomUUID()}`;
   const code = createCode();
   const createdAt = new Date(issuedAt);
-  db.insert(captchas).values({
+  await dbRun(db.insert(captchas).values({
     id: captchaId,
     codeHash: hashCode(captchaId, code.answer),
     tryCount: 0,
     expireAt: minutesFromNow(5),
     createdAt
-  }).run();
+  }));
 
   return { captchaId, image: svgToDataUri(createSvg(code.question)) };
 }
 
-export function verifyCaptcha(captchaId: string, captchaCode: string) {
-  const record = db.select().from(captchas).where(eq(captchas.id, captchaId)).limit(1).get();
+export async function verifyCaptcha(captchaId: string, captchaCode: string) {
+  const record = await dbGet<typeof captchas.$inferSelect>(db.select().from(captchas).where(eq(captchas.id, captchaId)).limit(1));
   const issuedAt = timestampFromCaptchaId(captchaId);
   if (
     !record ||
@@ -114,6 +114,6 @@ export function verifyCaptcha(captchaId: string, captchaCode: string) {
   }
 
   const ok = record.codeHash === hashCode(captchaId, captchaCode.trim());
-  db.update(captchas).set({ tryCount: record.tryCount + 1, usedAt: now() }).where(eq(captchas.id, captchaId)).run();
+  await dbRun(db.update(captchas).set({ tryCount: record.tryCount + 1, usedAt: now() }).where(eq(captchas.id, captchaId)));
   return ok;
 }

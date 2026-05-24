@@ -5,6 +5,7 @@ import { Plus, RefreshCw, Search, Trash2 } from "lucide-vue-next";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import EmptyState from "../../components/common/EmptyState.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
+import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { useDocStore } from "../../stores/doc";
 import "./doc-list.css";
 
@@ -25,6 +26,7 @@ const route = useRoute();
 const router = useRouter();
 const docs = useDocStore();
 const isMobile = useIsMobileViewport();
+const { docsPath, trashPath, docPath } = useWorkspaceRoutes();
 
 const query = computed(() => String(route.query.q || "").trim());
 const visibleDocs = computed(() => docs.docs);
@@ -40,7 +42,7 @@ const allVisibleSelected = computed(() => !!visibleDocs.value.length && visibleD
 
 async function createDoc() {
   const doc = await docs.createDoc("未命名文档");
-  router.push(`/admin/docs/${doc.id}`);
+  router.push(docPath(doc.id));
 }
 
 function sharePath(doc: { shareCode?: number | null; customSlug?: string | null }) {
@@ -147,7 +149,7 @@ function openOrToggleDoc(id: number) {
     toggleDocSelection(id);
     return;
   }
-  router.push(`/admin/docs/${id}`);
+  router.push(docPath(id));
 }
 
 function handleRowKeydown(event: Event, id: number) {
@@ -190,7 +192,7 @@ function formatDate(value: string) {
 
 function submitSearch() {
   const value = searchKeyword.value.trim();
-  router.push({ path: "/admin/docs", query: value ? { q: value } : {} });
+  router.push({ path: docsPath.value, query: value ? { q: value } : {} });
 }
 
 onMounted(load);
@@ -229,7 +231,7 @@ watch(visibleDocs, (items) => {
         </button>
         <button v-if="bulkMode" class="cd-button" type="button" @click="cancelBulkMode">取消</button>
         <button class="cd-button primary" type="button" @click="createDoc"><Plus :size="16" />新建文档</button>
-        <RouterLink class="cd-button" to="/admin/trash"><Trash2 :size="16" />回收站</RouterLink>
+        <RouterLink class="cd-button" :to="trashPath"><Trash2 :size="16" />回收站</RouterLink>
       </div>
 
       <div v-if="docs.loadingList" class="doc-list-page__skeleton is-mobile">
@@ -287,7 +289,7 @@ watch(visibleDocs, (items) => {
             {{ allVisibleSelected ? "取消全选" : "全选" }}
           </button>
           <button v-if="bulkMode" class="cd-button" type="button" @click="cancelBulkMode">取消</button>
-          <RouterLink class="cd-button" to="/admin/trash"><Trash2 :size="16" />回收站</RouterLink>
+          <RouterLink class="cd-button" :to="trashPath"><Trash2 :size="16" />回收站</RouterLink>
           <button class="cd-button primary" type="button" @click="createDoc"><Plus :size="16" />新建文档</button>
         </div>
       </div>

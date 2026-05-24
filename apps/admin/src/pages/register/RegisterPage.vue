@@ -4,7 +4,7 @@ import { RouterLink, useRouter } from "vue-router";
 import { Eye, EyeOff, KeyRound, LockKeyhole, UserRound } from "lucide-vue-next";
 import CaptchaInput from "../../components/auth/CaptchaInput.vue";
 import { getPublicSiteConfigApi } from "../../api/settings";
-import { bundledLogoUrl, bundledWallpaperUrl, defaultRemoteLogoUrl, defaultRemoteWallpaperUrl, withBundledSiteAssets } from "../../config/site-assets";
+import { bundledLogoUrl, bundledWallpaperUrl, withBundledSiteAssets } from "../../config/site-assets";
 import "./register.css";
 
 const router = useRouter();
@@ -48,8 +48,8 @@ async function submit() {
   if (error.value) return;
   loading.value = true;
   try {
-    const { registerApi } = await import("../../api/auth");
-    await registerApi({
+    const { a1: createCredential } = await import("../../api/auth");
+    await createCredential({
       username: username.value,
       password: password.value,
       inviteCode: inviteCode.value.trim().toUpperCase(),

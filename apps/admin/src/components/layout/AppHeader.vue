@@ -2,10 +2,12 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { Menu, Search } from "lucide-vue-next";
+import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import "./app-header.css";
 
 defineEmits<{ menu: [] }>();
 const router = useRouter();
+const { docsPath } = useWorkspaceRoutes();
 const keyword = ref("");
 
 function search() {
@@ -16,7 +18,7 @@ function search() {
     window.open(`/r/${shareCode}`, "_blank", "noopener,noreferrer");
     return;
   }
-  router.push({ path: "/admin/docs", query: { q: value } });
+  router.push({ path: docsPath.value, query: { q: value } });
 }
 </script>
 

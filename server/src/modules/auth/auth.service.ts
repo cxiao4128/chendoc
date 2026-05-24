@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { ZodError, z } from "zod";
-import { db } from "../../db/client.js";
+import { db, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { invites, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { now } from "../../utils/date.js";
@@ -37,9 +37,9 @@ export const encryptedPasswordSchema = z.object({
 
 export const registerSchema = registerPayloadSchema;
 
-function parseEncryptedJson<T extends z.ZodTypeAny>(input: unknown, schema: T): z.infer<T> {
+async function parseEncryptedJson<T extends z.ZodTypeAny>(input: unknown, schema: T): Promise<z.infer<T>> {
   const envelope = encryptedRequestSchema.parse(input);
-  const plaintext = decryptSubmittedPayload(envelope);
+  const plaintext = await decryptSubmittedPayload(envelope);
   let decoded: unknown;
   try {
     decoded = JSON.parse(plaintext);
@@ -58,12 +58,12 @@ function canSkipLoginCaptcha(user: { username: string; role: "admin" | "user" })
 }
 
 export async function login(input: unknown) {
-  const body = parseEncryptedJson(input, loginPayloadSchema);
+  const body = await parseEncryptedJson(input, loginPayloadSchema);
   const password = body.password;
-  const user = db.select().from(users).where(eq(users.username, body.username)).limit(1).get();
+  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.username, body.username)).limit(1));
   const shouldSkipCaptcha = user ? canSkipLoginCaptcha(user) : false;
 
-  if (!shouldSkipCaptcha && (!body.captchaId || !body.captchaCode || !verifyCaptcha(body.captchaId, body.captchaCode))) {
+  if (!shouldSkipCaptcha && (!body.captchaId || !body.captchaCode || !(await verifyCaptcha(body.captchaId, body.captchaCode)))) {
     throw new Error("登录失败，请检查账号、密码或验证码");
   }
 
@@ -71,13 +71,13 @@ export async function login(input: unknown) {
     throw new Error("登录失败，请检查账号、密码或验证码");
   }
 
-  cleanupExpiredAuthSessions();
-  return { ...createAuthSession(user.id), user: publicUser(user) };
+  await cleanupExpiredAuthSessions();
+  return { ...await createAuthSession(user.id), user: publicUser(user) };
 }
 
 export async function register(input: unknown) {
-  const body = parseEncryptedJson(input, registerPayloadSchema);
-  if (!body.captchaId || !body.captchaCode || !verifyCaptcha(body.captchaId, body.captchaCode)) {
+  const body = await parseEncryptedJson(input, registerPayloadSchema);
+  if (!body.captchaId || !body.captchaCode || !(await verifyCaptcha(body.captchaId, body.captchaCode))) {
     throw new Error("验证码不正确或已过期");
   }
 
@@ -88,40 +88,39 @@ export async function register(input: unknown) {
   }
 
   const passwordHash = await hashPassword(password);
-  const result = db.transaction((tx) => {
-    const invite = tx
+  const result = await dbTransaction(async (tx) => {
+    const invite = await dbGet<typeof invites.$inferSelect>(tx
       .select()
       .from(invites)
       .where(and(eq(invites.code, body.inviteCode.toUpperCase()), eq(invites.status, "unused")))
-      .limit(1)
-      .get();
+      .limit(1));
 
     if (!invite || invite.usedAt || invite.expireAt && invite.expireAt.getTime() <= Date.now()) {
       throw new Error("注册卡密不存在、已使用或已过期");
     }
 
-    const exists = tx.select({ id: users.id }).from(users).where(eq(users.username, body.username)).limit(1).get();
+    const exists = await dbGet<{ id: number }>(tx.select({ id: users.id }).from(users).where(eq(users.username, body.username)).limit(1));
     if (exists) {
       throw new Error("注册失败，请更换账号或稍后重试");
     }
 
     const createdAt = now();
-    const insert = tx.insert(users).values({
+    const insert = await dbRun(tx.insert(users).values({
       username: body.username,
       passwordHash,
       role: "user",
       status: "active",
       createdAt,
       updatedAt: createdAt
-    }).run();
+    }));
 
     const userId = Number(insert.lastInsertRowid);
-    const inviteUpdate = tx.update(invites).set({
+    const inviteUpdate = await dbRun(tx.update(invites).set({
       status: "used",
       usedBy: userId,
       usedAt: now(),
       updatedAt: now()
-    }).where(and(eq(invites.id, invite.id), eq(invites.status, "unused"), isNull(invites.usedAt))).run();
+    }).where(and(eq(invites.id, invite.id), eq(invites.status, "unused"), isNull(invites.usedAt))));
     if (inviteUpdate.changes !== 1) {
       throw new Error("注册卡密已被使用，请更换卡密");
     }
@@ -129,7 +128,7 @@ export async function register(input: unknown) {
     return { userId };
   });
 
-  const user = db.select().from(users).where(eq(users.id, result.userId)).limit(1).get();
+  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, result.userId)).limit(1));
   if (!user) {
     throw new Error("注册失败，请稍后重试");
   }
@@ -137,9 +136,9 @@ export async function register(input: unknown) {
 }
 
 export async function changePassword(userId: number, currentEncryptedPassword: string, newEncryptedPassword: string, keyId: string) {
-  const currentPassword = decryptSubmittedPassword(keyId, currentEncryptedPassword);
-  const newPassword = decryptSubmittedPassword(keyId, newEncryptedPassword);
-  const user = db.select().from(users).where(eq(users.id, userId)).limit(1).get();
+  const currentPassword = await decryptSubmittedPassword(keyId, currentEncryptedPassword);
+  const newPassword = await decryptSubmittedPassword(keyId, newEncryptedPassword);
+  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, userId)).limit(1));
   if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
     throw new Error("当前密码不正确");
   }
@@ -152,5 +151,5 @@ export async function changePassword(userId: number, currentEncryptedPassword: s
   }
 
   const passwordHash = await hashPassword(newPassword);
-  db.update(users).set({ passwordHash, updatedAt: now() }).where(eq(users.id, userId)).run();
+  await dbRun(db.update(users).set({ passwordHash, updatedAt: now() }).where(eq(users.id, userId)));
 }

@@ -72,15 +72,15 @@ afterAll(() => {
 });
 
 async function createDocument() {
-  const doc = createDoc(adminId, { title: "Security doc" });
-  return updateDoc(doc.id, adminId, {
+  const doc = await createDoc(adminId, { title: "Security doc" });
+  return await updateDoc(doc.id, adminId, {
     contentHtml: "<p>private content</p>"
   });
 }
 
 async function createUserDocument() {
-  const doc = createDoc(userId, { title: "User doc" });
-  return updateDoc(doc.id, userId, {
+  const doc = await createDoc(userId, { title: "User doc" });
+  return await updateDoc(doc.id, userId, {
     contentHtml: "<p>user content</p>"
   }, { id: userId, role: "user" });
 }
@@ -102,20 +102,20 @@ describe("share public access boundary", () => {
 
     expect(share.isEnabled).toBe(false);
 
-    publishDoc(doc.id, adminId);
-    expect(getPublicShare(share.shareCode)).toBeNull();
+    await publishDoc(doc.id, adminId);
+    expect(await getPublicShare(share.shareCode)).toBeNull();
   });
 
   test("enabled shares expose docs without extra publish step", async () => {
     const doc = await createDocument();
     const share = await createShare(doc.id, { isEnabled: true });
 
-    const draftData = getPublicShare(share.shareCode);
+    const draftData = await getPublicShare(share.shareCode);
     expect(draftData?.doc.status).toBe("published");
     expect(draftData?.doc.contentHtml).toBe("<p>private content</p>");
 
-    publishDoc(doc.id, adminId);
-    const data = getPublicShare(share.shareCode);
+    await publishDoc(doc.id, adminId);
+    const data = await getPublicShare(share.shareCode);
 
     expect(data?.doc.status).toBe("published");
     expect(data?.doc.contentHtml).toBe("<p>private content</p>");
@@ -124,20 +124,20 @@ describe("share public access boundary", () => {
   test("enabled shares cannot expose deleted docs", async () => {
     const doc = await createDocument();
     const share = await createShare(doc.id, { isEnabled: true });
-    publishDoc(doc.id, adminId);
+    await publishDoc(doc.id, adminId);
 
-    expect(getPublicShare(share.shareCode)).toBeTruthy();
+    expect(await getPublicShare(share.shareCode)).toBeTruthy();
 
-    softDeleteDoc(doc.id, adminId);
-    expect(getPublicShare(share.shareCode)).toBeNull();
+    await softDeleteDoc(doc.id, adminId);
+    expect(await getPublicShare(share.shareCode)).toBeNull();
   });
 
   test("password shares require the correct password", async () => {
     const doc = await createDocument();
     const share = await createShare(doc.id, { isEnabled: true, password: "correct horse" });
-    publishDoc(doc.id, adminId);
+    await publishDoc(doc.id, adminId);
 
-    const data = getPublicShare(share.shareCode);
+    const data = await getPublicShare(share.shareCode);
     expect(data?.protected).toBe(true);
 
     const rejected = await verifySharePassword(share.shareCode, "wrong password");
@@ -158,7 +158,7 @@ describe("share public access boundary", () => {
     const doc = await createDocument();
     await createShare(doc.id, { isEnabled: true, password: "correct horse" });
 
-    const detail = getDoc(doc.id, { id: adminId, role: "admin" }) as { share?: Record<string, unknown> | null };
+    const detail = await getDoc(doc.id, { id: adminId, role: "admin" }) as { share?: Record<string, unknown> | null };
 
     expect(detail.share?.hasPassword).toBe(true);
     expect(detail.share).not.toHaveProperty("passwordHash");
@@ -181,7 +181,7 @@ describe("share public access boundary", () => {
 
     await restoreDocVersion(doc.id, version!.id, adminId, { id: adminId, role: "admin" });
 
-    const restored = getDoc(doc.id, { id: adminId, role: "admin" });
+    const restored = await getDoc(doc.id, { id: adminId, role: "admin" });
     const versions = db.select().from(docVersions).where(eq(docVersions.docId, doc.id)).all();
     expect(restored.contentHtml).toBe("<p></p>");
     expect(versions.some((item) => item.contentHtml === "<p>private content</p>")).toBe(true);
@@ -207,13 +207,13 @@ describe("audit log coverage", () => {
 
 describe("document search", () => {
   test("search results include document summary", async () => {
-    const doc = createDoc(adminId, { title: "Search summary doc" });
+    const doc = await createDoc(adminId, { title: "Search summary doc" });
     await updateDoc(doc.id, adminId, {
       summary: "quarterly planning search synopsis",
       contentHtml: "<p>body content</p>"
     }, { id: adminId, role: "admin" });
 
-    const results = listDocs({ id: adminId, role: "admin" }, "planning search");
+    const results = await listDocs({ id: adminId, role: "admin" }, "planning search");
 
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
@@ -223,34 +223,34 @@ describe("document search", () => {
   });
 
   test("soft deleted documents are excluded from search", async () => {
-    const liveDoc = createDoc(adminId, { title: "Live retention needle" });
+    const liveDoc = await createDoc(adminId, { title: "Live retention needle" });
     await updateDoc(liveDoc.id, adminId, {
       summary: "retention search marker"
     }, { id: adminId, role: "admin" });
-    const deletedDoc = createDoc(adminId, { title: "Deleted retention needle" });
+    const deletedDoc = await createDoc(adminId, { title: "Deleted retention needle" });
     await updateDoc(deletedDoc.id, adminId, {
       summary: "retention search marker"
     }, { id: adminId, role: "admin" });
-    softDeleteDoc(deletedDoc.id, adminId, { id: adminId, role: "admin" });
+    await softDeleteDoc(deletedDoc.id, adminId, { id: adminId, role: "admin" });
 
-    const ids = listDocs({ id: adminId, role: "admin" }, "retention search marker").map((doc) => doc.id);
+    const ids = (await listDocs({ id: adminId, role: "admin" }, "retention search marker")).map((doc) => doc.id);
 
     expect(ids).toEqual([liveDoc.id]);
     expect(ids).not.toContain(deletedDoc.id);
   });
 
   test("ordinary users only search their own documents", async () => {
-    const ownDoc = createDoc(userId, { title: "Own search needle" });
+    const ownDoc = await createDoc(userId, { title: "Own search needle" });
     await updateDoc(ownDoc.id, userId, {
       summary: "shared visibility search marker"
     }, { id: userId, role: "user" });
-    const otherDoc = createDoc(otherUserId, { title: "Other search needle" });
+    const otherDoc = await createDoc(otherUserId, { title: "Other search needle" });
     await updateDoc(otherDoc.id, otherUserId, {
       summary: "shared visibility search marker"
     }, { id: otherUserId, role: "user" });
 
-    const ownResults = listDocs({ id: userId, role: "user" }, "shared visibility").map((doc) => doc.id);
-    const adminResults = listDocs({ id: adminId, role: "admin" }, "shared visibility").map((doc) => doc.id).sort((a, b) => a - b);
+    const ownResults = (await listDocs({ id: userId, role: "user" }, "shared visibility")).map((doc) => doc.id);
+    const adminResults = (await listDocs({ id: adminId, role: "admin" }, "shared visibility")).map((doc) => doc.id).sort((a, b) => a - b);
 
     expect(ownResults).toEqual([ownDoc.id]);
     expect(adminResults).toEqual([ownDoc.id, otherDoc.id].sort((a, b) => a - b));
@@ -266,12 +266,12 @@ describe("user document share review flow", () => {
     expect(share?.shareCode).toBeLessThanOrEqual(99999999);
     expect(share?.isEnabled).toBe(false);
     expect(share?.reviewStatus).toBe("pending");
-    expect(getPublicShare(share!.shareCode)).toBeNull();
+    expect(await getPublicShare(share!.shareCode)).toBeNull();
 
     await reviewUserShare(share!.id, { action: "approve", shareCode: 87654321 }, adminId);
 
-    expect(getPublicShare(share!.shareCode)).toBeNull();
-    const approved = getPublicShare(87654321);
+    expect(await getPublicShare(share!.shareCode)).toBeNull();
+    const approved = await getPublicShare(87654321);
     expect(approved?.doc.contentHtml).toBe("<p>user content</p>");
   });
 
@@ -288,11 +288,11 @@ describe("user document share review flow", () => {
     const doc = await createUserDocument();
     const share = await createOrGetShare(doc.id, { isEnabled: true }, { id: userId, role: "user" });
     await reviewUserShare(share!.id, { action: "approve" }, adminId);
-    expect(getPublicShare(share!.shareCode)).toBeTruthy();
+    expect(await getPublicShare(share!.shareCode)).toBeTruthy();
 
     await updateDoc(doc.id, userId, { contentHtml: "<p>changed</p>" }, { id: userId, role: "user" });
 
-    expect(getPublicShare(share!.shareCode)).toBeNull();
+    expect(await getPublicShare(share!.shareCode)).toBeNull();
   });
 
   test("rejected user shares require a document content update before resubmission", async () => {
@@ -312,9 +312,9 @@ describe("user document share review flow", () => {
     const ownDoc = await createUserDocument();
     const adminDoc = await createDocument();
 
-    expect(listDocs({ id: userId, role: "user" }).map((doc) => doc.id)).toEqual([ownDoc.id]);
-    expect(listDocs({ id: adminId, role: "admin" }).map((doc) => doc.id).sort((a, b) => a - b)).toEqual([adminDoc.id, ownDoc.id].sort((a, b) => a - b));
-    expect(() => getDoc(adminDoc.id, { id: userId, role: "user" })).toThrow("文档不存在");
+    expect((await listDocs({ id: userId, role: "user" })).map((doc) => doc.id)).toEqual([ownDoc.id]);
+    expect((await listDocs({ id: adminId, role: "admin" })).map((doc) => doc.id).sort((a, b) => a - b)).toEqual([adminDoc.id, ownDoc.id].sort((a, b) => a - b));
+    await expect(getDoc(adminDoc.id, { id: userId, role: "user" })).rejects.toThrow("文档不存在");
   });
 
   test("ordinary users cannot manage another user's share", async () => {

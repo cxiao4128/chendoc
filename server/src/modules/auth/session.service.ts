@@ -2,7 +2,7 @@ import { createDecipheriv, createHash, randomBytes, randomUUID } from "node:cryp
 import { eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "../../config/env.js";
-import { db } from "../../db/client.js";
+import { db, dbGet, dbRun } from "../../db/client.js";
 import { authSessions } from "../../db/schema.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { now } from "../../utils/date.js";
@@ -66,24 +66,24 @@ function decryptAuthPayload(key: Buffer, sessionId: string, nonce: Buffer, raw: 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
-export function createAuthSession(userId: number) {
+export async function createAuthSession(userId: number) {
   const sessionId = randomUUID();
   const sessionKey = randomBytes(32).toString("base64");
   const createdAt = now();
   const expireAt = new Date(createdAt.getTime() + parseDurationMs(env.jwtExpiresIn));
 
-  db.insert(authSessions).values({
+  await dbRun(db.insert(authSessions).values({
     id: sessionId,
     userId,
     keyEncrypted: encryptValue(sessionKey, env.configEncryptionKey),
     expireAt,
     createdAt
-  }).run();
+  }));
 
   return { sessionId, sessionKey };
 }
 
-export function verifyAuthSessionHeader(header: string) {
+export async function verifyAuthSessionHeader(header: string) {
   const raw = base64UrlDecode(header.trim());
   if (raw.length <= 33 || raw[0] !== 1) {
     throw new Error("Invalid authorization payload.");
@@ -93,12 +93,11 @@ export function verifyAuthSessionHeader(header: string) {
   const nonce = raw.subarray(17, 33);
   const payload = raw.subarray(33);
 
-  const session = db
+  const session = await dbGet<typeof authSessions.$inferSelect>(db
     .select()
     .from(authSessions)
     .where(eq(authSessions.id, sessionId))
-    .limit(1)
-    .get();
+    .limit(1));
   if (!session || session.expireAt.getTime() <= Date.now()) {
     throw new Error("Session expired");
   }
@@ -116,6 +115,6 @@ export function verifyAuthSessionHeader(header: string) {
   return { userId: session.userId };
 }
 
-export function cleanupExpiredAuthSessions() {
-  db.delete(authSessions).where(lt(authSessions.expireAt, now())).run();
+export async function cleanupExpiredAuthSessions() {
+  await dbRun(db.delete(authSessions).where(lt(authSessions.expireAt, now())));
 }

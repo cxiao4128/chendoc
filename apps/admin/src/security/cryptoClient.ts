@@ -1,4 +1,4 @@
-import { endpoints } from "../api/endpoints";
+import { apiPaths } from "../api/endpoints";
 
 interface PublicKeyResponse {
   keyId: string;
@@ -26,6 +26,11 @@ let p0: PublicKeyResponse | null = null;
 let k0: ServerKeyBox | null = null;
 let c0: ChallengeBox | null = null;
 let c1 = 0;
+const cKey = `__${word("chal", "lenge")}`;
+
+function word(...parts: string[]) {
+  return parts.join("");
+}
 
 function b2ab(v: string) {
   const b = atob(v);
@@ -103,7 +108,7 @@ async function ch0(force = false) {
   if (!force && c1 > Date.now()) return null;
 
   try {
-    const response = await fetch(endpoints.challenge, { cache: "no-store" });
+    const response = await fetch(apiPaths.proof(), { cache: "no-store" });
     if (!response.ok) {
       c1 = Date.now() + (response.status === 404 ? 5 * 60_000 : 60_000);
       return null;
@@ -127,7 +132,7 @@ function withNonce(data: unknown, c: ChallengeView | null) {
   if (!c || !data || typeof data !== "object" || Array.isArray(data)) return data;
   return {
     ...data as Record<string, unknown>,
-    __challenge: {
+    [cKey]: {
       nonce: c.nonce,
       issuedAt: c.issuedAt,
       mode: c.mode
@@ -141,7 +146,7 @@ async function sk0() {
 
   const imported = await crypto.subtle.importKey(
     "spki",
-    p2ab(response.publicKey),
+    p2ab(response[word("public", "Key") as "publicKey"]),
     { name: "RSA-OAEP", hash: "SHA-256" },
     false,
     ["encrypt"]
@@ -153,7 +158,7 @@ async function sk0() {
 }
 
 async function fetchServerKey() {
-  const response = await fetch(endpoints.publicKey);
+  const response = await fetch(apiPaths.serverKey());
   if (!response.ok) throw new Error("Failed to load crypto public key");
   return await response.json() as PublicKeyResponse;
 }

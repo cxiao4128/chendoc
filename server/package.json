@@ -1,6 +1,6 @@
 {
   "name": "@chendoc/server",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "db:migrate": "tsx src/db/migrate.ts",
+    "migrate:sqlite-to-mysql": "tsx scripts/migrate-sqlite-to-mysql.ts",
     "db:backup": "node ../scripts/backup-sqlite.js",
     "deploy:preflight": "node ../scripts/preflight-deploy.js",
     "admin:init": "tsx src/scripts/init-admin.ts",
@@ -27,6 +28,7 @@
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.15.3",
     "nanoid": "^5.1.6",
     "sanitize-html": "^2.17.0",
     "zod": "^4.1.12"

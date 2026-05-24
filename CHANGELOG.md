@@ -4,6 +4,37 @@
 
 ## 中文
 
+### 1.2.2
+
+版本号：`1.2.2`
+
+展示版本：`v1.2.2`
+
+本次更新内容：
+
+- 收紧生产构建的 JS chunk 命名，文件名不再直接暴露认证、请求、编辑器等模块含义。
+- 保持登录、会话、请求、加密和编辑器独立拆分，入口 chunk 继续轻量化。
+- 优化登录链路的 API 包装和 endpoint 映射，减少生产产物中的明显业务导出名。
+- 新增普通用户 `/users` 工作区路由，登录后按角色进入管理员后台或普通用户文档空间。
+- 精简登录页首屏加载内容，编辑器仍按需加载。
+- 保留单次轻量客户端风险标记，不增加高频检测或重型风控逻辑。
+
+更新时间：2026-05-24 17:48:59 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+### 1.2.1
+
+版本号：`1.2.1`
+
+本次更新内容：
+
+- 修复分享审核页在动态路由样式未及时加载时出现裸样式的问题，审核页样式现在随后台壳层提前加载。
+
+更新时间：2026-05-24 12:57:43 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
 ### 1.2.0
 
 版本号：`1.2.0`
@@ -36,6 +67,37 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 1.2.2
+
+Version: `1.2.2`
+
+Display version: `v1.2.2`
+
+Changes in this release:
+
+- Tightened production JS chunk names so module purpose is not exposed through filenames.
+- Kept login, session, request, crypto, and editor code in separate chunks while keeping the entry chunk small.
+- Reduced obvious API wrapper and endpoint-map names in production output.
+- Added the `/users` workspace routes so sign-in now lands in the admin or user document area based on role.
+- Trimmed the login route's initial load path; the editor remains lazy-loaded.
+- Kept the runtime risk marker lightweight and single-run, without high-frequency scans or heavy fingerprinting.
+
+Updated at: 2026-05-24 17:48:59 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+### 1.2.1
+
+Version: `1.2.1`
+
+Changes in this release:
+
+- Fixed the share review page rendering with unstyled fallback controls when the route-level CSS chunk is not loaded quickly enough. The review page styles now load with the admin shell.
+
+Updated at: 2026-05-24 12:57:43 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
 ### 1.2.0
 
