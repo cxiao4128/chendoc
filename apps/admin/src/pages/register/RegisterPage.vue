@@ -5,7 +5,6 @@ import { Eye, EyeOff, KeyRound, LockKeyhole, UserRound } from "lucide-vue-next";
 import CaptchaInput from "../../components/auth/CaptchaInput.vue";
 import { getPublicSiteConfigApi } from "../../api/settings";
 import { bundledLogoUrl, bundledWallpaperUrl, defaultRemoteLogoUrl, defaultRemoteWallpaperUrl, withBundledSiteAssets } from "../../config/site-assets";
-import { registerApi } from "../../api/auth";
 import "./register.css";
 
 const router = useRouter();
@@ -49,6 +48,7 @@ async function submit() {
   if (error.value) return;
   loading.value = true;
   try {
+    const { registerApi } = await import("../../api/auth");
     await registerApi({
       username: username.value,
       password: password.value,

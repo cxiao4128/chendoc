@@ -1,8 +1,21 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { clearToken, getToken, setToken } from "../api/request";
 import type { UserProfile } from "../api/auth";
-import { meApi } from "../api/auth";
+import { clearAuthSession, getSessionId, saveAuthSession } from "../security/sessionToken";
+
+function getToken() {
+  localStorage.removeItem("chendoc_token");
+  return getSessionId();
+}
+
+function setToken(sessionId: string, sessionKey: string) {
+  saveAuthSession(sessionId, sessionKey);
+}
+
+function clearToken() {
+  localStorage.removeItem("chendoc_token");
+  clearAuthSession();
+}
 
 export const useAuthStore = defineStore("auth", () => {
   const token = ref(getToken());
@@ -32,6 +45,7 @@ export const useAuthStore = defineStore("auth", () => {
       return null;
     }
     try {
+      const { meApi } = await import("../api/auth");
       const response = await meApi();
       user.value = response.user;
       return response.user;

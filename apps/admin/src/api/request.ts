@@ -1,8 +1,9 @@
-import { clearAuthSession, createEncryptedAuthorization, createResponseDecryptor, getSessionId, isEncryptedResponse, setAuthSession } from "./rsa";
+import { buildAuthorization, clearAuthSession, getSessionId, saveAuthSession } from "../security/sessionToken";
+import { buildClientRiskHeader } from "../security/runtimeGuard";
+import { createResponseDecryptor, isEncryptedResponse } from "../security/responseCrypto";
+import { endpoints, isCredentialEndpoint, resolveApiPath } from "./endpoints";
 
 const DEFAULT_ERROR_MESSAGE = "请求失败";
-const LOGIN_API_PATH = "/api/auth/login";
-const REGISTER_API_PATH = "/api/auth/register";
 
 export class ApiError extends Error {
   status: number;
@@ -27,7 +28,7 @@ export function getToken() {
 }
 
 export function setToken(sessionId: string, sessionKey: string) {
-  setAuthSession(sessionId, sessionKey);
+  saveAuthSession(sessionId, sessionKey);
 }
 
 export function clearToken() {
@@ -39,17 +40,9 @@ export interface SecureRequestOptions {
   encryptedResponse?: boolean;
 }
 
-function getRequestPath(url: string) {
-  try {
-    return new URL(url, window.location.origin).pathname;
-  } catch {
-    return url;
-  }
-}
-
 function shouldRedirectUnauthorized(url: string) {
-  const path = getRequestPath(url);
-  return path !== LOGIN_API_PATH && path !== REGISTER_API_PATH;
+  const path = resolveApiPath(url);
+  return path !== endpoints.login && path !== endpoints.register;
 }
 
 function redirectToLogin(url: string) {
@@ -67,7 +60,14 @@ export async function request<T>(url: string, options: RequestInit = {}, secure:
   const responseDecryptor = secure.encryptedResponse ? await createResponseDecryptor() : null;
   if (responseDecryptor) headers.set("X-Response-Public-Key", responseDecryptor.publicKeyHeader);
 
-  if (getToken()) headers.set("Authorization", await createEncryptedAuthorization());
+  const riskHeader = buildClientRiskHeader();
+  if (riskHeader) headers.set("X-Client-Risk", riskHeader);
+
+  if (!isCredentialEndpoint(url)) {
+    const authorization = await buildAuthorization();
+    if (authorization) headers.set("Authorization", authorization);
+  }
+
   if (options.body && !headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -78,10 +78,12 @@ export async function request<T>(url: string, options: RequestInit = {}, secure:
   const payload = isEncryptedResponse(rawPayload) && responseDecryptor
     ? await responseDecryptor.decrypt<unknown>(rawPayload.encryptedData)
     : rawPayload;
+
   if (!response.ok) {
     if (response.status === 401) redirectToLogin(url);
     const message = typeof payload === "object" && payload && "message" in payload ? String(payload.message) : DEFAULT_ERROR_MESSAGE;
     throw new ApiError(message, response.status);
   }
+
   return payload as T;
 }

@@ -3,7 +3,6 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-vue-next";
 import CaptchaInput from "../../components/auth/CaptchaInput.vue";
-import { loginApi } from "../../api/auth";
 import { getPublicSiteConfigApi } from "../../api/settings";
 import {
   bundledLogoUrl,
@@ -72,6 +71,7 @@ async function submit() {
     ? { captchaId: captchaId.value, captchaCode: captchaCode.value }
     : {};
   try {
+    const { loginApi } = await import("../../api/auth");
     const response = await loginApi({
       username: username.value,
       password: password.value,

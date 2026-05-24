@@ -20,7 +20,7 @@ const loginPayloadSchema = z.object({
   username: z.string().trim().min(1).max(64),
   password: z.string().min(1).max(128),
   captchaId: z.string().min(8).optional(),
-  captchaCode: z.string().min(4).max(8).optional()
+  captchaCode: z.string().trim().min(1).max(8).optional()
 });
 
 const registerPayloadSchema = loginPayloadSchema.extend({
@@ -32,7 +32,7 @@ export const encryptedPasswordSchema = z.object({
   encryptedPassword: z.string().min(40),
   keyId: z.string().min(8),
   captchaId: z.string().min(8).optional(),
-  captchaCode: z.string().min(4).max(8).optional()
+  captchaCode: z.string().trim().min(1).max(8).optional()
 });
 
 export const registerSchema = registerPayloadSchema;

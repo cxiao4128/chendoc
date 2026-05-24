@@ -23,9 +23,8 @@ defineExpose({ refresh });
 
 function normalizeCode(event: Event) {
   code.value = (event.target as HTMLInputElement).value
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 5);
+    .replace(/\D/g, "")
+    .slice(0, 4);
 }
 
 onMounted(refreshCaptcha);
@@ -34,11 +33,20 @@ onMounted(refreshCaptcha);
 <template>
   <div class="captcha-input">
     <label class="cd-label captcha-input__field">
-      验证码
-      <input ref="input" v-model="code" class="cd-input" autocomplete="off" autocapitalize="characters" inputmode="text" maxlength="5" @input="normalizeCode" />
+      计算验证码
+      <input
+        ref="input"
+        v-model="code"
+        class="cd-input"
+        autocomplete="off"
+        inputmode="numeric"
+        maxlength="4"
+        placeholder="输入结果"
+        @input="normalizeCode"
+      />
     </label>
     <button class="captcha-input__image" type="button" :disabled="loading" aria-label="刷新验证码" @click="refresh">
-      <img v-if="image" :src="image" alt="验证码" />
+      <img v-if="image" :src="image" alt="计算验证码" />
       <span v-else>加载中</span>
     </button>
     <button class="cd-button captcha-input__refresh" type="button" :disabled="loading" aria-label="刷新验证码" @click="refresh">
