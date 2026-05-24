@@ -34,7 +34,7 @@ import "./settings.css";
 type ActivePanel = "logs" | "appearance" | "users" | null;
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v1.05";
+const APP_VERSION = "1.2.0";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -275,6 +275,8 @@ function canonicalVersion(value: string) {
   const raw = value.trim().toLowerCase().replace(/^v/, "");
   const displayMatch = raw.match(/^1\.(\d{2})$/);
   if (displayMatch) return `1.0.${Number(displayMatch[1])}`;
+  const shortSemverMatch = raw.match(/^(\d+)\.(\d+)$/);
+  if (shortSemverMatch) return `${shortSemverMatch[1]}.${shortSemverMatch[2]}.0`;
   return raw;
 }
 
