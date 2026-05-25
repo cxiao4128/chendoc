@@ -4,6 +4,24 @@
 
 ## 中文
 
+### 1.2.4
+
+版本号：`1.2.4`
+
+展示版本：`v1.2.4`
+
+本次更新内容：
+
+- `bash ./deploy.sh` 不再自动执行 `npm run db:migrate`，已迁移好的服务器部署时只构建并重启服务。
+- 数据库迁移保留为手动命令，需要建表或更新表结构时再单独执行 `npm run db:migrate`。
+- MySQL 连接新增 10 秒连接超时，数据库地址或端口不通时会更快失败。
+- 部署脚本会明确输出跳过数据库迁移和管理员初始化的状态。
+- 部署预检会明确拦截根目录 `.env` 中遗留的 SQLite `DATABASE_URL`，提示改为 MySQL 连接串。
+
+更新时间：2026-05-25 21:06:20 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
 ### 1.2.3
 
 版本号：`1.2.3`
@@ -86,6 +104,24 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 1.2.4
+
+Version: `1.2.4`
+
+Display version: `v1.2.4`
+
+Changes in this release:
+
+- `bash ./deploy.sh` no longer runs `npm run db:migrate` automatically; already-migrated servers only build and restart during deployment.
+- Database migration remains available as a manual command when tables need to be created or updated.
+- Added a 10-second MySQL connection timeout so unreachable database hosts or ports fail faster.
+- Deployment now prints explicit status for skipped database migration and admin initialization.
+- Deploy preflight now clearly blocks legacy SQLite `DATABASE_URL` values in the root `.env` and asks for a MySQL URL.
+
+Updated at: 2026-05-25 21:06:20 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
 ### 1.2.3
 

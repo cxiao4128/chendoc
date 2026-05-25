@@ -15,7 +15,8 @@ process.env.RSA_PRIVATE_KEY_ENCRYPTION_KEY = testSecret;
 process.env.PUBLIC_SITE_URL = "http://127.0.0.1:8985";
 process.env.DEFAULT_ADMIN_PASSWORD = "Test!Password123";
 
-await import("../../db/migrate.js");
+const { migrate } = await import("../../db/migrate.js");
+await migrate();
 
 const { db, sqlite } = await import("../../db/client.js");
 const { docVersions, operationLogs, shares, users } = await import("../../db/schema.js");

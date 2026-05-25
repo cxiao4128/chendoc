@@ -1,4 +1,6 @@
-import { databaseProvider, mysqlPool, sqlite } from "./client.js";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { closeDatabase, databaseProvider, mysqlPool, sqlite } from "./client.js";
 import { MYSQL_CREATE_TABLES, MYSQL_INDEXES } from "./mysql-ddl.js";
 
 function migrateSqlite() {
@@ -204,5 +206,16 @@ export async function migrate() {
   migrateSqlite();
 }
 
-await migrate();
-console.log(`Database migration completed for ${databaseProvider}.`);
+function isDirectExecution() {
+  const entry = process.argv[1];
+  return entry ? resolve(entry) === resolve(fileURLToPath(import.meta.url)) : false;
+}
+
+if (isDirectExecution()) {
+  try {
+    await migrate();
+    console.log(`Database migration completed for ${databaseProvider}.`);
+  } finally {
+    await closeDatabase();
+  }
+}

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import "../db/migrate.js";
+import { closeDatabase } from "../db/client.js";
+import { migrate } from "../db/migrate.js";
 import { saveR2Config } from "../modules/settings/settings.service.js";
 
 const defaultPath = "D:\\desktop\\bixu\\js\\r2对象存储文件.txt";
@@ -18,6 +19,8 @@ function readEnvLike(content: string, names: string[]) {
 }
 
 async function main() {
+  await migrate();
+
   const content = readFileSync(sourcePath, "utf8");
   const accountId = readEnvLike(content, ["R2_ACCOUNT_ID"]);
   const bucket = readEnvLike(content, ["R2_BUCKET", "R2_BUCKET_NAME"]);
@@ -44,5 +47,7 @@ try {
   await main();
 } catch (error) {
   console.error(error instanceof Error ? error.message : "R2 import failed.");
-  process.exit(1);
+  process.exitCode = 1;
+} finally {
+  await closeDatabase();
 }

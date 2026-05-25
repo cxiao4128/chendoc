@@ -42,6 +42,14 @@ function readEnvFile(path) {
   return env;
 }
 
+function mergeEnv(target, source, sourceName, sources) {
+  for (const [name, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    target[name] = value;
+    sources[name] = sourceName;
+  }
+}
+
 function byteLength(value) {
   return Buffer.byteLength(value, "utf8");
 }
@@ -122,11 +130,14 @@ async function checkPort(port, host) {
   });
 }
 
-const env = {
-  ...readEnvFile(resolve(root, ".env")),
-  ...readEnvFile(resolve(root, "server/.env")),
-  ...process.env
-};
+const env = {};
+const envSources = {};
+const serverEnv = readEnvFile(resolve(root, "server/.env"));
+const rootEnv = readEnvFile(resolve(root, ".env"));
+
+mergeEnv(env, serverEnv, "server/.env", envSources);
+mergeEnv(env, rootEnv, ".env", envSources);
+mergeEnv(env, process.env, "process.env", envSources);
 
 const major = Number(process.versions.node.split(".")[0]);
 if (Number.isFinite(major) && major >= 20) {
@@ -140,6 +151,26 @@ checkSecret(env, "CONFIG_ENCRYPTION_KEY", 32);
 checkSecret(env, "RSA_PRIVATE_KEY_ENCRYPTION_KEY", 32);
 checkAdminPassword(env);
 requireValue(env, "PUBLIC_SITE_URL");
+
+function databaseUrlKind(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "missing";
+  if (normalized.startsWith("mysql://")) return "mysql";
+  if (normalized.startsWith("file:") || normalized.startsWith("sqlite:") || normalized.includes(".sqlite")) return "sqlite";
+  return "other";
+}
+
+if (String(rootEnv.DATABASE_PROVIDER || "").trim().toLowerCase() === "sqlite") {
+  fail("Root .env still sets DATABASE_PROVIDER=sqlite. Production deployment must use DATABASE_PROVIDER=mysql.");
+}
+
+if (databaseUrlKind(rootEnv.DATABASE_URL) === "sqlite") {
+  fail("Root .env still uses a legacy SQLite DATABASE_URL. Set DATABASE_PROVIDER=mysql and DATABASE_URL=mysql://user:password@host:3306/database.");
+}
+
+if (serverEnv.DATABASE_PROVIDER || serverEnv.DATABASE_URL) {
+  warn("server/.env contains database settings. Runtime deployment reads root .env first; keep production DATABASE_PROVIDER and DATABASE_URL in the project-root .env.");
+}
 
 const port = Number(env.PORT || 8985);
 const host = env.HOST && env.HOST !== "::" ? env.HOST : "0.0.0.0";
@@ -159,12 +190,12 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const databaseProvider = String(env.DATABASE_PROVIDER || "mysql").trim().toLowerCase();
 if (databaseProvider === "mysql") {
   if (!String(env.DATABASE_URL || "").startsWith("mysql://")) {
-    fail("DATABASE_URL must be a mysql:// URL when DATABASE_PROVIDER=mysql.");
+    fail(`DATABASE_URL must be a mysql:// URL when DATABASE_PROVIDER=mysql. Current source: ${envSources.DATABASE_URL || "missing"}.`);
   } else {
-    note("MySQL database provider selected.");
+    note(`MySQL database provider selected (${envSources.DATABASE_PROVIDER || "default mysql"}).`);
   }
 } else {
-  fail("Production deployment requires DATABASE_PROVIDER=mysql. SQLite is only kept for historical migration/testing notes.");
+  fail(`Production deployment requires DATABASE_PROVIDER=mysql. Current source: ${envSources.DATABASE_PROVIDER || "missing"}. SQLite is only kept for historical migration/testing notes.`);
 }
 
 console.log("ChenDoc deploy preflight");
