@@ -10,6 +10,7 @@ export interface DocSummary {
   pinned?: boolean;
   sort: number;
   createdBy?: number | null;
+  ownerUsername?: string | null;
   updatedAt: string;
   createdAt: string;
   deletedAt?: string | null;
@@ -36,17 +37,31 @@ export interface DocVersion {
   createdAt: string;
 }
 
-export function listDocsApi(options: { q?: string; signal?: AbortSignal } = {}) {
-  const query = options.q ? `?q=${encodeURIComponent(options.q)}` : "";
-  return request<{ docs: DocSummary[] }>(`/api/docs${query}`, { signal: options.signal });
+export interface PageInfo {
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+export function listDocsApi(options: { q?: string; page?: number; pageSize?: number; signal?: AbortSignal } = {}) {
+  const params = new URLSearchParams();
+  if (options.q) params.set("q", options.q);
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("pageSize", String(options.pageSize));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return request<{ docs: DocSummary[]; pagination?: PageInfo }>(`/api/docs${query}`, { signal: options.signal });
 }
 
 export function searchDocsApi(q: string, signal?: AbortSignal) {
   return request<{ docs: DocSummary[] }>(`/api/docs/search?q=${encodeURIComponent(q)}`, { signal });
 }
 
-export function listTrashDocsApi() {
-  return request<{ docs: DocSummary[] }>("/api/admin/docs/trash");
+export function listTrashDocsApi(options: { page?: number; pageSize?: number; signal?: AbortSignal } = {}) {
+  const params = new URLSearchParams();
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("pageSize", String(options.pageSize));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return request<{ docs: DocSummary[]; pagination?: PageInfo }>(`/api/docs/trash${query}`, { signal: options.signal });
 }
 
 export function createDocApi(title: string) {
@@ -73,11 +88,31 @@ export function bulkDeleteDocsApi(ids: number[]) {
 }
 
 export function restoreDocApi(id: number) {
-  return request<{ doc: DocDetail }>(`/api/admin/docs/${id}/restore`, { method: "POST" });
+  return request<{ success: true; restored: number; restoredIds: number[] }>("/api/docs/trash/batch-restore", {
+    method: "POST",
+    body: JSON.stringify({ ids: [id] })
+  });
+}
+
+export function bulkRestoreTrashDocsApi(ids: number[]) {
+  return request<{ success: true; restored: number; restoredIds: number[] }>("/api/docs/trash/batch-restore", {
+    method: "POST",
+    body: JSON.stringify({ ids })
+  });
 }
 
 export function hardDeleteDocApi(id: number) {
-  return request<{ ok: true }>(`/api/admin/docs/${id}/hard`, { method: "DELETE" });
+  return request<{ success: true; deleted: number; deletedIds: number[] }>("/api/docs/trash/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids: [id] })
+  });
+}
+
+export function bulkHardDeleteTrashDocsApi(ids: number[]) {
+  return request<{ success: true; deleted: number; deletedIds: number[] }>("/api/docs/trash/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids })
+  });
 }
 
 export function publishDocApi(id: number) {

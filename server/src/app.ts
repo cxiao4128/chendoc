@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import Fastify from "fastify";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
@@ -51,6 +52,25 @@ export async function buildApp() {
     reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   });
 
+  const requestStartedAt = new WeakMap<object, number>();
+  app.addHook("onRequest", async (request) => {
+    requestStartedAt.set(request, performance.now());
+  });
+
+  app.addHook("onResponse", async (request) => {
+    const startedAt = requestStartedAt.get(request);
+    if (!startedAt) return;
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (durationMs <= 300) return;
+    const pathName = request.url.split("?")[0] || request.url;
+    app.log.warn({
+      method: request.method,
+      path: pathName,
+      durationMs,
+      queryName: request.routeOptions.url ?? pathName
+    }, "slow request");
+  });
+
   await app.register(fastifyRateLimit, {
     max: 300,
     timeWindow: "1 minute"
@@ -75,7 +95,12 @@ export async function buildApp() {
       prefix: "/",
       decorateReply: false,
       index: false,
-      wildcard: false
+      wildcard: false,
+      setHeaders: (res, pathName) => {
+        if (/\.(?:avif|gif|jpe?g|png|svg|webp|woff2?)$/i.test(pathName)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      }
     });
   }
 
@@ -94,7 +119,7 @@ export async function buildApp() {
       return reply.code(503).send({ message: "前端资源尚未构建，请先运行 npm run build" });
     }
     const html = await readFile(indexPath, "utf8");
-    return reply.type("text/html; charset=utf-8").send(html);
+    return reply.header("Cache-Control", "no-store").type("text/html; charset=utf-8").send(html);
   });
 
   return app;

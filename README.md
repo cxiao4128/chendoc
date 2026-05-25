@@ -1,6 +1,6 @@
 # ChenDoc / Chen Shu
 
-当前版本 / Current version: `v1.2.2`
+当前版本 / Current version: `v1.2.3`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -8,18 +8,20 @@
 
 ### 中文更新
 
-版本号：`1.2.2`
+版本号：`1.2.3`
 
-展示版本：`v1.2.2`
+展示版本：`v1.2.3`
 
 本次更新内容：
 
-- 新增 `DATABASE_PROVIDER=mysql` 运行时连接支持，默认仍保持 SQLite。
-- 新增一次性 SQLite 到 MySQL 安全迁移脚本，迁移前自动备份到 `backups/db/`。
-- 新增迁移校验：表数量、管理员权限、回收站状态、设置记录、分享标识和分享审核元数据。
-- 新增 `docs/sqlite-to-mysql.md`，说明宝塔 MySQL 迁移、切换和回滚流程。
+- 登录页壁纸改为静态 small WebP 首屏占位，高清 WebP 在 HTML 中 preload 后再切换。
+- MySQL 成为生产唯一运行数据库，SQLite 仅保留历史迁移和测试说明。
+- 文档列表和回收站列表改为分页读取，只返回列表必要字段，不再返回正文内容。
+- MySQL 连接池、站点设置读取、用户管理列表和常用索引做轻量化优化，改善 2H4G 宝塔服务器体验。
+- 回收站新增批量恢复和批量永久删除，服务端按用户权限校验。
+- 新增 300ms 以上慢接口日志，只记录 method、path、duration 和 queryName。
 
-更新时间：2026-05-24 17:48:59 +08:00
+更新时间：2026-05-25 00:56:50 +08:00
 
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
@@ -68,18 +70,20 @@
 
 ### English Changelog
 
-Version: `1.2.2`
+Version: `1.2.3`
 
-Display version: `v1.2.2`
+Display version: `v1.2.3`
 
 Changes in this release:
 
-- Added `DATABASE_PROVIDER=mysql` runtime support while keeping SQLite as the default.
-- Added a one-time safe SQLite to MySQL migration script with automatic pre-migration backup in `backups/db/`.
-- Added migration validation for table counts, admin role, trash/deleted state, settings, share identifiers, and share review metadata.
-- Documented the BT Panel MySQL migration, cutover, and rollback flow in `docs/sqlite-to-mysql.md`.
+- Changed the login wallpaper to a static small WebP placeholder with a preloaded full WebP swap.
+- Made MySQL the only production runtime database; SQLite remains only for historical migration and test notes.
+- Paginated document and trash lists so list APIs return only lightweight fields, not document body content.
+- Tuned the MySQL pool, site settings reads, user list loading, and common indexes for low-resource BT Panel servers.
+- Added batch restore and batch permanent delete in Trash with server-side ownership checks.
+- Added lightweight slow-request logging above 300ms with method, path, duration, and queryName only.
 
-Updated at: 2026-05-24 17:48:59 +08:00
+Updated at: 2026-05-25 00:56:50 +08:00
 
 Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
@@ -144,8 +148,8 @@ ChenDoc 是一个轻量的私有文档系统，适合个人服务器、小团队
 ### 技术栈
 
 - 前端：Vue 3、Vite、TypeScript、Pinia、Vue Router、TipTap。
-- 后端：Node.js 20+、Fastify、TypeScript、Drizzle ORM、SQLite / MySQL。
-- 存储：SQLite 默认保存业务数据，也可切换到 MySQL；Cloudflare R2 或 S3 兼容对象存储保存上传文件。
+- 后端：Node.js 20+、Fastify、TypeScript、Drizzle ORM、MySQL。
+- 存储：MySQL 保存业务数据；历史 SQLite 文件仅作为迁移来源保留，Cloudflare R2 或 S3 兼容对象存储保存上传文件。
 
 ### 环境要求
 
@@ -182,8 +186,8 @@ cp .env.example .env
 重点配置：
 
 - `PUBLIC_SITE_URL`：站点公网地址。
-- `DATABASE_PROVIDER`：数据库类型，默认 `sqlite`，可选 `mysql`。
-- `DATABASE_URL`：SQLite 数据库路径或 MySQL 连接串。
+- `DATABASE_PROVIDER`：生产运行固定使用 `mysql`。
+- `DATABASE_URL`：MySQL 连接串，例如 `mysql://user:password@127.0.0.1:3306/chendoc`。
 - `JWT_SECRET`：登录会话密钥。
 - `CONFIG_ENCRYPTION_KEY`：配置加密密钥。
 - `RSA_PRIVATE_KEY_ENCRYPTION_KEY`：RSA 私钥加密密钥。
@@ -221,7 +225,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 从 GitHub Release 下载部署压缩包后，在部署目录内解压并执行：
 
 ```bash
-unzip -o chendoc-1.2.2-*.zip
+unzip -o chendoc-1.2.3-*.zip
 cp .env.example .env
 # 编辑 .env，填写生产环境配置
 bash ./deploy.sh
@@ -241,6 +245,16 @@ CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
 http://127.0.0.1:8985
 ```
 
+如在宝塔/Nginx 中额外配置静态缓存，可给 `/site-assets/` 图片设置长缓存，例如：
+
+```nginx
+location /site-assets/ {
+  proxy_pass http://127.0.0.1:8985;
+  expires 30d;
+  add_header Cache-Control "public, max-age=2592000, immutable";
+}
+```
+
 ### 常用命令
 
 ```bash
@@ -250,7 +264,7 @@ npm run test             # 运行后端测试
 npm run db:migrate       # 数据库迁移
 npm run admin:init       # 初始化或修复管理员账号
 npm run r2:import        # 导入 R2 配置
-npm run db:backup        # 备份 SQLite 数据库
+npm run db:backup        # 旧 SQLite 迁移前备份工具
 bash ./deploy.sh         # 部署并重启服务
 bash ./start.sh          # 启动已构建服务
 bash ./stop.sh           # 停止服务
@@ -262,7 +276,7 @@ bash ./stop.sh           # 停止服务
 apps/admin/              Vue 管理后台
 server/                  Fastify 后端和数据库模块
 scripts/                 构建、部署、备份脚本
-data/                    运行数据和 SQLite 数据库，不提交
+data/                    历史迁移数据和本地运行文件，不提交
 server/public/admin/     构建后由后端托管的前端产物
 ```
 
@@ -295,8 +309,8 @@ ChenDoc is a lightweight private documentation system for personal servers, smal
 ### Tech Stack
 
 - Frontend: Vue 3, Vite, TypeScript, Pinia, Vue Router, TipTap.
-- Backend: Node.js 20+, Fastify, TypeScript, Drizzle ORM, SQLite / MySQL.
-- Storage: SQLite by default, optional MySQL for application data, Cloudflare R2 or S3-compatible object storage for uploaded files.
+- Backend: Node.js 20+, Fastify, TypeScript, Drizzle ORM, MySQL.
+- Storage: MySQL stores application data; historical SQLite files are kept only as migration sources. Cloudflare R2 or S3-compatible object storage stores uploads.
 
 ### Requirements
 
@@ -333,8 +347,8 @@ cp .env.example .env
 Important settings:
 
 - `PUBLIC_SITE_URL`: public site URL.
-- `DATABASE_PROVIDER`: database provider, `sqlite` by default, optional `mysql`.
-- `DATABASE_URL`: SQLite database path or MySQL connection URL.
+- `DATABASE_PROVIDER`: production runtime database provider, fixed to `mysql`.
+- `DATABASE_URL`: MySQL connection URL, for example `mysql://user:password@127.0.0.1:3306/chendoc`.
 - `JWT_SECRET`: session signing secret.
 - `CONFIG_ENCRYPTION_KEY`: configuration encryption key.
 - `RSA_PRIVATE_KEY_ENCRYPTION_KEY`: RSA private-key encryption key.
@@ -372,7 +386,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 Download the deployment archive from GitHub Releases, extract it inside your deployment directory, and run:
 
 ```bash
-unzip -o chendoc-1.2.2-*.zip
+unzip -o chendoc-1.2.3-*.zip
 cp .env.example .env
 # Edit .env for production settings.
 bash ./deploy.sh
@@ -392,6 +406,16 @@ Reverse proxy target:
 http://127.0.0.1:8985
 ```
 
+For an extra BT Panel/Nginx static cache rule, `/site-assets/` images can be cached for a long time:
+
+```nginx
+location /site-assets/ {
+  proxy_pass http://127.0.0.1:8985;
+  expires 30d;
+  add_header Cache-Control "public, max-age=2592000, immutable";
+}
+```
+
 ### Common Commands
 
 ```bash
@@ -401,7 +425,7 @@ npm run test             # Run backend tests
 npm run db:migrate       # Run database migrations
 npm run admin:init       # Initialize or repair admin account
 npm run r2:import        # Import R2 settings
-npm run db:backup        # Backup SQLite database
+npm run db:backup        # Legacy SQLite pre-migration backup helper
 bash ./deploy.sh         # Deploy and restart service
 bash ./start.sh          # Start built service
 bash ./stop.sh           # Stop service
@@ -413,7 +437,7 @@ bash ./stop.sh           # Stop service
 apps/admin/              Vue admin app
 server/                  Fastify backend and database modules
 scripts/                 Build, deployment, and backup scripts
-data/                    Runtime data and SQLite database, not committed
+data/                    Historical migration data and local runtime files, not committed
 server/public/admin/     Built frontend served by backend
 ```
 

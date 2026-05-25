@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Plus, RefreshCw, Search, Trash2 } from "lucide-vue-next";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
@@ -36,6 +36,7 @@ const bulkMode = ref(false);
 const selectedDocIds = ref<Set<number>>(new Set());
 const bulkDeleteOpen = ref(false);
 const bulkDeleting = ref(false);
+let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
 const listErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).listError) || localListError.value);
 const selectedCount = computed(() => selectedDocIds.value.size);
 const allVisibleSelected = computed(() => !!visibleDocs.value.length && visibleDocs.value.every((doc) => selectedDocIds.value.has(doc.id)));
@@ -195,12 +196,29 @@ function submitSearch() {
   router.push({ path: docsPath.value, query: value ? { q: value } : {} });
 }
 
+function queueSearch(value: string) {
+  if (searchTimer) window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(() => {
+    const normalized = value.trim();
+    if (normalized === query.value) return;
+    router.replace({ path: docsPath.value, query: normalized ? { q: normalized } : {} });
+  }, 280);
+}
+
+function loadMore() {
+  void docs.loadMore(query.value);
+}
+
 onMounted(load);
+onUnmounted(() => {
+  if (searchTimer) window.clearTimeout(searchTimer);
+});
 watch(() => route.query.q, load);
 watch(query, (value) => {
   searchKeyword.value = value;
   cancelBulkMode();
 });
+watch(searchKeyword, queueSearch);
 watch(visibleDocs, (items) => {
   const visibleIdSet = new Set(items.map((doc) => doc.id));
   setSelectedDocIds(Array.from(selectedDocIds.value).filter((id) => visibleIdSet.has(id)));
@@ -272,6 +290,9 @@ watch(visibleDocs, (items) => {
           <code>{{ shareStatusText(doc) }}</code>
         </article>
       </div>
+      <button v-if="docs.listHasMore" class="cd-button doc-list-page__more" type="button" :disabled="docs.loadingList" @click="loadMore">
+        {{ docs.loadingList ? "加载中..." : "加载更多" }}
+      </button>
     </template>
 
     <template v-else>
@@ -332,6 +353,9 @@ watch(visibleDocs, (items) => {
           <code>{{ shareStatusText(doc) }}</code>
         </article>
       </div>
+      <button v-if="docs.listHasMore" class="cd-button doc-list-page__more" type="button" :disabled="docs.loadingList" @click="loadMore">
+        {{ docs.loadingList ? "加载中..." : "加载更多" }}
+      </button>
     </template>
     <ConfirmDialog
       v-model="bulkDeleteOpen"

@@ -1,5 +1,5 @@
 import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { authSessions, docs, docVersions, invites, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
@@ -71,15 +71,33 @@ const siteConfigSchema = z.object({
   copyright: z.string().trim().max(120).default("Copyright © 2026 陈书. All rights reserved")
 });
 
+function decodeSettingRow(row: typeof settings.$inferSelect) {
+  return row.encrypted ? decryptValue(row.value, env.configEncryptionKey) : row.value;
+}
+
 async function settingValue(key: string, fallback = "") {
   const row = await dbGet<typeof settings.$inferSelect>(db.select().from(settings).where(eq(settings.key, key)).limit(1));
   if (!row) return fallback;
-  if (row.encrypted) return decryptValue(row.value, env.configEncryptionKey);
-  return row.value;
+  return decodeSettingRow(row);
 }
 
 async function settingBooleanValue(key: string, fallback = false) {
   const value = (await settingValue(key, fallback ? "true" : "false")).trim().toLowerCase();
+  return value === "true" || value === "1" || value === "yes" || value === "on";
+}
+
+async function settingValues(keys: string[]) {
+  if (!keys.length) return new Map<string, string>();
+  const rows = await dbAll<typeof settings.$inferSelect>(db.select().from(settings).where(inArray(settings.key, keys)));
+  return new Map(rows.map((row) => [row.key, decodeSettingRow(row)]));
+}
+
+function valueFromSettings(values: Map<string, string>, key: string, fallback = "") {
+  return values.get(key) ?? fallback;
+}
+
+function booleanFromSettings(values: Map<string, string>, key: string, fallback = false) {
+  const value = valueFromSettings(values, key, fallback ? "true" : "false").trim().toLowerCase();
   return value === "true" || value === "1" || value === "yes" || value === "on";
 }
 
@@ -152,6 +170,55 @@ async function userDocStats(userId: number) {
     docCount: rows.length,
     deletedDocCount: rows.filter((row) => !!row.deletedAt).length
   };
+}
+
+async function userDocStatsMap(userIds: number[]) {
+  const stats = new Map<number, { docCount: number; deletedDocCount: number }>();
+  for (const userId of userIds) stats.set(userId, { docCount: 0, deletedDocCount: 0 });
+  if (!userIds.length) return stats;
+
+  const rows = await dbAll<{ createdBy: number | null; deletedAt: Date | null }>(db
+    .select({ createdBy: docs.createdBy, deletedAt: docs.deletedAt })
+    .from(docs)
+    .where(inArray(docs.createdBy, userIds)));
+
+  for (const row of rows) {
+    if (!row.createdBy) continue;
+    const current = stats.get(row.createdBy) ?? { docCount: 0, deletedDocCount: 0 };
+    current.docCount += 1;
+    if (row.deletedAt) current.deletedDocCount += 1;
+    stats.set(row.createdBy, current);
+  }
+
+  return stats;
+}
+
+async function recentUserActivityMap(userIds: number[]) {
+  const activity = new Map<number, { lastIp: string | null; lastActiveAt: Date | null; recentIps: string[] }>();
+  for (const userId of userIds) activity.set(userId, { lastIp: null, lastActiveAt: null, recentIps: [] });
+  if (!userIds.length) return activity;
+
+  const rows = await dbAll<{ userId: number | null; ip: string | null; createdAt: Date }>(db
+    .select({
+      userId: operationLogs.userId,
+      ip: operationLogs.ip,
+      createdAt: operationLogs.createdAt
+    })
+    .from(operationLogs)
+    .where(inArray(operationLogs.userId, userIds))
+    .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
+    .limit(1000));
+
+  for (const row of rows) {
+    if (!row.userId) continue;
+    const current = activity.get(row.userId) ?? { lastIp: null, lastActiveAt: null, recentIps: [] };
+    if (!current.lastActiveAt) current.lastActiveAt = row.createdAt;
+    if (row.ip && !current.recentIps.includes(row.ip) && current.recentIps.length < 8) current.recentIps.push(row.ip);
+    current.lastIp = current.recentIps[0] ?? null;
+    activity.set(row.userId, current);
+  }
+
+  return activity;
 }
 
 async function managedUserPayload(user: ManagedUser, includeDocs = false) {
@@ -232,7 +299,19 @@ export async function listManagedUsers() {
     })
     .from(users)
     .orderBy(desc(users.createdAt), desc(users.id)));
-  return await Promise.all(rows.map((user) => managedUserPayload(user)));
+  const userIds = rows.map((user) => user.id);
+  const [docStats, activity] = await Promise.all([userDocStatsMap(userIds), recentUserActivityMap(userIds)]);
+  return rows.map((user) => ({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    isSuperAdmin: isSuperAdminUser(user),
+    status: user.status,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    ...(docStats.get(user.id) ?? { docCount: 0, deletedDocCount: 0 }),
+    ...(activity.get(user.id) ?? { lastIp: null, lastActiveAt: null, recentIps: [] })
+  }));
 }
 
 export async function getManagedUser(id: number) {
@@ -283,14 +362,24 @@ export async function deleteManagedUser(id: number, actor: UserActor) {
 }
 
 export async function getSiteConfig(): Promise<SiteConfig> {
+  const values = await settingValues([
+    "site.brand_name",
+    "site.short_name",
+    "site.logo_url",
+    "site.auth_wallpaper_url",
+    "site.prefer_remote_logo",
+    "site.prefer_remote_wallpaper",
+    "site.copyright"
+  ]);
+
   return {
-    brandName: await settingValue("site.brand_name", "陈书 / ChensDoc"),
-    shortName: await settingValue("site.short_name", "陈书"),
-    logoUrl: await settingValue("site.logo_url", defaultRemoteLogoUrl),
-    authWallpaperUrl: await settingValue("site.auth_wallpaper_url", defaultRemoteWallpaperUrl),
-    preferRemoteLogo: await settingBooleanValue("site.prefer_remote_logo", false),
-    preferRemoteWallpaper: await settingBooleanValue("site.prefer_remote_wallpaper", false),
-    copyright: await settingValue("site.copyright", "Copyright © 2026 陈书. All rights reserved")
+    brandName: valueFromSettings(values, "site.brand_name", "陈书 / ChensDoc"),
+    shortName: valueFromSettings(values, "site.short_name", "陈书"),
+    logoUrl: valueFromSettings(values, "site.logo_url", defaultRemoteLogoUrl),
+    authWallpaperUrl: valueFromSettings(values, "site.auth_wallpaper_url", defaultRemoteWallpaperUrl),
+    preferRemoteLogo: booleanFromSettings(values, "site.prefer_remote_logo", false),
+    preferRemoteWallpaper: booleanFromSettings(values, "site.prefer_remote_wallpaper", false),
+    copyright: valueFromSettings(values, "site.copyright", "Copyright © 2026 陈书. All rights reserved")
   };
 }
 
@@ -307,14 +396,24 @@ export async function saveSiteConfig(input: unknown) {
 }
 
 export async function getR2Config(revealSecrets = true): Promise<R2Config> {
+  const values = await settingValues([
+    "r2.account_id",
+    "r2.access_key_id",
+    "r2.secret_access_key",
+    "r2.bucket",
+    "r2.public_url",
+    "r2.endpoint",
+    "r2.region"
+  ]);
+
   const config = {
-    accountId: await settingValue("r2.account_id", env.r2.accountId),
-    accessKeyId: await settingValue("r2.access_key_id", env.r2.accessKeyId),
-    secretAccessKey: await settingValue("r2.secret_access_key", env.r2.secretAccessKey),
-    bucket: await settingValue("r2.bucket", env.r2.bucket),
-    publicUrl: await settingValue("r2.public_url", env.r2.publicUrl),
-    endpoint: await settingValue("r2.endpoint", env.r2.endpoint),
-    region: await settingValue("r2.region", env.r2.region || "auto")
+    accountId: valueFromSettings(values, "r2.account_id", env.r2.accountId),
+    accessKeyId: valueFromSettings(values, "r2.access_key_id", env.r2.accessKeyId),
+    secretAccessKey: valueFromSettings(values, "r2.secret_access_key", env.r2.secretAccessKey),
+    bucket: valueFromSettings(values, "r2.bucket", env.r2.bucket),
+    publicUrl: valueFromSettings(values, "r2.public_url", env.r2.publicUrl),
+    endpoint: valueFromSettings(values, "r2.endpoint", env.r2.endpoint),
+    region: valueFromSettings(values, "r2.region", env.r2.region || "auto")
   };
 
   if (!revealSecrets) {

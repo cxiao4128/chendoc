@@ -1,5 +1,5 @@
 import { databaseProvider, mysqlPool, sqlite } from "./client.js";
-import { MYSQL_CREATE_TABLES } from "./mysql-ddl.js";
+import { MYSQL_CREATE_TABLES, MYSQL_INDEXES } from "./mysql-ddl.js";
 
 function migrateSqlite() {
   if (!sqlite) throw new Error("SQLite connection is not available.");
@@ -178,6 +178,21 @@ async function migrateMysql() {
   if (!mysqlPool) throw new Error("MySQL connection is not available.");
   for (const statement of MYSQL_CREATE_TABLES) {
     await mysqlPool.query(statement);
+  }
+
+  const [databaseRows] = await mysqlPool.query("SELECT DATABASE() AS databaseName");
+  const databaseName = (databaseRows as Array<{ databaseName: string }>)[0]?.databaseName;
+  if (!databaseName) throw new Error("Unable to resolve current MySQL database.");
+
+  for (const index of MYSQL_INDEXES) {
+    const [existingRows] = await mysqlPool.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?
+       LIMIT 1`,
+      [databaseName, index.table, index.name]
+    );
+    if ((existingRows as unknown[]).length) continue;
+    await mysqlPool.query(`CREATE INDEX \`${index.name}\` ON \`${index.table}\` (${index.columns})`);
   }
 }
 

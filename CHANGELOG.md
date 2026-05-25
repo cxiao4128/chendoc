@@ -4,6 +4,25 @@
 
 ## 中文
 
+### 1.2.3
+
+版本号：`1.2.3`
+
+展示版本：`v1.2.3`
+
+本次更新内容：
+
+- 登录页壁纸改为 small WebP 首屏占位，高清 WebP 提前 preload，避免慢半拍。
+- MySQL 作为生产唯一运行数据库，SQLite 仅保留历史迁移和测试说明。
+- 文档列表和回收站列表改为分页轻量查询，不再返回正文内容。
+- 优化 MySQL 连接池、站点设置读取、用户列表加载和常用索引，降低 2H4G 服务器压力。
+- 回收站新增批量恢复和批量永久删除，服务端按用户权限校验。
+- 新增 300ms 以上慢接口日志，便于定位卡顿接口。
+
+更新时间：2026-05-25 00:56:50 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
 ### 1.2.2
 
 版本号：`1.2.2`
@@ -67,6 +86,25 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 1.2.3
+
+Version: `1.2.3`
+
+Display version: `v1.2.3`
+
+Changes in this release:
+
+- Switched the login wallpaper to a small WebP first-paint placeholder and preloaded full WebP image.
+- Made MySQL the only production runtime database; SQLite remains only for historical migration and tests.
+- Paginated document and trash list queries and stopped returning body content from list APIs.
+- Tuned the MySQL pool, site settings reads, user list loading, and common indexes for 2C4G servers.
+- Added Trash batch restore and batch permanent delete with server-side permission checks.
+- Added lightweight slow-request logs for requests over 300ms.
+
+Updated at: 2026-05-25 00:56:50 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
 ### 1.2.2
 

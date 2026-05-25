@@ -4,7 +4,7 @@ import { RouterLink, useRouter } from "vue-router";
 import { Eye, EyeOff, KeyRound, LockKeyhole, UserRound } from "lucide-vue-next";
 import CaptchaInput from "../../components/auth/CaptchaInput.vue";
 import { getPublicSiteConfigApi } from "../../api/settings";
-import { bundledLogoUrl, bundledWallpaperUrl, withBundledSiteAssets } from "../../config/site-assets";
+import { bundledLogoUrl, bundledWallpaperUrl, preloadImageAsset, withBundledSiteAssets } from "../../config/site-assets";
 import "./register.css";
 
 const router = useRouter();
@@ -19,6 +19,7 @@ const showPassword = ref(false);
 const loading = ref(false);
 const error = ref("");
 const success = ref("");
+const wallpaperReady = ref(false);
 const site = reactive({
   brandName: "陈书",
   shortName: "陈书",
@@ -31,8 +32,32 @@ const site = reactive({
 
 const effectiveLogoUrl = computed(() => site.logoUrl || bundledLogoUrl);
 const effectiveWallpaperUrl = computed(() => site.authWallpaperUrl || bundledWallpaperUrl);
-const authStyle = computed(() => ({ "--auth-bg-url": `url("${effectiveWallpaperUrl.value}")` }));
+const isCustomWallpaper = computed(() => effectiveWallpaperUrl.value !== bundledWallpaperUrl);
+const authStyle = computed(() => isCustomWallpaper.value ? { "--auth-bg-url": `url("${effectiveWallpaperUrl.value}")` } : {});
 const brandTitle = computed(() => site.shortName?.trim() || "陈书");
+
+function applySiteConfig(config: Awaited<ReturnType<typeof getPublicSiteConfigApi>>["config"]) {
+  const next = withBundledSiteAssets(config);
+  const logoUrl = next.logoUrl || bundledLogoUrl;
+  const wallpaperUrl = next.authWallpaperUrl || bundledWallpaperUrl;
+
+  Object.assign(site, {
+    ...next,
+    logoUrl: site.logoUrl,
+    authWallpaperUrl: site.authWallpaperUrl
+  });
+
+  if (logoUrl !== site.logoUrl) {
+    void preloadImageAsset(logoUrl).then((ready) => {
+      if (ready) site.logoUrl = logoUrl;
+    });
+  }
+  if (wallpaperUrl !== site.authWallpaperUrl) {
+    void preloadImageAsset(wallpaperUrl).then((ready) => {
+      if (ready) site.authWallpaperUrl = wallpaperUrl;
+    });
+  }
+}
 
 function validate() {
   if (username.value.length < 6 || !/^[A-Za-z0-9_]+$/.test(username.value)) return "账号至少 6 位，只能包含字母、数字、下划线";
@@ -69,8 +94,12 @@ async function submit() {
 }
 
 onMounted(async () => {
+  void preloadImageAsset(bundledWallpaperUrl).then((ready) => {
+    wallpaperReady.value = ready;
+  });
+
   try {
-    Object.assign(site, withBundledSiteAssets((await getPublicSiteConfigApi()).config));
+    applySiteConfig((await getPublicSiteConfigApi()).config);
   } catch {
     // keep bundled defaults
   }
@@ -78,8 +107,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="register-page" :style="authStyle">
-    <img class="register-page__wallpaper" :src="effectiveWallpaperUrl" alt="" fetchpriority="high" decoding="async" />
+  <main class="register-page" :class="{ 'is-wallpaper-ready': wallpaperReady, 'is-custom-wallpaper': isCustomWallpaper }" :style="authStyle">
     <header class="auth-topbar">
       <RouterLink class="auth-brand" to="/login">
         <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" />

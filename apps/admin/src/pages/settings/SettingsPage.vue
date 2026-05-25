@@ -34,7 +34,7 @@ import "./settings.css";
 type ActivePanel = "logs" | "appearance" | "users" | null;
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v1.2.2";
+const APP_VERSION = "v1.2.3";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -48,8 +48,10 @@ const actionTextMap: Record<string, string> = {
   "doc.create": "新建文档",
   "doc.soft_delete": "移入回收站",
   "doc.bulk_soft_delete": "批量删除文档",
+  "doc.bulk_restore": "批量恢复文档",
   "doc.restore": "恢复文档",
   "doc.hard_delete": "永久删除文档",
+  "doc.bulk_hard_delete": "批量永久删除文档",
   "doc.publish": "发布文档",
   "doc.version.restore": "恢复历史版本",
   "invite.create": "创建注册卡密",

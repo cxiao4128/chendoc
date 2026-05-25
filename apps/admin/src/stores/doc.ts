@@ -42,6 +42,9 @@ export const useDocStore = defineStore("doc", () => {
   const current = ref<DocDetail | null>(null);
   const listLoading = ref(false);
   const detailLoading = ref(false);
+  const listPage = ref(1);
+  const listPageSize = ref(30);
+  const listHasMore = ref(false);
   const loadingList = listLoading;
   const loadingDetail = detailLoading;
   const listError = ref<string | null>(null);
@@ -49,12 +52,15 @@ export const useDocStore = defineStore("doc", () => {
   let currentController: AbortController | null = null;
   let requestSeq = 0;
 
-  async function loadList(q = "") {
+  async function loadList(q = "", options: { append?: boolean } = {}) {
+    const page = options.append ? listPage.value + 1 : 1;
     listLoading.value = true;
     listError.value = null;
     try {
-      const response = await listDocsApi({ q });
-      docs.value = response.docs;
+      const response = await listDocsApi({ q, page, pageSize: listPageSize.value });
+      docs.value = options.append ? [...docs.value, ...response.docs] : response.docs;
+      listPage.value = response.pagination?.page ?? page;
+      listHasMore.value = response.pagination?.hasMore ?? false;
       pruneDetailCache();
     } catch (error) {
       listError.value = getApiErrorMessage(error);
@@ -62,6 +68,11 @@ export const useDocStore = defineStore("doc", () => {
     } finally {
       listLoading.value = false;
     }
+  }
+
+  async function loadMore(q = "") {
+    if (!listHasMore.value || listLoading.value) return;
+    await loadList(q, { append: true });
   }
 
   async function createDoc(title = "未命名文档") {
@@ -143,11 +154,15 @@ export const useDocStore = defineStore("doc", () => {
     current,
     listLoading,
     detailLoading,
+    listPage,
+    listPageSize,
+    listHasMore,
     loadingList,
     loadingDetail,
     listError,
     detailError,
     loadList,
+    loadMore,
     loadDoc,
     createDoc,
     saveDoc,

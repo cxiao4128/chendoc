@@ -40,8 +40,13 @@ if (sqlite) {
 export const mysqlPool = databaseProvider === "mysql"
   ? mysql.createPool({
     uri: env.databaseUrl,
-    connectionLimit: 8,
+    connectionLimit: 5,
+    maxIdle: 5,
+    idleTimeout: 30000,
     waitForConnections: true,
+    queueLimit: 50,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
     charset: "utf8mb4"
   })
   : null;

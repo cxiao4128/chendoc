@@ -3,17 +3,19 @@
   min-height: 100dvh;
   overflow: hidden;
   background: #f7faff;
+  background-image: url("/site-assets/desktop-bg-small.webp");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   color: #172033;
 }
 
-.register-page__wallpaper {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
+.register-page.is-wallpaper-ready {
+  background-image: url("/site-assets/desktop-bg.webp");
+}
+
+.register-page.is-custom-wallpaper {
+  background-image: var(--auth-bg-url), url("/site-assets/desktop-bg.webp");
 }
 
 .register-page::before {
@@ -274,8 +276,8 @@
     overflow-y: auto;
   }
 
-  .register-page__wallpaper {
-    object-position: 58% center;
+  .register-page {
+    background-position: 58% center;
   }
 
   .register-page::before {
