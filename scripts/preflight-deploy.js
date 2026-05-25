@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -40,10 +40,6 @@ function readEnvFile(path) {
     if (env[match[1]] === undefined) env[match[1]] = value;
   }
   return env;
-}
-
-function resolveFromRoot(path) {
-  return isAbsolute(path) ? path : resolve(root, path);
 }
 
 function byteLength(value) {
@@ -126,17 +122,6 @@ async function checkPort(port, host) {
   });
 }
 
-function recentBackups(backupDir) {
-  if (!existsSync(backupDir)) return [];
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  return readdirSync(backupDir)
-    .map((name) => join(backupDir, name))
-    .filter((path) => {
-      if (!/\.(sqlite|sqlite3|db)$/i.test(path)) return false;
-      return statSync(path).mtimeMs >= cutoff;
-    });
-}
-
 const env = {
   ...readEnvFile(resolve(root, ".env")),
   ...readEnvFile(resolve(root, "server/.env")),
@@ -171,7 +156,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   }
 }
 
-const databaseProvider = String(env.DATABASE_PROVIDER || "sqlite").trim().toLowerCase();
+const databaseProvider = String(env.DATABASE_PROVIDER || "mysql").trim().toLowerCase();
 if (databaseProvider === "mysql") {
   if (!String(env.DATABASE_URL || "").startsWith("mysql://")) {
     fail("DATABASE_URL must be a mysql:// URL when DATABASE_PROVIDER=mysql.");
@@ -179,23 +164,7 @@ if (databaseProvider === "mysql") {
     note("MySQL database provider selected.");
   }
 } else {
-  const rawDatabasePath = String(env.DATABASE_URL || "./data/chendoc.sqlite").replace(/^file:/, "");
-  const databasePath = resolveFromRoot(rawDatabasePath);
-  if (existsSync(databasePath)) {
-    const backupDir = resolve(root, "data/backups");
-    const backups = recentBackups(backupDir);
-    note(`SQLite database found: ${databasePath}`);
-    if (existsSync(`${databasePath}-wal`)) {
-      warn("SQLite WAL sidecar detected. Do not back up by copying only the main .sqlite file.");
-    }
-    if (backups.length === 0) {
-      warn("No SQLite backup found in data/backups from the last 24 hours. Run: npm run db:backup");
-    } else {
-      note(`Recent SQLite backup found: ${backups[0]}`);
-    }
-  } else {
-    note(`SQLite database not found yet: ${databasePath}`);
-  }
+  fail("Production deployment requires DATABASE_PROVIDER=mysql. SQLite is only kept for historical migration/testing notes.");
 }
 
 console.log("ChenDoc deploy preflight");

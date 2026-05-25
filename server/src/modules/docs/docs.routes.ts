@@ -5,12 +5,14 @@ import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import {
   createDoc,
+  bulkHardDeleteTrashDocs,
+  bulkRestoreDocs,
   bulkSoftDeleteDocs,
   getDoc,
   hardDeleteDoc,
-  listDocs,
+  listDocsPage,
   listDocVersions,
-  listTrashDocs,
+  listTrashDocsPage,
   publishDoc,
   restoreDoc,
   restoreDocVersion,
@@ -20,13 +22,22 @@ import {
 
 export async function docsRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
+  const listQuerySchema = z.object({
+    q: z.string().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce.number().int().positive().max(50).default(30)
+  });
+  const trashBulkSchema = z.object({
+    ids: z.array(z.number().int().positive()).min(1).max(200)
+  });
+
   app.get("/api/docs", { preHandler: authenticate }, async (request) => {
-    const query = z.object({ q: z.string().optional() }).parse(request.query);
-    return { docs: await listDocs(request.user!, query.q) };
+    const query = listQuerySchema.parse(request.query);
+    return await listDocsPage(request.user!, query.q, query);
   });
   app.get("/api/docs/search", { preHandler: authenticate }, async (request) => {
-    const query = z.object({ q: z.string().optional() }).parse(request.query);
-    return { docs: await listDocs(request.user!, query.q) };
+    const query = listQuerySchema.parse(request.query);
+    return await listDocsPage(request.user!, query.q, query);
   });
   app.post("/api/docs", { preHandler: authenticate }, async (request) => {
     const doc = await createDoc(request.user!.id, request.body);
@@ -55,7 +66,70 @@ export async function docsRoutes(app: FastifyInstance) {
     }
     return { ok: true, deletedIds };
   });
-  app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async () => ({ docs: await listTrashDocs() }));
+  app.get("/api/docs/trash", { preHandler: authenticate }, async (request) => {
+    const query = listQuerySchema.parse(request.query);
+    return await listTrashDocsPage(request.user!, query);
+  });
+  app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async (request) => {
+    const query = listQuerySchema.parse(request.query);
+    return await listTrashDocsPage(request.user!, query);
+  });
+  app.post("/api/docs/trash/batch-restore", { preHandler: authenticate }, async (request) => {
+    const body = trashBulkSchema.parse(request.body);
+    const restoredIds = await bulkRestoreDocs(body.ids, request.user!.id, request.user!);
+    if (restoredIds.length) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "doc.bulk_restore",
+        targetType: "doc",
+        targetId: `count:${restoredIds.length}`,
+        ...auditMetaFromRequest(request)
+      });
+    }
+    return { success: true, restored: restoredIds.length, restoredIds };
+  });
+  app.post("/api/docs/trash/batch-delete", { preHandler: authenticate }, async (request) => {
+    const body = trashBulkSchema.parse(request.body);
+    const deletedIds = await bulkHardDeleteTrashDocs(body.ids, request.user!);
+    if (deletedIds.length) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "doc.bulk_hard_delete",
+        targetType: "doc",
+        targetId: `count:${deletedIds.length}`,
+        ...auditMetaFromRequest(request)
+      });
+    }
+    return { success: true, deleted: deletedIds.length, deletedIds };
+  });
+  app.post("/api/admin/docs/trash/bulk-restore", { preHandler: adminOnly }, async (request) => {
+    const body = trashBulkSchema.parse(request.body);
+    const restoredIds = await bulkRestoreDocs(body.ids, request.user!.id, request.user!);
+    if (restoredIds.length) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "doc.bulk_restore",
+        targetType: "doc",
+        targetId: `count:${restoredIds.length}`,
+        ...auditMetaFromRequest(request)
+      });
+    }
+    return { ok: true, restoredIds };
+  });
+  app.post("/api/admin/docs/trash/bulk-hard-delete", { preHandler: adminOnly }, async (request) => {
+    const body = trashBulkSchema.parse(request.body);
+    const deletedIds = await bulkHardDeleteTrashDocs(body.ids, request.user!);
+    if (deletedIds.length) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "doc.bulk_hard_delete",
+        targetType: "doc",
+        targetId: `count:${deletedIds.length}`,
+        ...auditMetaFromRequest(request)
+      });
+    }
+    return { ok: true, deletedIds };
+  });
   app.get("/api/docs/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     return { doc: await getDoc(params.id, request.user!) };
@@ -78,7 +152,7 @@ export async function docsRoutes(app: FastifyInstance) {
   });
   app.post("/api/admin/docs/:id/restore", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const doc = await restoreDoc(params.id, request.user!.id);
+    const doc = await restoreDoc(params.id, request.user!.id, request.user!);
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.restore",
@@ -90,7 +164,7 @@ export async function docsRoutes(app: FastifyInstance) {
   });
   app.delete("/api/admin/docs/:id/hard", { preHandler: adminOnly }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    await hardDeleteDoc(params.id);
+    await hardDeleteDoc(params.id, request.user!);
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.hard_delete",

@@ -113,9 +113,24 @@ function optionalInt(name: string, fallback: number): number {
 }
 
 function databaseProvider(): "sqlite" | "mysql" {
-  const raw = (process.env.DATABASE_PROVIDER ?? "sqlite").trim().toLowerCase();
-  if (raw === "sqlite" || raw === "mysql") return raw;
+  const nodeEnv = process.env.NODE_ENV ?? "development";
+  const raw = (process.env.DATABASE_PROVIDER ?? (nodeEnv === "test" ? "sqlite" : "mysql")).trim().toLowerCase();
+  if (raw === "mysql") return raw;
+  if (raw === "sqlite" && nodeEnv === "test") return raw;
+  if (raw === "sqlite") {
+    throw new Error("SQLite is kept only for tests and historical migration scripts. Set DATABASE_PROVIDER=mysql for runtime.");
+  }
   throw new Error("DATABASE_PROVIDER must be sqlite or mysql.");
+}
+
+function databaseUrl(provider: "sqlite" | "mysql") {
+  const value = process.env.DATABASE_URL?.trim();
+  if (provider === "mysql") {
+    if (!value) throw new Error("DATABASE_URL is required and must be a mysql:// URL.");
+    if (!/^mysql:\/\//i.test(value)) throw new Error("DATABASE_URL must be a mysql:// URL when DATABASE_PROVIDER=mysql.");
+    return value;
+  }
+  return value || "./data/chendoc.sqlite";
 }
 
 const defaultAdminUsername = process.env.DEFAULT_ADMIN_USERNAME ?? "xchen";
@@ -131,7 +146,7 @@ export const env = {
   port: optionalInt("PORT", 8985),
   publicSiteUrl: process.env.PUBLIC_SITE_URL ?? `http://127.0.0.1:${process.env.PORT ?? 8985}`,
   databaseProvider: provider,
-  databaseUrl: process.env.DATABASE_URL ?? "./data/chendoc.sqlite",
+  databaseUrl: databaseUrl(provider),
   jwtSecret: requiredSecret("JWT_SECRET", 32),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "2h",
   configEncryptionKey: requiredSecret("CONFIG_ENCRYPTION_KEY", 32),

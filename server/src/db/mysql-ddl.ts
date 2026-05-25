@@ -187,3 +187,17 @@ export const MYSQL_CREATE_TABLES = [
     KEY operation_logs_user_idx (user_id)
   ) ${tableOptions}`
 ] as const;
+
+export const MYSQL_INDEXES = [
+  { table: "docs", name: "docs_created_by_idx", columns: "`created_by`" },
+  { table: "docs", name: "docs_status_idx", columns: "`status`" },
+  { table: "docs", name: "docs_list_admin_idx", columns: "`deleted_at`, `pinned`, `updated_at`" },
+  { table: "docs", name: "docs_list_user_idx", columns: "`created_by`, `deleted_at`, `pinned`, `updated_at`" },
+  { table: "docs", name: "docs_trash_idx", columns: "`deleted_at`, `updated_at`" },
+  { table: "users", name: "users_role_idx", columns: "`role`" },
+  { table: "users", name: "users_status_idx", columns: "`status`" },
+  { table: "shares", name: "shares_review_idx", columns: "`review_status`, `created_at`" },
+  { table: "shares", name: "shares_doc_review_idx", columns: "`doc_id`, `review_status`" },
+  { table: "operation_logs", name: "operation_logs_created_idx", columns: "`created_at`" },
+  { table: "operation_logs", name: "operation_logs_user_created_idx", columns: "`user_id`, `created_at`" }
+] as const;

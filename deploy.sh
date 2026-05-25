@@ -17,6 +17,7 @@ fi
 
 echo "Node: $(node -v)"
 echo "NPM: $(npm -v)"
+echo "Database: MySQL runtime required (set DATABASE_PROVIDER=mysql in .env)"
 
 node -e "const major=Number(process.versions.node.split('.')[0]); if (major < 20) { console.error('Node.js 20+ is required.'); process.exit(1); }"
 node scripts/preflight-deploy.js

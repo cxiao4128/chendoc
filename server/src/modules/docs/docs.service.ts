@@ -1,14 +1,17 @@
 import { and, desc, eq, inArray, isNotNull, isNull, like, or } from "drizzle-orm";
 import { z } from "zod";
 import { castAsText, db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { docs, docVersions, shares, uploads } from "../../db/schema.js";
+import { docs, docVersions, shares, uploads, users } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
 import { sanitizeDocumentHtml } from "../../utils/sanitize.js";
 
 type Actor = { id: number; role: "admin" | "user" };
+type PageOptions = { page?: number; pageSize?: number };
 const VERSION_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_DOC_VERSIONS = 50;
+const DEFAULT_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 50;
 
 const docCreateSchema = z.object({
   title: z.string().trim().min(1).max(160),
@@ -47,6 +50,33 @@ function normalizeDocStatus(status: "draft" | "published" | "archived") {
 
 function normalizeDocRecord<T extends { status: "draft" | "published" | "archived" }>(doc: T): T {
   return { ...doc, status: normalizeDocStatus(doc.status) };
+}
+
+function uniquePositiveIds(ids: number[]) {
+  return Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
+}
+
+function normalizePageOptions(options?: PageOptions) {
+  const page = Math.max(1, Math.floor(Number(options?.page) || 1));
+  const rawPageSize = Math.floor(Number(options?.pageSize) || DEFAULT_PAGE_SIZE);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, rawPageSize));
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize
+  };
+}
+
+function pagedResult<T>(rows: T[], options: ReturnType<typeof normalizePageOptions>) {
+  const hasMore = rows.length > options.pageSize;
+  return {
+    docs: rows.slice(0, options.pageSize),
+    pagination: {
+      page: options.page,
+      pageSize: options.pageSize,
+      hasMore
+    }
+  };
 }
 
 function safeShareRecord(share: typeof shares.$inferSelect | undefined | null) {
@@ -123,6 +153,7 @@ function listSelect() {
     pinned: docs.pinned,
     sort: docs.sort,
     createdBy: docs.createdBy,
+    ownerUsername: users.username,
     updatedAt: docs.updatedAt,
     createdAt: docs.createdAt,
     deletedAt: docs.deletedAt,
@@ -144,6 +175,10 @@ function assertCanAccessDoc(actor: Actor | undefined, doc: { createdBy: number |
 }
 
 export async function listDocs(actor: Actor, query?: unknown) {
+  return await queryDocs(actor, query);
+}
+
+async function queryDocs(actor: Actor, query?: unknown, options?: ReturnType<typeof normalizePageOptions>) {
   await normalizeLegacyDraftStatuses();
   const q = normalizeSearch(query);
   const pattern = `%${q}%`;
@@ -154,7 +189,6 @@ export async function listDocs(actor: Actor, query?: unknown) {
       or(
         like(docs.title, pattern),
         like(docs.summary, pattern),
-        like(docs.contentHtml, pattern),
         like(castAsText(shares.shareCode), pattern),
         like(shares.customSlug, pattern)
       )
@@ -165,20 +199,43 @@ export async function listDocs(actor: Actor, query?: unknown) {
     .select(listSelect())
     .from(docs)
     .leftJoin(shares, eq(docs.id, shares.docId))
+    .leftJoin(users, eq(docs.createdBy, users.id))
     .where(where)
-    .orderBy(desc(docs.pinned), desc(docs.updatedAt))))
+    .orderBy(desc(docs.pinned), desc(docs.updatedAt))
+    .limit(options ? options.pageSize + 1 : 100000)
+    .offset(options?.offset ?? 0)))
     .map((doc: any) => normalizeDocRecord(doc));
 }
 
-export async function listTrashDocs() {
+export async function listDocsPage(actor: Actor, query?: unknown, pageOptions?: PageOptions) {
+  const options = normalizePageOptions(pageOptions);
+  return pagedResult(await queryDocs(actor, query, options), options);
+}
+
+export async function listTrashDocs(actor?: Actor) {
+  return await queryTrashDocs(actor);
+}
+
+async function queryTrashDocs(actor?: Actor, options?: ReturnType<typeof normalizePageOptions>) {
   await normalizeLegacyDraftStatuses();
+  const accessWhere = actor?.role === "user"
+    ? and(isNotNull(docs.deletedAt), eq(docs.createdBy, actor.id))
+    : isNotNull(docs.deletedAt);
   return (await dbAll(db
     .select(listSelect())
     .from(docs)
     .leftJoin(shares, eq(docs.id, shares.docId))
-    .where(isNotNull(docs.deletedAt))
-    .orderBy(desc(docs.deletedAt))))
+    .leftJoin(users, eq(docs.createdBy, users.id))
+    .where(accessWhere)
+    .orderBy(desc(docs.deletedAt))
+    .limit(options ? options.pageSize + 1 : 100000)
+    .offset(options?.offset ?? 0)))
     .map((doc: any) => normalizeDocRecord(doc));
+}
+
+export async function listTrashDocsPage(actor?: Actor, pageOptions?: PageOptions) {
+  const options = normalizePageOptions(pageOptions);
+  return pagedResult(await queryTrashDocs(actor, options), options);
 }
 
 export async function createDoc(userId: number, input: unknown) {
@@ -268,7 +325,7 @@ export async function softDeleteDoc(id: number, userId: number, actor?: Actor) {
 }
 
 export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) {
-  const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
+  const uniqueIds = uniquePositiveIds(ids);
   const deletedIds: number[] = [];
   const deletedAt = now();
 
@@ -289,20 +346,69 @@ export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: A
   return deletedIds;
 }
 
-export async function restoreDoc(id: number, userId: number) {
+export async function restoreDoc(id: number, userId: number, actor?: Actor) {
+  const existing = await dbGet<{ id: number; createdBy: number | null }>(db
+    .select({ id: docs.id, createdBy: docs.createdBy })
+    .from(docs)
+    .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
+    .limit(1));
+  if (!existing) throw new Error("文档不存在");
+  assertCanAccessDoc(actor, existing);
   await dbRun(db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
-  return await getDoc(id);
+  return await getDoc(id, actor);
 }
 
-export async function hardDeleteDoc(id: number) {
-  const existing = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.id, id)).limit(1));
+export async function bulkRestoreDocs(ids: number[], userId: number, actor?: Actor) {
+  const uniqueIds = uniquePositiveIds(ids);
+  if (!uniqueIds.length) return [];
+
+  const rows = await dbAll<{ id: number; createdBy: number | null }>(db
+    .select({ id: docs.id, createdBy: docs.createdBy })
+    .from(docs)
+    .where(and(inArray(docs.id, uniqueIds), isNotNull(docs.deletedAt))));
+  const restoredIds = rows.filter((row) => canAccessDoc(actor, row)).map((row) => row.id);
+  if (!restoredIds.length) return [];
+
+  const updatedAt = now();
+  await dbRun(db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt }).where(inArray(docs.id, restoredIds)));
+  return restoredIds;
+}
+
+export async function hardDeleteDoc(id: number, actor?: Actor) {
+  const existing = await dbGet<{ id: number; createdBy: number | null }>(db
+    .select({ id: docs.id, createdBy: docs.createdBy })
+    .from(docs)
+    .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
+    .limit(1));
   if (!existing) throw new Error("文档不存在");
+  assertCanAccessDoc(actor, existing);
   await dbTransaction(async (tx) => {
     await dbRun(tx.delete(shares).where(eq(shares.docId, id)));
     await dbRun(tx.delete(docVersions).where(eq(docVersions.docId, id)));
     await dbRun(tx.update(uploads).set({ docId: null }).where(eq(uploads.docId, id)));
     await dbRun(tx.delete(docs).where(eq(docs.id, id)));
   });
+}
+
+export async function bulkHardDeleteTrashDocs(ids: number[], actor?: Actor) {
+  const uniqueIds = uniquePositiveIds(ids);
+  if (!uniqueIds.length) return [];
+
+  const rows = await dbAll<{ id: number; createdBy: number | null }>(db
+    .select({ id: docs.id, createdBy: docs.createdBy })
+    .from(docs)
+    .where(and(inArray(docs.id, uniqueIds), isNotNull(docs.deletedAt))));
+  const deletedIds = rows.filter((row) => canAccessDoc(actor, row)).map((row) => row.id);
+  if (!deletedIds.length) return [];
+
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.delete(shares).where(inArray(shares.docId, deletedIds)));
+    await dbRun(tx.delete(docVersions).where(inArray(docVersions.docId, deletedIds)));
+    await dbRun(tx.update(uploads).set({ docId: null }).where(inArray(uploads.docId, deletedIds)));
+    await dbRun(tx.delete(docs).where(inArray(docs.id, deletedIds)));
+  });
+
+  return deletedIds;
 }
 
 export async function publishDoc(id: number, userId: number) {
