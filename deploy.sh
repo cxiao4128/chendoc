@@ -29,10 +29,13 @@ else
 fi
 
 npm run build
-npm run db:migrate
+
+echo "Skip database migration. Run npm run db:migrate manually only when you need schema changes."
 
 if [ "${CHENDOC_INIT_ADMIN:-0}" = "1" ]; then
+  echo "Initializing admin account..."
   npm run admin:init
+  echo "Admin initialization finished."
 else
   echo "Skip admin init. Set CHENDOC_INIT_ADMIN=1 for the first deployment."
 fi

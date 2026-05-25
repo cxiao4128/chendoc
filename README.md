@@ -1,12 +1,30 @@
 # ChenDoc / Chen Shu
 
-当前版本 / Current version: `v1.2.3`
+当前版本 / Current version: `v1.2.4`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
 ## 更新日志 / Changelog
 
 ### 中文更新
+
+版本号：`1.2.4`
+
+展示版本：`v1.2.4`
+
+本次更新内容：
+
+- `bash ./deploy.sh` 不再自动执行 `npm run db:migrate`，已迁移好的服务器部署时只构建并重启服务。
+- 数据库迁移保留为手动命令，需要建表或更新表结构时再单独执行 `npm run db:migrate`。
+- MySQL 连接新增 10 秒连接超时，数据库地址或端口不通时会更快失败。
+- 部署脚本会明确输出跳过数据库迁移和管理员初始化的状态。
+- 部署预检会明确拦截根目录 `.env` 中遗留的 SQLite `DATABASE_URL`，提示改为 MySQL 连接串。
+
+更新时间：2026-05-25 21:06:20 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+#### 早期更新
 
 版本号：`1.2.3`
 
@@ -24,8 +42,6 @@
 更新时间：2026-05-25 00:56:50 +08:00
 
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
-
-#### 早期更新
 
 版本号：`1.2.2`
 
@@ -70,6 +86,24 @@
 
 ### English Changelog
 
+Version: `1.2.4`
+
+Display version: `v1.2.4`
+
+Changes in this release:
+
+- `bash ./deploy.sh` no longer runs `npm run db:migrate` automatically; already-migrated servers only build and restart during deployment.
+- Database migration remains available as a manual command when tables need to be created or updated.
+- Added a 10-second MySQL connection timeout so unreachable database hosts or ports fail faster.
+- Deployment now prints explicit status for skipped database migration and admin initialization.
+- Deploy preflight now clearly blocks legacy SQLite `DATABASE_URL` values in the root `.env` and asks for a MySQL URL.
+
+Updated at: 2026-05-25 21:06:20 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+#### Earlier Updates
+
 Version: `1.2.3`
 
 Display version: `v1.2.3`
@@ -86,8 +120,6 @@ Changes in this release:
 Updated at: 2026-05-25 00:56:50 +08:00
 
 Documentation: [https://d.w92.pw/](https://d.w92.pw/)
-
-#### Earlier Updates
 
 Version: `1.2.2`
 
@@ -225,7 +257,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 从 GitHub Release 下载部署压缩包后，在部署目录内解压并执行：
 
 ```bash
-unzip -o chendoc-1.2.3-*.zip
+unzip -o chendoc-1.2.4-*.zip
 cp .env.example .env
 # 编辑 .env，填写生产环境配置
 bash ./deploy.sh
@@ -237,7 +269,7 @@ bash ./deploy.sh
 CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
 ```
 
-部署脚本会检查环境、安装依赖、构建前后端、执行数据库迁移，并通过 PM2 启动服务。
+部署脚本会检查环境、安装依赖、构建前后端，并通过 PM2 启动服务。数据库迁移不再自动执行；需要建表或更新表结构时，请单独运行 `npm run db:migrate`。
 
 反向代理目标：
 
@@ -386,7 +418,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 Download the deployment archive from GitHub Releases, extract it inside your deployment directory, and run:
 
 ```bash
-unzip -o chendoc-1.2.3-*.zip
+unzip -o chendoc-1.2.4-*.zip
 cp .env.example .env
 # Edit .env for production settings.
 bash ./deploy.sh
@@ -398,7 +430,7 @@ For the first deployment with admin initialization:
 CHENDOC_INIT_ADMIN=1 bash ./deploy.sh
 ```
 
-The deployment script checks the environment, installs dependencies, builds the frontend and backend, runs database migrations, and starts the service through PM2.
+The deployment script checks the environment, installs dependencies, builds the frontend and backend, and starts the service through PM2. Database migrations no longer run automatically; run `npm run db:migrate` manually only when tables need to be created or updated.
 
 Reverse proxy target:
 

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import "../db/migrate.js";
-import { db, dbGet, dbRun } from "../db/client.js";
+import { closeDatabase, db, dbGet, dbRun } from "../db/client.js";
+import { migrate } from "../db/migrate.js";
 import { docs, shares, spaces, users } from "../db/schema.js";
 import { env } from "../config/env.js";
 import { now } from "../utils/date.js";
@@ -12,6 +12,8 @@ function flagEnabled(name: string): boolean {
 }
 
 async function main() {
+  await migrate();
+
   if (!env.defaultAdminPassword) {
     throw new Error("DEFAULT_ADMIN_PASSWORD is required for admin initialization.");
   }
@@ -103,7 +105,11 @@ async function main() {
   console.log(`Admin initialized: ${env.defaultAdminUsername}`);
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error(error instanceof Error ? error.message : "Admin init failed.");
-  process.exit(1);
-});
+  process.exitCode = 1;
+} finally {
+  await closeDatabase();
+}

@@ -40,6 +40,7 @@ if (sqlite) {
 export const mysqlPool = databaseProvider === "mysql"
   ? mysql.createPool({
     uri: env.databaseUrl,
+    connectTimeout: 10000,
     connectionLimit: 5,
     maxIdle: 5,
     idleTimeout: 30000,
@@ -106,4 +107,13 @@ export function castAsText(value: unknown) {
   return databaseProvider === "mysql"
     ? sql<string>`CAST(${value} AS CHAR)`
     : sql<string>`CAST(${value} AS TEXT)`;
+}
+
+export async function closeDatabase() {
+  if (mysqlPool) {
+    await mysqlPool.end();
+  }
+  if (sqlite?.open) {
+    sqlite.close();
+  }
 }
