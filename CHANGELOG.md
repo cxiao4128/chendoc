@@ -4,6 +4,51 @@
 
 ## 中文
 
+### 2.0.0
+
+版本号：`2.0.0`
+
+展示版本：`v2.0.0`
+
+本次更新内容：
+
+- 新增 Gateway Packet Layer，生产 API 统一通过 `/api/gateway` 进入后端。
+- 生产请求体外层统一收敛为 `{ "data": "..." }`，不再在根层暴露 `key`、`keyId`、`payload`、`challenge` 或业务字段。
+- 请求 packet 内部保留 `v`、`key`、`keyId`、`iv`、`challenge`、`timestamp`、`nonce` 和加密后的业务 body。
+- 全局 gateway middleware 统一完成 packet decode、RSA-OAEP 解密 AES key、AES-GCM 解密 body，并把解包后的业务 body 注入到 `request.body`。
+- controller 不再直接处理业务请求 decrypt，登录、注册、当前用户、改密等认证逻辑统一消费解包后的请求体。
+- 生产响应统一封包为 `{ "data": "..." }`，响应 packet 内包含 `code`、`message`、`data`、`timestamp` 和 `requestId`。
+- 新增 nonce/timestamp 防重放，timestamp 允许 300 秒偏移，nonce 内存 TTL 为 5 分钟，重复 nonce 返回 `INVALID_NONCE`。
+- challenge layer 改为服务端内存维护，前端只保留内存缓存，不写入 localStorage，challenge 进入 packet 内部。
+- 前端新增统一 gateway client，统一处理生产 API 的封包、发送、重试入口和响应解包。
+- 保持 MySQL、R2 上传、分享页、回收站、用户权限和部署命令不变，继续适配 2H4G 宝塔服务器。
+
+更新时间：2026-05-27 20:02:11 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+### 1.3.0
+
+版本号：`1.3.0`
+
+展示版本：`v1.3.0`
+
+本次更新内容：
+
+- 优化登录页首屏加载，关键样式随 HTML 提前加载，减少裸样式闪烁。
+- 优化登录页壁纸与 Logo 预加载，先显示 small 图，再无感切换高清图。
+- 修复公开分享页品牌 Logo 显示，未配置时使用本地默认 Logo。
+- 移除公开分享页多余的“公开分享”标识，头部只保留 Logo 和站点名。
+- 优化禁用、注销用户的登录反馈，失败状态会明确提示。
+- 优化登录成功反馈和角色跳转，管理员进入 `/admin/docs`，普通用户进入 `/users/docs`。
+- 统一生产请求加密结构，业务请求体外层只保留 `data`。
+- 移除系统设置页重复的回收站入口，左侧导航栏回收站继续保留。
+- 保持 MySQL 运行模式和轻量查询策略，继续适配 2H4G 宝塔服务器。
+
+更新时间：2026-05-27 19:30:33 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
 ### 1.2.4
 
 版本号：`1.2.4`
@@ -104,6 +149,51 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 2.0.0
+
+Version: `2.0.0`
+
+Display version: `v2.0.0`
+
+Changes in this release:
+
+- Added the Gateway Packet Layer and routed production API traffic through `/api/gateway`.
+- Reduced production request bodies to `{ "data": "..." }`; `key`, `keyId`, `payload`, `challenge`, and business fields are no longer exposed at the root.
+- Packet internals now carry `v`, `key`, `keyId`, `iv`, `challenge`, `timestamp`, `nonce`, and the encrypted business body.
+- Added global gateway middleware for packet decode, RSA-OAEP AES key decrypt, AES-GCM body decrypt, and `request.body` injection.
+- Removed direct business request decrypt handling from controllers.
+- Packetized production responses as `{ "data": "..." }` with `code`, `message`, `data`, `timestamp`, and `requestId` inside the response packet.
+- Added nonce/timestamp replay protection with a 300-second timestamp window and a 5-minute in-memory nonce TTL. Replays return `INVALID_NONCE`.
+- Moved challenge usage inside the packet and kept challenge state in memory instead of localStorage.
+- Added a unified admin gateway client for production API packing, transport, retry entry, and response unpacking.
+- Kept MySQL, R2 uploads, public share pages, recycle bin flows, permissions, and `bash ./deploy.sh` deployment unchanged.
+
+Updated at: 2026-05-27 20:02:11 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+### 1.3.0
+
+Version: `1.3.0`
+
+Display version: `v1.3.0`
+
+Changes in this release:
+
+- Optimized the login first paint by loading critical login styles from the HTML entry.
+- Optimized wallpaper and Logo preloading with a small placeholder image before the full wallpaper swap.
+- Fixed the public share header to use the site Logo with a bundled fallback.
+- Removed the extra “公开分享” marker from the public share page header.
+- Improved login feedback for disabled and deleted users.
+- Added immediate success feedback and faster role-based redirects after sign-in.
+- Unified production request encryption so encrypted business requests expose only `data` at the body root.
+- Removed the duplicate Trash card from System Settings while keeping the sidebar Trash entry.
+- Kept the MySQL runtime path and lightweight query strategy for 2C4G BT Panel servers.
+
+Updated at: 2026-05-27 19:30:33 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
 ### 1.2.4
 

@@ -58,14 +58,12 @@ function manualChunks(id: string) {
   if (normalized.endsWith("/src/api/auth.ts")) return chunkNames.auth;
   if (normalized.endsWith("/src/api/docs.ts") || normalized.endsWith("/src/stores/doc.ts")) return chunkNames.docCore;
 
-  if (
-    normalized.endsWith("/src/security/cryptoClient.ts")
-  ) return chunkNames.crypto;
+  if (normalized.includes("/src/gateway/")) return chunkNames.request;
+  if (normalized.endsWith("/src/security/cryptoClient.ts")) return chunkNames.crypto;
   if (normalized.endsWith("/src/security/sessionToken.ts") || normalized.endsWith("/src/stores/auth.ts")) return chunkNames.session;
   if (
     normalized.endsWith("/src/api/request.ts")
     || normalized.endsWith("/src/api/endpoints.ts")
-    || normalized.endsWith("/src/security/responseCrypto.ts")
     || normalized.endsWith("/src/security/runtimeGuard.ts")
   ) return chunkNames.request;
 

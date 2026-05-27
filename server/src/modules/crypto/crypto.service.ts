@@ -1,45 +1,13 @@
-import { createCipheriv, createDecipheriv, createHash, createPublicKey, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, randomUUID } from "node:crypto";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { db, dbGet, dbRun } from "../../db/client.js";
 import { cryptoKeys } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { daysFromNow, now } from "../../utils/date.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
-import { decryptRsaOaepBase64, encryptRsaOaepBase64 } from "../../utils/rsa.js";
+import { decryptRsaOaepBase64 } from "../../utils/rsa.js";
 
 const minimumRsaModulusLength = 4096;
-
-export interface HybridEncryptedPayload {
-  keyId: string;
-  key: string;
-  payload: string;
-}
-
-function deriveIv(key: Buffer, label: string) {
-  return createHash("sha256").update("chendoc-aes-iv-v1").update(label).update(key).digest().subarray(0, 12);
-}
-
-function encryptAesGcm(key: Buffer, label: string, value: string) {
-  const cipher = createCipheriv("aes-256-gcm", key, deriveIv(key, label));
-  return Buffer.concat([
-    cipher.update(value, "utf8"),
-    cipher.final(),
-    cipher.getAuthTag()
-  ]).toString("base64");
-}
-
-function decryptAesGcm(key: Buffer, label: string, payload: string) {
-  const raw = Buffer.from(payload, "base64");
-  if (raw.length <= 16) {
-    throw new Error("Invalid encrypted payload.");
-  }
-
-  const ciphertext = raw.subarray(0, -16);
-  const tag = raw.subarray(-16);
-  const decipher = createDecipheriv("aes-256-gcm", key, deriveIv(key, label));
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-}
 
 function rsaModulusLength(publicKeyPem: string) {
   try {
@@ -101,27 +69,4 @@ export async function decryptSubmittedValue(keyId: string, encryptedValue: strin
 
   const privateKey = decryptValue(record.privateKeyEncrypted, env.rsaPrivateKeyEncryptionKey);
   return decryptRsaOaepBase64(privateKey, encryptedValue);
-}
-
-export async function decryptSubmittedPayload(input: HybridEncryptedPayload) {
-  const aesKeyBase64 = await decryptSubmittedValue(input.keyId, input.key);
-  const aesKey = Buffer.from(aesKeyBase64, "base64");
-  if (aesKey.length !== 32) {
-    throw new Error("Invalid encrypted payload key.");
-  }
-  return decryptAesGcm(aesKey, "request", input.payload);
-}
-
-export function decryptSubmittedPassword(keyId: string, encryptedPassword: string) {
-  return decryptSubmittedValue(keyId, encryptedPassword);
-}
-
-export function encryptResponse(publicKey: string, payload: unknown) {
-  const key = randomBytes(32);
-  const envelope = {
-    alg: "RSA-OAEP-256+A256GCM",
-    key: encryptRsaOaepBase64(publicKey, key.toString("base64")),
-    data: encryptAesGcm(key, "response", JSON.stringify(payload))
-  };
-  return { encryptedData: Buffer.from(JSON.stringify(envelope), "utf8").toString("base64") };
 }

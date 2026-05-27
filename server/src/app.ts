@@ -7,6 +7,8 @@ import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { env } from "./config/env.js";
+import { packGatewayReply, unpackGatewayRequest } from "./gateway/middleware.js";
+import { gatewayRoutes } from "./gateway/routes.js";
 import { registerErrorHandler } from "./middleware/error.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { captchaRoutes } from "./modules/captcha/captcha.routes.js";
@@ -24,12 +26,31 @@ export async function buildApp() {
   const app = Fastify({
     logger: {
       level: env.nodeEnv === "production" ? "info" : "debug",
-      redact: ["req.headers.authorization", "*.password", "*.payload", "*.encryptedData", "*.encryptedPassword", "*.secretAccessKey", "*.accessKeyId"]
+      redact: [
+        "req.headers.authorization",
+        "*.password",
+        "*.payload",
+        "*.encryptedData",
+        "*.encryptedPassword",
+        "*.secretAccessKey",
+        "*.accessKeyId",
+        "*.sessionKey",
+        "*.token",
+        "*.key",
+        "*.keyId",
+        "*.data",
+        "*.p",
+        "*.iv",
+        "*.body",
+        "*.challenge"
+      ]
     },
     trustProxy: true
   });
 
   registerErrorHandler(app);
+  app.addHook("preValidation", unpackGatewayRequest);
+  app.addHook("onSend", packGatewayReply);
 
   await app.register(fastifyHelmet, {
     frameguard: { action: "sameorigin" },
@@ -57,17 +78,17 @@ export async function buildApp() {
     requestStartedAt.set(request, performance.now());
   });
 
-  app.addHook("onResponse", async (request) => {
+  app.addHook("onResponse", async (request, reply) => {
     const startedAt = requestStartedAt.get(request);
     if (!startedAt) return;
     const durationMs = Math.round(performance.now() - startedAt);
     if (durationMs <= 300) return;
     const pathName = request.url.split("?")[0] || request.url;
     app.log.warn({
-      method: request.method,
+      requestId: request.id,
       path: pathName,
-      durationMs,
-      queryName: request.routeOptions.url ?? pathName
+      status: reply.statusCode,
+      durationMs
     }, "slow request");
   });
 
@@ -79,6 +100,7 @@ export async function buildApp() {
   await app.register(publicRoutes);
   await app.register(cryptoRoutes);
   await app.register(captchaRoutes);
+  await app.register(gatewayRoutes);
   await app.register(authRoutes);
   await app.register(invitesRoutes);
   await app.register(spacesRoutes);
@@ -97,7 +119,7 @@ export async function buildApp() {
       index: false,
       wildcard: false,
       setHeaders: (res, pathName) => {
-        if (/\.(?:avif|gif|jpe?g|png|svg|webp|woff2?)$/i.test(pathName)) {
+        if (/\.(?:avif|css|gif|jpe?g|js|png|svg|webp|woff2?)$/i.test(pathName)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         }
       }

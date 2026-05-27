@@ -12,9 +12,9 @@ import {
 } from "../../config/site-assets";
 import { allowedPostLoginPath } from "../../router/access";
 import { useAuthStore } from "../../stores/auth";
-import "./login.css";
 
 const adminCaptchaBypassUsername = "xchen";
+const loginNoticeKey = "chendoc_login_notice";
 
 const route = useRoute();
 const router = useRouter();
@@ -29,6 +29,7 @@ const remember = ref(true);
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref("");
+const successMessage = ref("");
 const usernameIntent = ref(false);
 const wallpaperReady = ref(false);
 const site = reactive({
@@ -82,6 +83,28 @@ function scrubAutofilledAdminUsername() {
   }
 }
 
+function firstQueryValue(value: unknown) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function takeLoginNotice() {
+  const queryMessage = firstQueryValue(route.query.message);
+  const storedMessage = typeof window === "undefined" ? "" : window.sessionStorage.getItem(loginNoticeKey) || "";
+  if (storedMessage && typeof window !== "undefined") window.sessionStorage.removeItem(loginNoticeKey);
+  const message = typeof queryMessage === "string" && queryMessage ? queryMessage : storedMessage;
+  if (message) error.value = message;
+}
+
+function loginErrorMessage(err: unknown) {
+  if (err && typeof err === "object" && "code" in err) {
+    const code = String((err as { code?: unknown }).code || "");
+    if (code === "USER_DISABLED") return "你已被管理员禁止登录";
+    if (code === "USER_NOT_FOUND" || code === "USER_DELETED") return "账号不存在或已被注销";
+    if (code === "INVALID_CREDENTIALS") return "登录失败，请检查账号、密码或验证码";
+  }
+  return err instanceof Error ? err.message : "登录失败，请检查账号或密码";
+}
+
 watch(shouldHideCaptcha, (value) => {
   if (value) {
     captchaCode.value = "";
@@ -92,6 +115,7 @@ watch(shouldHideCaptcha, (value) => {
 async function submit() {
   loading.value = true;
   error.value = "";
+  successMessage.value = "";
   const captcha = !shouldHideCaptcha.value && captchaId.value && captchaCode.value
     ? { captchaId: captchaId.value, captchaCode: captchaCode.value }
     : {};
@@ -100,12 +124,14 @@ async function submit() {
     const response = await submitCredential({
       username: username.value,
       password: password.value,
+      remember: remember.value,
       ...captcha
     });
     auth.setSession(response.sessionId, response.sessionKey, response.user);
-    await router.push(allowedPostLoginPath(response.user, route.query.redirect));
+    successMessage.value = "登录成功，正在进入…";
+    await router.replace(allowedPostLoginPath(response.user, route.query.redirect));
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "登录失败，请检查账号或密码";
+    error.value = loginErrorMessage(err);
     if (!shouldHideCaptcha.value) await (captchaInput.value?.refresh() ?? Promise.resolve()).catch(() => undefined);
   } finally {
     password.value = "";
@@ -114,6 +140,8 @@ async function submit() {
 }
 
 onMounted(async () => {
+  takeLoginNotice();
+
   void preloadImageAsset(bundledWallpaperUrl).then((ready) => {
     wallpaperReady.value = ready;
   });
@@ -205,8 +233,9 @@ onMounted(async () => {
         </div>
 
         <p v-if="error" class="cd-error" role="alert">{{ error }}</p>
+        <p v-if="successMessage" class="auth-success" role="status">{{ successMessage }}</p>
         <button class="auth-submit" type="submit" :disabled="loading">
-          {{ loading ? "进入中..." : "进入陈书" }}
+          {{ loading ? "验证中..." : "进入陈书" }}
         </button>
       </form>
     </section>

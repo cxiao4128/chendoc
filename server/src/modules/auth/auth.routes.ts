@@ -1,5 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { z } from "zod";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { authenticate } from "../../middleware/auth.js";
 import { loginRateLimit, registerRateLimit } from "../../middleware/rateLimit.js";
@@ -7,40 +6,21 @@ import { users } from "../../db/schema.js";
 import { db, dbGet } from "../../db/client.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
-import { changePassword, login, register } from "./auth.service.js";
-import { encryptResponse } from "../crypto/crypto.service.js";
-
-function getResponsePublicKey(request: FastifyRequest) {
-  const header = request.headers["x-response-public-key"];
-  const value = Array.isArray(header) ? header[0] : header;
-  if (!value) {
-    throw new Error("Missing response public key");
-  }
-
-  const publicKey = Buffer.from(value, "base64").toString("utf8");
-  if (!publicKey.includes("BEGIN PUBLIC KEY")) {
-    throw new Error("Invalid response public key");
-  }
-  return publicKey;
-}
-
-function encrypted(request: FastifyRequest, payload: unknown) {
-  return encryptResponse(getResponsePublicKey(request), payload);
-}
-
-function sendEncrypted(reply: FastifyReply, request: FastifyRequest, status: number, payload: unknown) {
-  try {
-    return reply.code(status).send(encrypted(request, payload));
-  } catch {
-    return reply.code(status).send(payload);
-  }
-}
+import { AuthError, changePassword, login, register } from "./auth.service.js";
 
 export async function authRoutes(app: FastifyInstance) {
+  async function currentUser(request: FastifyRequest) {
+    const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, request.user!.id)).limit(1));
+    if (!user) {
+      return { code: "USER_NOT_FOUND", message: "账号不存在或已被注销", user: null };
+    }
+    return { user: { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) } };
+  }
+
   app.post("/api/auth/login", { config: { rateLimit: loginRateLimit } }, async (request, reply) => {
     try {
-      return encrypted(request, await login(request.body));
-    } catch {
+      return await login(request.body);
+    } catch (error) {
       await writeAuditLog({
         userId: null,
         action: "auth.login.failure",
@@ -48,7 +28,10 @@ export async function authRoutes(app: FastifyInstance) {
         targetId: "login",
         ...auditMetaFromRequest(request)
       });
-      return sendEncrypted(reply, request, 401, { message: "登录失败，请检查账号、密码或验证码" });
+      if (error instanceof AuthError) {
+        return reply.code(error.statusCode).send({ code: error.code, message: error.message });
+      }
+      return reply.code(401).send({ code: "INVALID_CREDENTIALS", message: "登录失败，请检查账号、密码或验证码" });
     }
   });
 
@@ -62,7 +45,7 @@ export async function authRoutes(app: FastifyInstance) {
         targetId: result.user.id,
         ...auditMetaFromRequest(request)
       });
-      return encrypted(request, result);
+      return result;
     } catch (error) {
       await writeAuditLog({
         userId: null,
@@ -71,26 +54,17 @@ export async function authRoutes(app: FastifyInstance) {
         targetId: "register",
         ...auditMetaFromRequest(request)
       });
-      return sendEncrypted(reply, request, 400, { message: error instanceof Error ? error.message : "注册失败" });
+      return reply.code(400).send({ message: error instanceof Error ? error.message : "注册失败" });
     }
   });
 
-  app.get("/api/auth/me", { preHandler: authenticate }, async (request) => {
-    const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, request.user!.id)).limit(1));
-    if (!user) {
-      return encrypted(request, { user: null });
-    }
-    return encrypted(request, { user: { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) } });
-  });
+  app.get("/api/auth/me", { preHandler: authenticate }, async (request) => currentUser(request));
+
+  app.post("/api/auth/me", { preHandler: authenticate }, async (request) => currentUser(request));
 
   app.post("/api/auth/change-password", { preHandler: authenticate }, async (request, reply) => {
-    const body = z.object({
-      currentEncryptedPassword: z.string().min(40),
-      newEncryptedPassword: z.string().min(40),
-      keyId: z.string().min(8)
-    }).parse(request.body);
     try {
-      await changePassword(request.user!.id, body.currentEncryptedPassword, body.newEncryptedPassword, body.keyId);
+      await changePassword(request.user!.id, request.body);
       await writeAuditLog({
         userId: request.user!.id,
         action: "auth.password.change",

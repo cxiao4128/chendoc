@@ -5,20 +5,28 @@ import { invites, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { now } from "../../utils/date.js";
 import { hashPassword, validateUserRegistration, verifyPassword } from "../../utils/password.js";
-import { decryptSubmittedPassword, decryptSubmittedPayload } from "../crypto/crypto.service.js";
 import { verifyCaptcha } from "../captcha/captcha.service.js";
 import { cleanupExpiredAuthSessions, createAuthSession } from "./session.service.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 
-export const encryptedRequestSchema = z.object({
-  keyId: z.string().min(8),
-  key: z.string().min(40),
-  payload: z.string().min(40)
-});
+export type AuthErrorCode = "USER_DISABLED" | "USER_NOT_FOUND" | "USER_DELETED" | "INVALID_CREDENTIALS";
+
+export class AuthError extends Error {
+  code: AuthErrorCode;
+  statusCode: number;
+
+  constructor(code: AuthErrorCode, message: string, statusCode = 401) {
+    super(message);
+    this.name = "AuthError";
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
 
 const loginPayloadSchema = z.object({
   username: z.string().trim().min(1).max(64),
   password: z.string().min(1).max(128),
+  remember: z.boolean().optional(),
   captchaId: z.string().min(8).optional(),
   captchaCode: z.string().trim().min(1).max(8).optional()
 });
@@ -27,27 +35,12 @@ const registerPayloadSchema = loginPayloadSchema.extend({
   inviteCode: z.string().trim().min(4).max(32)
 });
 
-export const encryptedPasswordSchema = z.object({
-  username: z.string().trim().min(1).max(64),
-  encryptedPassword: z.string().min(40),
-  keyId: z.string().min(8),
-  captchaId: z.string().min(8).optional(),
-  captchaCode: z.string().trim().min(1).max(8).optional()
+const changePasswordPayloadSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(1).max(128)
 });
 
 export const registerSchema = registerPayloadSchema;
-
-async function parseEncryptedJson<T extends z.ZodTypeAny>(input: unknown, schema: T): Promise<z.infer<T>> {
-  const envelope = encryptedRequestSchema.parse(input);
-  const plaintext = await decryptSubmittedPayload(envelope);
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(plaintext);
-  } catch {
-    throw new Error("Invalid encrypted payload");
-  }
-  return schema.parse(decoded);
-}
 
 function publicUser(user: { id: number; username: string; role: "admin" | "user"; status: string }) {
   return { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) };
@@ -57,18 +50,28 @@ function canSkipLoginCaptcha(user: { username: string; role: "admin" | "user" })
   return user.role === "admin" && user.username.toLowerCase() === env.defaultAdminUsername.toLowerCase();
 }
 
+function invalidCredentials() {
+  return new AuthError("INVALID_CREDENTIALS", "登录失败，请检查账号、密码或验证码");
+}
+
 export async function login(input: unknown) {
-  const body = await parseEncryptedJson(input, loginPayloadSchema);
+  const body = loginPayloadSchema.parse(input);
   const password = body.password;
   const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.username, body.username)).limit(1));
-  const shouldSkipCaptcha = user ? canSkipLoginCaptcha(user) : false;
-
-  if (!shouldSkipCaptcha && (!body.captchaId || !body.captchaCode || !(await verifyCaptcha(body.captchaId, body.captchaCode)))) {
-    throw new Error("登录失败，请检查账号、密码或验证码");
+  if (!user) {
+    throw new AuthError("USER_NOT_FOUND", "账号不存在或已被注销", 404);
+  }
+  if (user.status !== "active") {
+    throw new AuthError("USER_DISABLED", "你已被管理员禁止登录", 403);
   }
 
-  if (!user || user.status !== "active" || !(await verifyPassword(password, user.passwordHash))) {
-    throw new Error("登录失败，请检查账号、密码或验证码");
+  const shouldSkipCaptcha = canSkipLoginCaptcha(user);
+  if (!shouldSkipCaptcha && (!body.captchaId || !body.captchaCode || !(await verifyCaptcha(body.captchaId, body.captchaCode)))) {
+    throw invalidCredentials();
+  }
+
+  if (!(await verifyPassword(password, user.passwordHash))) {
+    throw invalidCredentials();
   }
 
   await cleanupExpiredAuthSessions();
@@ -76,7 +79,7 @@ export async function login(input: unknown) {
 }
 
 export async function register(input: unknown) {
-  const body = await parseEncryptedJson(input, registerPayloadSchema);
+  const body = registerPayloadSchema.parse(input);
   if (!body.captchaId || !body.captchaCode || !(await verifyCaptcha(body.captchaId, body.captchaCode))) {
     throw new Error("验证码不正确或已过期");
   }
@@ -135,9 +138,10 @@ export async function register(input: unknown) {
   return { user: publicUser(user) };
 }
 
-export async function changePassword(userId: number, currentEncryptedPassword: string, newEncryptedPassword: string, keyId: string) {
-  const currentPassword = await decryptSubmittedPassword(keyId, currentEncryptedPassword);
-  const newPassword = await decryptSubmittedPassword(keyId, newEncryptedPassword);
+export async function changePassword(userId: number, input: unknown) {
+  const body = changePasswordPayloadSchema.parse(input);
+  const currentPassword = body.currentPassword;
+  const newPassword = body.newPassword;
   const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, userId)).limit(1));
   if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
     throw new Error("当前密码不正确");

@@ -206,6 +206,16 @@
   font-weight: 760;
 }
 
+.auth-success {
+  margin: 0;
+  border: 1px solid rgba(31, 138, 95, 0.22);
+  border-radius: 7px;
+  background: rgba(234, 247, 240, 0.92);
+  color: var(--cd-success);
+  padding: 9px 11px;
+  font-weight: 700;
+}
+
 .auth-row a {
   color: #6b9cff;
   font-weight: 760;
