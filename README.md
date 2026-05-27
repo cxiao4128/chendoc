@@ -1,12 +1,54 @@
 # ChenDoc / Chen Shu
 
-当前版本 / Current version: `v1.2.4`
+当前版本 / Current version: `v2.0.0`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
 ## 更新日志 / Changelog
 
 ### 中文更新
+
+版本号：`2.0.0`
+
+展示版本：`v2.0.0`
+
+本次更新内容：
+
+- 新增 Gateway Packet Layer，生产 API 统一通过 `/api/gateway` 进入后端。
+- 生产请求体外层统一收敛为 `{ "data": "..." }`，`key`、`keyId`、`challenge`、业务 body 不再暴露在请求根层。
+- 请求封包内部使用 RSA-OAEP 交换 AES key，业务 body 使用 AES-GCM 加密，并加入 `nonce`、`timestamp` 和 challenge 校验。
+- 新增全局 gateway middleware，统一完成 packet decode、RSA 解密、AES-GCM 解密、nonce 防重放和业务 body 注入。
+- controller 不再处理登录、注册、改密等业务请求解密，统一读取解包后的 `request.body`。
+- 生产响应统一封包为 `{ "data": "..." }`，登录返回的 `sessionKey`、用户角色和权限信息不再裸露为 JSON。
+- 前端新增统一 gateway client，生产 API 请求自动封包、自动注入 nonce/timestamp/challenge，并解包响应。
+- challenge 改为网关内存层维护，前端只做内存缓存，不写入 localStorage。
+- 保持 MySQL、R2 上传、公开分享、回收站和用户权限链路不变，部署命令仍为 `bash ./deploy.sh`。
+
+更新时间：2026-05-27 20:02:11 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+#### 早期更新
+
+版本号：`1.3.0`
+
+展示版本：`v1.3.0`
+
+本次更新内容：
+
+- 优化登录页首屏加载，关键样式随 HTML 提前加载，减少裸样式闪烁。
+- 优化登录页壁纸与 Logo 预加载，先显示 small 图，再无感切换高清图。
+- 修复公开分享页品牌 Logo 显示，未配置时使用本地默认 Logo。
+- 移除公开分享页多余的“公开分享”标识，头部只保留 Logo 和站点名。
+- 优化禁用、注销用户的登录反馈，失败状态会明确提示。
+- 优化登录成功反馈和角色跳转，管理员进入 `/admin/docs`，普通用户进入 `/users/docs`。
+- 统一生产请求加密结构，业务请求体外层只保留 `data`。
+- 移除系统设置页重复的回收站入口，左侧导航栏回收站继续保留。
+- 保持 MySQL 运行模式和轻量查询策略，继续适配 2H4G 宝塔服务器。
+
+更新时间：2026-05-27 19:30:33 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 版本号：`1.2.4`
 
@@ -23,8 +65,6 @@
 更新时间：2026-05-25 21:06:20 +08:00
 
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
-
-#### 早期更新
 
 版本号：`1.2.3`
 
@@ -86,6 +126,48 @@
 
 ### English Changelog
 
+Version: `2.0.0`
+
+Display version: `v2.0.0`
+
+Changes in this release:
+
+- Added the Gateway Packet Layer and routed production API traffic through `/api/gateway`.
+- Reduced production request bodies to `{ "data": "..." }`; `key`, `keyId`, `challenge`, and business fields are no longer exposed at the request root.
+- Packet payloads now use RSA-OAEP for AES key exchange, AES-GCM for the body, and include `nonce`, `timestamp`, and challenge validation.
+- Added global gateway middleware for packet decode, RSA decrypt, AES-GCM decrypt, replay protection, and business body injection.
+- Removed request decrypt handling from auth controllers; controllers read the unpacked `request.body`.
+- Production responses are packetized as `{ "data": "..." }`, so session keys, roles, and permission data are not returned as bare JSON.
+- Added a unified gateway client on the admin frontend for request packing and response unpacking.
+- Kept challenge state in memory and out of localStorage.
+- Kept MySQL, R2 uploads, public share pages, recycle bin flows, permissions, and `bash ./deploy.sh` deployment unchanged.
+
+Updated at: 2026-05-27 20:02:11 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+#### Earlier Updates
+
+Version: `1.3.0`
+
+Display version: `v1.3.0`
+
+Changes in this release:
+
+- Optimized the login first paint by loading critical login styles from the HTML entry.
+- Optimized wallpaper and Logo preloading with a small placeholder image before the full wallpaper swap.
+- Fixed the public share header to use the site Logo with a bundled fallback.
+- Removed the extra “公开分享” marker from the public share page header.
+- Improved login feedback for disabled and deleted users.
+- Added immediate success feedback and faster role-based redirects after sign-in.
+- Unified production request encryption so encrypted business requests expose only `data` at the body root.
+- Removed the duplicate Trash card from System Settings while keeping the sidebar Trash entry.
+- Kept the MySQL runtime path and lightweight query strategy for 2C4G BT Panel servers.
+
+Updated at: 2026-05-27 19:30:33 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
 Version: `1.2.4`
 
 Display version: `v1.2.4`
@@ -101,8 +183,6 @@ Changes in this release:
 Updated at: 2026-05-25 21:06:20 +08:00
 
 Documentation: [https://d.w92.pw/](https://d.w92.pw/)
-
-#### Earlier Updates
 
 Version: `1.2.3`
 
@@ -257,7 +337,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 从 GitHub Release 下载部署压缩包后，在部署目录内解压并执行：
 
 ```bash
-unzip -o chendoc-1.2.4-*.zip
+unzip -o chendoc-2.0.0-*.zip
 cp .env.example .env
 # 编辑 .env，填写生产环境配置
 bash ./deploy.sh
@@ -418,7 +498,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 Download the deployment archive from GitHub Releases, extract it inside your deployment directory, and run:
 
 ```bash
-unzip -o chendoc-1.2.4-*.zip
+unzip -o chendoc-2.0.0-*.zip
 cp .env.example .env
 # Edit .env for production settings.
 bash ./deploy.sh

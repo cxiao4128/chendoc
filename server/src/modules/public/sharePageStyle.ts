@@ -36,7 +36,7 @@ export const sharePageStyle = `
   .topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 16px;
     border-bottom: 1px solid var(--border);
     padding: 14px 32px;
@@ -51,14 +51,15 @@ export const sharePageStyle = `
     text-decoration: none;
     font-weight: 720;
   }
-  .brand span {
-    display: grid;
-    place-items: center;
+  .brand img {
     width: 28px;
     height: 28px;
     border: 1px solid var(--border);
     border-radius: 7px;
-    color: var(--accent);
+    object-fit: cover;
+  }
+  .brand__name {
+    color: var(--text);
   }
   main { max-width: 820px; margin: 0 auto; padding: 48px 0 88px; }
   header { border-bottom: 1px solid var(--border); margin-bottom: 32px; padding-bottom: 18px; }
@@ -115,7 +116,7 @@ export const sharePageStyle = `
   @media (max-width: 560px) {
     main { width: 100%; padding: 32px 16px 64px; }
     h1 { font-size: 28px; }
-    .topbar { align-items: flex-start; flex-direction: column; padding: 12px 16px; }
+    .topbar { padding: 12px 16px; }
     .share-row { grid-template-columns: 1fr; }
   }
 `;

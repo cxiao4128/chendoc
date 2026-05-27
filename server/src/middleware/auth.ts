@@ -15,17 +15,20 @@ declare module "fastify" {
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   const header = request.headers.authorization;
   if (!header) {
-    return reply.code(401).send({ message: "未登录或登录已过期" });
+    return reply.code(401).send({ code: "SESSION_EXPIRED", message: "未登录或登录已过期" });
   }
 
   try {
     const session = await verifyAuthSessionHeader(header);
     const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, session.userId)).limit(1));
-    if (!user || user.status !== "active") {
-      return reply.code(401).send({ message: "未登录或登录已过期" });
+    if (!user) {
+      return reply.code(401).send({ code: "USER_NOT_FOUND", message: "账号不存在或已被注销" });
+    }
+    if (user.status !== "active") {
+      return reply.code(401).send({ code: "USER_DISABLED", message: "你已被管理员禁止登录" });
     }
     request.user = { id: user.id, username: user.username, role: user.role, isSuperAdmin: isSuperAdminUser(user) };
   } catch {
-    return reply.code(401).send({ message: "未登录或登录已过期" });
+    return reply.code(401).send({ code: "SESSION_EXPIRED", message: "未登录或登录已过期" });
   }
 }

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import {
-  ArchiveRestore,
   ExternalLink,
   Github,
   KeyRound,
@@ -34,7 +33,7 @@ import "./settings.css";
 type ActivePanel = "logs" | "appearance" | "users" | null;
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v1.2.4";
+const APP_VERSION = "v2.0.0";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -352,10 +351,6 @@ onMounted(() => {
       <RouterLink class="settings-page__card" to="/admin/article-delete">
         <Trash2 :size="21" />
         <div><strong>文章删除</strong><span>输入文章 ID 查询并软删除文章</span></div>
-      </RouterLink>
-      <RouterLink class="settings-page__card" to="/admin/trash">
-        <ArchiveRestore :size="21" />
-        <div><strong>回收站</strong><span>恢复软删除文章，或执行永久删除</span></div>
       </RouterLink>
       <button class="settings-page__card" :class="{ 'is-active': activePanel === 'logs' }" type="button" @click="openPanel('logs')">
         <ScrollText :size="21" />

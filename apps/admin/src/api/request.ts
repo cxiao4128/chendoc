@@ -1,17 +1,20 @@
 import { buildAuthorization, clearAuthSession, getSessionId, saveAuthSession } from "../security/sessionToken";
 import { buildClientRiskHeader } from "../security/runtimeGuard";
-import { createResponseDecryptor, isEncryptedResponse } from "../security/responseCrypto";
+import { gatewayClientRequest, shouldUseGateway } from "../gateway/client";
 import { apiPaths, isCredentialEndpoint, resolveApiPath } from "./endpoints";
 
 const DEFAULT_ERROR_MESSAGE = "请求失败";
+const LOGIN_NOTICE_KEY = "chendoc_login_notice";
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message || DEFAULT_ERROR_MESSAGE);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -36,29 +39,36 @@ export function clearToken() {
   clearAuthSession();
 }
 
-export interface SecureRequestOptions {
-  encryptedResponse?: boolean;
-}
-
 function shouldRedirectUnauthorized(url: string) {
   const path = resolveApiPath(url);
   return path !== apiPaths.signIn() && path !== apiPaths.signUp();
 }
 
-function redirectToLogin(url: string) {
+function authMessageFromCode(code: string) {
+  if (code === "USER_DISABLED") return "你已被管理员禁止登录";
+  if (code === "USER_NOT_FOUND" || code === "USER_DELETED") return "账号不存在或已被注销";
+  return "登录状态已失效，请重新登录";
+}
+
+function redirectToLogin(url: string, code?: string, message?: string) {
   if (!shouldRedirectUnauthorized(url)) return;
   clearToken();
   if (typeof window === "undefined" || window.location.pathname === "/login") return;
 
   const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const redirect = current && current !== "/" ? `?redirect=${encodeURIComponent(current)}` : "";
-  window.location.assign(`/login${redirect}`);
+  const params = new URLSearchParams();
+  if (current && current !== "/") params.set("redirect", current);
+  const notice = code ? authMessageFromCode(code) : message;
+  if (notice) {
+    window.sessionStorage.setItem(LOGIN_NOTICE_KEY, notice);
+    params.set("message", notice);
+  }
+  const query = params.toString();
+  window.location.assign(`/login${query ? `?${query}` : ""}`);
 }
 
-export async function request<T>(url: string, options: RequestInit = {}, secure: SecureRequestOptions = {}): Promise<T> {
+export async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  const responseDecryptor = secure.encryptedResponse ? await createResponseDecryptor() : null;
-  if (responseDecryptor) headers.set("X-Response-Public-Key", responseDecryptor.h);
 
   const riskHeader = buildClientRiskHeader();
   if (riskHeader) headers.set("X-Client-Risk", riskHeader);
@@ -72,18 +82,25 @@ export async function request<T>(url: string, options: RequestInit = {}, secure:
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(url, { ...options, headers });
-  const contentType = response.headers.get("Content-Type") || "";
-  const rawPayload = contentType.includes("application/json") ? await response.json() : await response.text();
-  const payload = isEncryptedResponse(rawPayload) && responseDecryptor
-    ? await responseDecryptor.decrypt<unknown>(rawPayload.encryptedData)
-    : rawPayload;
+  const result = shouldUseGateway(url, options.body)
+    ? await gatewayClientRequest<unknown>(url, options, headers)
+    : await directRequest(url, options, headers);
+  const { response, payload } = result;
 
   if (!response.ok) {
-    if (response.status === 401) redirectToLogin(url);
-    const message = typeof payload === "object" && payload && "message" in payload ? String(payload.message) : DEFAULT_ERROR_MESSAGE;
-    throw new ApiError(message, response.status);
+    const payloadRecord = typeof payload === "object" && payload ? payload as Record<string, unknown> : null;
+    const message = payloadRecord && "message" in payloadRecord ? String(payloadRecord.message) : DEFAULT_ERROR_MESSAGE;
+    const code = payloadRecord && typeof payloadRecord.code === "string" ? payloadRecord.code : undefined;
+    if (response.status === 401) redirectToLogin(url, code, message);
+    throw new ApiError(message, response.status, code);
   }
 
   return payload as T;
+}
+
+async function directRequest(url: string, options: RequestInit, headers: Headers) {
+  const response = await fetch(url, { ...options, headers });
+  const contentType = response.headers.get("Content-Type") || "";
+  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+  return { response, payload };
 }
