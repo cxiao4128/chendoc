@@ -56,7 +56,7 @@ export async function unpackGatewayRequest(request: FastifyRequest, reply: Fasti
   if (!isApiRequest(request)) return;
   if (!hasRequestBody(request)) {
     if (requirePacket(request)) {
-      return reply.code(400).send({ code: "PACKET_REQUIRED", message: "请求结构不正确" });
+      return reply.code(400).send({ code: "PACKET_REQUIRED", message: "Invalid gateway packet." });
     }
     return;
   }
@@ -71,12 +71,12 @@ export async function unpackGatewayRequest(request: FastifyRequest, reply: Fasti
     } catch (error) {
       const code = error instanceof GatewayPacketError ? error.code : "INVALID_PACKET";
       const statusCode = error instanceof GatewayPacketError ? error.statusCode : 400;
-      return reply.code(statusCode).send({ code, message: "请求结构不正确" });
+      return reply.code(statusCode).send({ code, message: "Invalid gateway packet." });
     }
   }
 
   if (requirePacket(request)) {
-    return reply.code(400).send({ code: "PACKET_REQUIRED", message: "请求结构不正确" });
+    return reply.code(400).send({ code: "PACKET_REQUIRED", message: "Invalid gateway packet." });
   }
 }
 
@@ -86,8 +86,6 @@ export async function packGatewayReply(request: FastifyRequest, reply: FastifyRe
   if (reply.statusCode === 204) return payload;
 
   const parsed = parseJsonPayload(payload);
-  if (isGatewayEnvelope(parsed)) return payload;
-
   reply.header("Content-Type", "application/json; charset=utf-8");
   return JSON.stringify(packGatewayResponse({
     requestId: request.id,

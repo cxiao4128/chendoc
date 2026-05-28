@@ -119,7 +119,9 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       sourcemap: false,
-      cssCodeSplit: true,
+      // Keep route CSS in the initial stylesheet so authenticated redirects
+      // cannot render admin pages before their async page styles arrive.
+      cssCodeSplit: false,
       minify: "esbuild",
       rollupOptions: {
         output: {

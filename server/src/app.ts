@@ -45,6 +45,7 @@ export async function buildApp() {
         "*.challenge"
       ]
     },
+    disableRequestLogging: env.nodeEnv === "production",
     trustProxy: true
   });
 
@@ -83,10 +84,9 @@ export async function buildApp() {
     if (!startedAt) return;
     const durationMs = Math.round(performance.now() - startedAt);
     if (durationMs <= 300) return;
-    const pathName = request.url.split("?")[0] || request.url;
     app.log.warn({
       requestId: request.id,
-      path: pathName,
+      actionCode: request.packet?.actionCode,
       status: reply.statusCode,
       durationMs
     }, "slow request");

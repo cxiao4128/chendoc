@@ -153,12 +153,21 @@ export function renderSharePasswordHtml(input: {
         return b2ab(value.replace("-----BEGIN PUBLIC KEY-----", "").replace("-----END PUBLIC KEY-----", "").replace(/\\s/g, ""));
       }
 
-      function jsonToBase64(value) {
-        return btoa(unescape(encodeURIComponent(JSON.stringify(value))));
+      function b2u(value) {
+        return value.replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
       }
 
-      function base64ToJson(value) {
-        return JSON.parse(textDecoder.decode(b2bytes(value)));
+      function u2b(value) {
+        const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+        return normalized + (normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4)));
+      }
+
+      function ab2u(value) {
+        return b2u(ab2b(value));
+      }
+
+      function u2ab(value) {
+        return b2ab(u2b(value));
       }
 
       async function loadChallenge() {
@@ -167,7 +176,23 @@ export function renderSharePasswordHtml(input: {
         return response.json();
       }
 
-      async function encryptGatewayBody(method, path, body) {
+      async function encryptBytes(publicKey, bytes) {
+        const encrypted = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, textEncoder.encode(ab2b(bytes.buffer)));
+        return ab2u(encrypted);
+      }
+
+      async function encryptAes(keyBytes, value) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const aesKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt"]);
+        const encryptedBody = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv, tagLength: 128 },
+          aesKey,
+          textEncoder.encode(JSON.stringify(value || {}))
+        );
+        return { iv: ab2u(iv.buffer), body: ab2u(encryptedBody) };
+      }
+
+      async function encryptGatewayBody(action, payload) {
         const [keyResponse, challenge] = await Promise.all([
           fetch("/api/crypto/public-key", { cache: "no-store" }).then((response) => {
             if (!response.ok) throw new Error("无法加载加密密钥，请刷新后重试。");
@@ -183,49 +208,48 @@ export function renderSharePasswordHtml(input: {
           ["encrypt"]
         );
         const aesKeyBytes = crypto.getRandomValues(new Uint8Array(32));
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const encryptedKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, textEncoder.encode(ab2b(aesKeyBytes.buffer)));
-        const aesKey = await crypto.subtle.importKey("raw", aesKeyBytes, { name: "AES-GCM" }, false, ["encrypt"]);
-        const encryptedBody = await crypto.subtle.encrypt(
-          { name: "AES-GCM", iv, tagLength: 128 },
-          aesKey,
-          textEncoder.encode(JSON.stringify({ method, path, body }))
-        );
+        const encryptedKey = await encryptBytes(publicKey, aesKeyBytes);
+        const encryptedBody = await encryptAes(aesKeyBytes, payload);
+        const packet = {
+          v: "2.1",
+          keyId: keyResponse.keyId,
+          key: encryptedKey,
+          iv: encryptedBody.iv,
+          challenge: challenge.nonce,
+          timestamp: Date.now(),
+          nonce: crypto.randomUUID(),
+          action,
+          body: encryptedBody.body
+        };
+        const outerKeyBytes = crypto.getRandomValues(new Uint8Array(32));
+        const encryptedOuterKey = await encryptBytes(publicKey, outerKeyBytes);
+        const encryptedPacket = await encryptAes(outerKeyBytes, packet);
         return {
           envelope: {
-            data: jsonToBase64({
-              v: "2.0",
-              keyId: keyResponse.keyId,
-              key: ab2b(encryptedKey),
-              iv: ab2b(iv.buffer),
-              challenge: challenge.nonce,
-              timestamp: Date.now(),
-              nonce: crypto.randomUUID(),
-              body: ab2b(encryptedBody)
-            })
+            data: ["G21", encryptedOuterKey, encryptedPacket.iv, encryptedPacket.body].join(".")
           },
           key: aesKeyBytes
         };
       }
 
       async function decryptGatewayResponse(payload, key) {
-        const encoded = payload?.data || payload?.p;
+        const encoded = payload?.data;
         if (!encoded) return payload;
-        const packet = base64ToJson(encoded);
-        if (packet?.v !== "2.0" || !packet.iv || !packet.body) return packet;
+        const parts = encoded.split(".");
+        if (parts.length !== 3 || parts[0] !== "G21R") return payload;
         const aesKey = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["decrypt"]);
         const plaintext = await crypto.subtle.decrypt(
-          { name: "AES-GCM", iv: b2ab(packet.iv), tagLength: 128 },
+          { name: "AES-GCM", iv: u2ab(parts[1]), tagLength: 128 },
           aesKey,
-          b2ab(packet.body)
+          u2ab(parts[2])
         );
         const responsePacket = JSON.parse(textDecoder.decode(plaintext));
         if (responsePacket.code === 0) return responsePacket.data;
         throw new Error(responsePacket.message || "密码不正确，请重试。");
       }
 
-      async function requestGateway(path, body) {
-        const packed = await encryptGatewayBody("POST", path, body);
+      async function requestGateway(action, payload) {
+        const packed = await encryptGatewayBody(action, payload);
         const response = await fetch("/api/gateway", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -253,7 +277,7 @@ export function renderSharePasswordHtml(input: {
         status.classList.remove("is-error");
 
         try {
-          const payload = await requestGateway("/api/public/r/${encodedShareKey}/verify-password", { password });
+          const payload = await requestGateway("p2", { params: { shareKey: "${encodedShareKey}" }, body: { password } });
           if (!payload.ok || !payload.token) {
             throw new Error(payload?.message || "密码不正确，请重试。");
           }
