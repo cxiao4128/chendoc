@@ -12,7 +12,7 @@ export function registerErrorHandler(app: FastifyInstance) {
     if (env.nodeEnv === "production") {
       request.log.error({
         requestId: request.id,
-        path: request.url.split("?")[0],
+        actionCode: request.packet?.actionCode,
         status: statusCode,
         errorCode: error.code || error.name || "REQUEST_FAILED"
       }, "request failed");

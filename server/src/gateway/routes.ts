@@ -1,21 +1,207 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { z } from "zod";
 
-const transportSchema = z.object({
-  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
-  path: z.string().min(5).max(2048),
-  body: z.unknown().optional()
-});
+type GatewayMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-function normalizeGatewayPath(path: string) {
-  if (!path.startsWith("/api/") || path.startsWith("/api/gateway")) {
-    throw new Error("Invalid gateway target.");
+interface GatewayTarget {
+  method: GatewayMethod;
+  url: string;
+  body?: unknown;
+}
+
+type GatewayPayload = Record<string, unknown>;
+
+function asRecord(input: unknown): Record<string, unknown> {
+  return input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
+}
+
+function payloadOf(request: FastifyRequest): GatewayPayload {
+  return asRecord(request.body);
+}
+
+function paramsOf(payload: GatewayPayload) {
+  return asRecord(payload.params);
+}
+
+function queryOf(payload: GatewayPayload) {
+  return asRecord(payload.query);
+}
+
+function bodyOf(payload: GatewayPayload) {
+  return payload.body ?? {};
+}
+
+function stringValue(value: unknown, name: string) {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.trim()) return value.trim();
+  throw new Error(`Missing gateway action parameter: ${name}`);
+}
+
+function param(payload: GatewayPayload, name: string) {
+  return encodeURIComponent(stringValue(paramsOf(payload)[name], name));
+}
+
+function target(payload: GatewayPayload) {
+  return typeof payload.target === "string" ? payload.target : "";
+}
+
+function queryString(payload: GatewayPayload) {
+  const query = queryOf(payload);
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, String(item));
+      continue;
+    }
+    params.set(key, String(value));
   }
-  const url = new URL(path, "http://chendoc.local");
-  if (url.origin !== "http://chendoc.local" || !url.pathname.startsWith("/api/")) {
-    throw new Error("Invalid gateway target.");
+  const value = params.toString();
+  return value ? `?${value}` : "";
+}
+
+function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarget {
+  switch (actionCode) {
+    case "a1":
+      return { method: "POST", url: "/api/auth/login", body: bodyOf(payload) };
+    case "a2":
+      return { method: "POST", url: "/api/auth/register", body: bodyOf(payload) };
+    case "a3":
+      return { method: "POST", url: "/api/auth/me", body: {} };
+    case "a4":
+      return { method: "POST", url: "/api/auth/change-password", body: bodyOf(payload) };
+
+    case "c1":
+      return { method: "GET", url: "/api/captcha" };
+
+    case "p1":
+      return { method: "GET", url: "/api/public/settings/site" };
+    case "p2":
+      return {
+        method: "POST",
+        url: `/api/public/r/${param(payload, "shareKey")}/verify-password`,
+        body: bodyOf(payload)
+      };
+
+    case "d1":
+      return {
+        method: "GET",
+        url: `${payload.mode === "search" ? "/api/docs/search" : "/api/docs"}${queryString(payload)}`
+      };
+    case "d2":
+      return { method: "GET", url: `/api/docs/${param(payload, "id")}` };
+    case "d3":
+      return paramsOf(payload).id
+        ? { method: "PATCH", url: `/api/docs/${param(payload, "id")}`, body: bodyOf(payload) }
+        : { method: "POST", url: "/api/docs", body: bodyOf(payload) };
+    case "d4":
+      return { method: "DELETE", url: `/api/docs/${param(payload, "id")}` };
+    case "d5":
+      return { method: "POST", url: "/api/docs/bulk-delete", body: bodyOf(payload) };
+    case "d6":
+      return { method: "POST", url: `/api/docs/${param(payload, "id")}/publish`, body: {} };
+    case "d7":
+      return { method: "GET", url: `/api/docs/${param(payload, "id")}/versions` };
+    case "d8":
+      return {
+        method: "POST",
+        url: `/api/docs/${param(payload, "id")}/versions/${param(payload, "versionId")}/restore`,
+        body: {}
+      };
+
+    case "r1":
+      return {
+        method: "GET",
+        url: `${payload.scope === "admin" ? "/api/admin/docs/trash" : "/api/docs/trash"}${queryString(payload)}`
+      };
+    case "r2":
+      return {
+        method: "POST",
+        url: payload.scope === "admin" ? "/api/admin/docs/trash/bulk-restore" : "/api/docs/trash/batch-restore",
+        body: bodyOf(payload)
+      };
+    case "r3":
+      return {
+        method: "POST",
+        url: payload.scope === "admin" ? "/api/admin/docs/trash/bulk-hard-delete" : "/api/docs/trash/batch-delete",
+        body: bodyOf(payload)
+      };
+
+    case "h1":
+      return { method: "POST", url: `/api/docs/${param(payload, "docId")}/share`, body: bodyOf(payload) };
+    case "h2":
+      return { method: "GET", url: `/api/shares/doc/${param(payload, "docId")}` };
+    case "h3":
+      return { method: "PATCH", url: `/api/shares/${param(payload, "id")}`, body: bodyOf(payload) };
+    case "h4":
+      return { method: "DELETE", url: `/api/shares/${param(payload, "id")}` };
+    case "h5":
+      return { method: "GET", url: "/api/admin/share-reviews" };
+    case "h6":
+      return { method: "POST", url: `/api/admin/share-reviews/${param(payload, "id")}/review`, body: bodyOf(payload) };
+
+    case "s1":
+      if (target(payload) === "publicSite") return { method: "GET", url: "/api/public/settings/site" };
+      if (target(payload) === "site") return { method: "GET", url: "/api/settings/site" };
+      if (target(payload) === "r2") return { method: "GET", url: "/api/settings/storage/r2" };
+      if (target(payload) === "logs") return { method: "GET", url: "/api/settings/operation-logs" };
+      if (target(payload) === "settings") return { method: "GET", url: "/api/settings" };
+      break;
+    case "s2":
+      if (target(payload) === "site") return { method: "POST", url: "/api/settings/site", body: bodyOf(payload) };
+      if (target(payload) === "r2") return { method: "POST", url: "/api/settings/storage/r2", body: bodyOf(payload) };
+      if (target(payload) === "r2Test") return { method: "POST", url: "/api/settings/storage/r2/test", body: bodyOf(payload) };
+      if (target(payload) === "settings") return { method: "PATCH", url: "/api/settings", body: bodyOf(payload) };
+      break;
+
+    case "u1":
+      return { method: "GET", url: "/api/admin/users" };
+    case "u2":
+      return { method: "GET", url: `/api/admin/users/${param(payload, "id")}` };
+    case "u3":
+      return { method: "POST", url: `/api/admin/users/${param(payload, "id")}/promote`, body: {} };
+    case "u4":
+      return { method: "POST", url: `/api/admin/users/${param(payload, "id")}/disable`, body: {} };
+    case "u5":
+      return { method: "POST", url: `/api/admin/users/${param(payload, "id")}/enable`, body: {} };
+    case "u6":
+      return { method: "DELETE", url: `/api/admin/users/${param(payload, "id")}` };
+
+    case "f1":
+      return { method: "GET", url: "/api/uploads/policy" };
+    case "f2":
+      return { method: "POST", url: "/api/uploads/presign", body: bodyOf(payload) };
+    case "f3":
+      return { method: "POST", url: "/api/uploads/complete", body: bodyOf(payload) };
+    case "f4":
+      return { method: "DELETE", url: `/api/uploads/${param(payload, "id")}` };
+
+    case "w1":
+      return { method: "GET", url: "/api/spaces" };
+    case "w2":
+      return { method: "POST", url: "/api/spaces", body: bodyOf(payload) };
+    case "w3":
+      return { method: "PATCH", url: `/api/spaces/${param(payload, "id")}`, body: bodyOf(payload) };
+    case "w4":
+      return { method: "DELETE", url: `/api/spaces/${param(payload, "id")}` };
+
+    case "i1":
+      return { method: "GET", url: "/api/admin/invites" };
+    case "i2":
+      return { method: "POST", url: "/api/admin/invites", body: bodyOf(payload) };
+    case "i3":
+      return { method: "POST", url: "/api/admin/invites/batch", body: bodyOf(payload) };
+    case "i4":
+      return { method: "PATCH", url: `/api/admin/invites/${param(payload, "id")}/disable`, body: {} };
+    case "i5":
+      return { method: "DELETE", url: `/api/admin/invites/${param(payload, "id")}` };
+
+    case "x1":
+      return { method: "GET", url: `/api/admin/docs/by-id/${param(payload, "id")}` };
+    case "x2":
+      return { method: "DELETE", url: `/api/admin/docs/by-id/${param(payload, "id")}` };
   }
-  return `${url.pathname}${url.search}`;
+
+  throw new Error("Unknown gateway action.");
 }
 
 function headerValue(request: FastifyRequest, name: string) {
@@ -49,19 +235,20 @@ function parseInjectedPayload(payload: string, contentType: string | undefined) 
 
 export async function gatewayRoutes(app: FastifyInstance) {
   app.post("/api/gateway", async (request, reply) => {
-    const transport = transportSchema.parse(request.body);
-    const method = transport.method.toUpperCase() as "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-    const url = normalizeGatewayPath(transport.path);
-    const hasBody = method !== "GET" && method !== "DELETE";
+    const actionCode = request.packet?.actionCode;
+    if (!actionCode) return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
+
+    const targetRequest = actionTarget(actionCode, payloadOf(request));
+    const hasBody = targetRequest.method !== "GET" && targetRequest.method !== "DELETE";
 
     const response = await app.inject({
-      method,
-      url,
+      method: targetRequest.method,
+      url: targetRequest.url,
       headers: {
         ...internalHeaders(request),
         ...(hasBody ? { "content-type": "application/json" } : {})
       },
-      payload: hasBody ? JSON.stringify(transport.body ?? {}) : undefined
+      payload: hasBody ? JSON.stringify(targetRequest.body ?? {}) : undefined
     });
 
     const contentType = Array.isArray(response.headers["content-type"])

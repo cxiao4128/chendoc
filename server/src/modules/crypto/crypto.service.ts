@@ -70,3 +70,22 @@ export async function decryptSubmittedValue(keyId: string, encryptedValue: strin
   const privateKey = decryptValue(record.privateKeyEncrypted, env.rsaPrivateKeyEncryptionKey);
   return decryptRsaOaepBase64(privateKey, encryptedValue);
 }
+
+export async function decryptSubmittedValueWithActiveKey(encryptedValue: string) {
+  const records = await db
+    .select()
+    .from(cryptoKeys)
+    .where(and(eq(cryptoKeys.status, "active"), gt(cryptoKeys.expireAt, now())))
+    .orderBy(desc(cryptoKeys.createdAt));
+
+  for (const record of records) {
+    try {
+      const privateKey = decryptValue(record.privateKeyEncrypted, env.rsaPrivateKeyEncryptionKey);
+      return decryptRsaOaepBase64(privateKey, encryptedValue);
+    } catch {
+      // Try the next active key. The gateway keeps key identifiers inside the encrypted packet.
+    }
+  }
+
+  throw new Error("Gateway key decrypt failed.");
+}

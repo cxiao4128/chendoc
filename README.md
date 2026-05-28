@@ -1,6 +1,6 @@
 # ChenDoc / Chen Shu
 
-当前版本 / Current version: `v2.0.0`
+当前版本 / Current version: `v2.1.0`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -8,23 +8,23 @@
 
 ### 中文更新
 
-版本号：`2.0.0`
+版本号：`2.1.0`
 
-展示版本：`v2.0.0`
+展示版本：`v2.1.0`
 
 本次更新内容：
 
-- 新增 Gateway Packet Layer，生产 API 统一通过 `/api/gateway` 进入后端。
-- 生产请求体外层统一收敛为 `{ "data": "..." }`，`key`、`keyId`、`challenge`、业务 body 不再暴露在请求根层。
-- 请求封包内部使用 RSA-OAEP 交换 AES key，业务 body 使用 AES-GCM 加密，并加入 `nonce`、`timestamp` 和 challenge 校验。
-- 新增全局 gateway middleware，统一完成 packet decode、RSA 解密、AES-GCM 解密、nonce 防重放和业务 body 注入。
-- controller 不再处理登录、注册、改密等业务请求解密，统一读取解包后的 `request.body`。
-- 生产响应统一封包为 `{ "data": "..." }`，登录返回的 `sessionKey`、用户角色和权限信息不再裸露为 JSON。
-- 前端新增统一 gateway client，生产 API 请求自动封包、自动注入 nonce/timestamp/challenge，并解包响应。
-- challenge 改为网关内存层维护，前端只做内存缓存，不写入 localStorage。
+- Gateway Packet Layer 升级到 v2.1.0，`data` 不再是 `base64(JSON)`，而是外层 AES-GCM 加密后的二进制封套。
+- 请求采用双层加密：业务 body 先 AES-GCM 加密，再把包含 `key/keyId/iv/challenge/timestamp/nonce/action/body` 的 packet 整体二次加密。
+- 生产请求体仍只允许 `{ "data": "..." }`，解码 `data` 不会直接看到 `v/keyId/key/iv/challenge/nonce/action/body`。
+- 生产 API 统一通过 `/api/gateway` 进入后端，网关中间件集中完成外层解密、时间戳校验、nonce 防重放、内层 body 解密和动作码分发。
+- 新增动作码路由，使用 `a1/a2/a3/d1/d2/d3/r1/r2/r3/s1/s2` 等代码替代可读业务路由。
+- 生产响应也统一返回 `{ "data": "..." }`，响应内容使用 AES-GCM 加密，不返回裸 JSON 业务数据。
+- 开发模式可用 `VITE_DISABLE_GATEWAY_PACKET=true` 临时关闭网关封包；生产默认启用。
+- 生产日志只保留 `requestId/actionCode/status/errorCode/duration` 等低敏字段，不记录解密 body、密钥、token、sessionKey、password、challenge 或 Authorization。
 - 保持 MySQL、R2 上传、公开分享、回收站和用户权限链路不变，部署命令仍为 `bash ./deploy.sh`。
 
-更新时间：2026-05-27 20:02:11 +08:00
+更新时间：2026-05-28 13:02:20 +08:00
 
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
@@ -126,23 +126,23 @@
 
 ### English Changelog
 
-Version: `2.0.0`
+Version: `2.1.0`
 
-Display version: `v2.0.0`
+Display version: `v2.1.0`
 
 Changes in this release:
 
-- Added the Gateway Packet Layer and routed production API traffic through `/api/gateway`.
-- Reduced production request bodies to `{ "data": "..." }`; `key`, `keyId`, `challenge`, and business fields are no longer exposed at the request root.
-- Packet payloads now use RSA-OAEP for AES key exchange, AES-GCM for the body, and include `nonce`, `timestamp`, and challenge validation.
-- Added global gateway middleware for packet decode, RSA decrypt, AES-GCM decrypt, replay protection, and business body injection.
-- Removed request decrypt handling from auth controllers; controllers read the unpacked `request.body`.
-- Production responses are packetized as `{ "data": "..." }`, so session keys, roles, and permission data are not returned as bare JSON.
-- Added a unified gateway client on the admin frontend for request packing and response unpacking.
-- Kept challenge state in memory and out of localStorage.
+- Upgraded Gateway Packet Layer to v2.1.0. `data` is no longer `base64(JSON)`; it is an AES-GCM encrypted binary envelope.
+- Requests now use double-layer encryption: the business body is encrypted first, then the whole packet containing `key/keyId/iv/challenge/timestamp/nonce/action/body` is encrypted again.
+- Production request bodies still allow only `{ "data": "..." }`; decoding `data` no longer reveals packet JSON or gateway fields.
+- Production API traffic is routed through `/api/gateway`, where middleware centralizes outer decrypt, timestamp validation, replay protection, inner body decrypt, action-code resolution, and dispatch.
+- Added action-code routing such as `a1/a2/a3/d1/d2/d3/r1/r2/r3/s1/s2` instead of readable business route names.
+- Production responses also return `{ "data": "..." }` with AES-GCM encrypted response envelopes, not raw business JSON.
+- Development can temporarily disable packet mode with `VITE_DISABLE_GATEWAY_PACKET=true`; production enables it by default.
+- Production logging keeps only low-sensitive fields such as `requestId/actionCode/status/errorCode/duration`.
 - Kept MySQL, R2 uploads, public share pages, recycle bin flows, permissions, and `bash ./deploy.sh` deployment unchanged.
 
-Updated at: 2026-05-27 20:02:11 +08:00
+Updated at: 2026-05-28 13:02:20 +08:00
 
 Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
@@ -337,7 +337,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 从 GitHub Release 下载部署压缩包后，在部署目录内解压并执行：
 
 ```bash
-unzip -o chendoc-2.0.0-*.zip
+unzip -o chendoc-2.1.0-*.zip
 cp .env.example .env
 # 编辑 .env，填写生产环境配置
 bash ./deploy.sh
@@ -498,7 +498,7 @@ CHENDOC_RESET_ADMIN_PASSWORD=1 npm run admin:init
 Download the deployment archive from GitHub Releases, extract it inside your deployment directory, and run:
 
 ```bash
-unzip -o chendoc-2.0.0-*.zip
+unzip -o chendoc-2.1.0-*.zip
 cp .env.example .env
 # Edit .env for production settings.
 bash ./deploy.sh
