@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { BadRequestError } from "../utils/errors.js";
 
 type GatewayMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -33,7 +34,7 @@ function bodyOf(payload: GatewayPayload) {
 function stringValue(value: unknown, name: string) {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "string" && value.trim()) return value.trim();
-  throw new Error(`Missing gateway action parameter: ${name}`);
+  throw new BadRequestError(`Missing gateway action parameter: ${name}`, "GATEWAY_PARAM_MISSING");
 }
 
 function param(payload: GatewayPayload, name: string) {
@@ -69,6 +70,10 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       return { method: "POST", url: "/api/auth/me", body: {} };
     case "a4":
       return { method: "POST", url: "/api/auth/change-password", body: bodyOf(payload) };
+    case "a5":
+      return { method: "POST", url: "/api/auth/refresh", body: {} };
+    case "a6":
+      return { method: "POST", url: "/api/auth/logout", body: {} };
 
     case "c1":
       return { method: "GET", url: "/api/captcha" };
@@ -80,6 +85,11 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
         method: "POST",
         url: `/api/public/r/${param(payload, "shareKey")}/verify-password`,
         body: bodyOf(payload)
+      };
+    case "p3":
+      return {
+        method: "GET",
+        url: `/api/public/r/${param(payload, "shareKey")}`
       };
 
     case "d1":
@@ -144,12 +154,17 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       if (target(payload) === "site") return { method: "GET", url: "/api/settings/site" };
       if (target(payload) === "r2") return { method: "GET", url: "/api/settings/storage/r2" };
       if (target(payload) === "logs") return { method: "GET", url: "/api/settings/operation-logs" };
+      if (target(payload) === "systemStatus") return { method: "GET", url: "/api/settings/system/status" };
+      if (target(payload) === "systemExport") return { method: "GET", url: "/api/settings/system/export" };
       if (target(payload) === "settings") return { method: "GET", url: "/api/settings" };
       break;
     case "s2":
       if (target(payload) === "site") return { method: "POST", url: "/api/settings/site", body: bodyOf(payload) };
       if (target(payload) === "r2") return { method: "POST", url: "/api/settings/storage/r2", body: bodyOf(payload) };
       if (target(payload) === "r2Test") return { method: "POST", url: "/api/settings/storage/r2/test", body: bodyOf(payload) };
+      if (target(payload) === "systemAction") {
+        return { method: "POST", url: `/api/settings/system/actions/${param(payload, "action")}`, body: {} };
+      }
       if (target(payload) === "settings") return { method: "PATCH", url: "/api/settings", body: bodyOf(payload) };
       break;
 
@@ -165,6 +180,10 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       return { method: "POST", url: `/api/admin/users/${param(payload, "id")}/enable`, body: {} };
     case "u6":
       return { method: "DELETE", url: `/api/admin/users/${param(payload, "id")}` };
+    case "u7":
+      return { method: "GET", url: `/api/admin/users/${param(payload, "id")}/password` };
+    case "u8":
+      return { method: "POST", url: `/api/admin/users/${param(payload, "id")}/password`, body: bodyOf(payload) };
 
     case "f1":
       return { method: "GET", url: "/api/uploads/policy" };
@@ -199,9 +218,26 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       return { method: "GET", url: `/api/admin/docs/by-id/${param(payload, "id")}` };
     case "x2":
       return { method: "DELETE", url: `/api/admin/docs/by-id/${param(payload, "id")}` };
+
+    case "y1":
+      return { method: "GET", url: "/api/admin/security/totp/status" };
+    case "y2":
+      return { method: "POST", url: "/api/admin/security/totp/setup", body: {} };
+    case "y3":
+      return { method: "POST", url: "/api/admin/security/totp/enable", body: bodyOf(payload) };
+    case "y4":
+      return { method: "POST", url: "/api/admin/security/totp/disable", body: bodyOf(payload) };
+    case "y5":
+      return { method: "GET", url: "/api/admin/security/totp/recovery-codes" };
+    case "y6":
+      return { method: "POST", url: "/api/admin/security/totp/recovery-codes", body: bodyOf(payload) };
+    case "y7":
+      return { method: "POST", url: "/api/admin/security/totp/reset", body: bodyOf(payload) };
+    case "y8":
+      return { method: "POST", url: "/api/admin/security/danger-verify", body: bodyOf(payload) };
   }
 
-  throw new Error("Unknown gateway action.");
+  throw new BadRequestError("Unknown gateway action.", "INVALID_GATEWAY_ACTION");
 }
 
 function headerValue(request: FastifyRequest, name: string) {
@@ -254,7 +290,6 @@ export async function gatewayRoutes(app: FastifyInstance) {
     const contentType = Array.isArray(response.headers["content-type"])
       ? response.headers["content-type"][0]
       : response.headers["content-type"];
-
     return reply
       .code(response.statusCode)
       .send(parseInjectedPayload(response.body, contentType));

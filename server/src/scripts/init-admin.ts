@@ -4,6 +4,7 @@ import { migrate } from "../db/migrate.js";
 import { docs, shares, spaces, users } from "../db/schema.js";
 import { env } from "../config/env.js";
 import { now } from "../utils/date.js";
+import { encryptDocumentContent } from "../utils/documentCrypto.js";
 import { hashPassword } from "../utils/password.js";
 
 function flagEnabled(name: string): boolean {
@@ -72,18 +73,19 @@ async function main() {
 
   const existingShare111 = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.shareCode, 111)).limit(1));
   if (!existingShare111) {
+    const welcomeContentJson = JSON.stringify({
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "ChenDoc 已准备好" }] },
+        { type: "paragraph", content: [{ type: "text", text: "这是系统初始化创建的第一篇示例文档，你可以在后台编辑、发布或删除它。" }] }
+      ]
+    });
+    const welcomeContentHtml = "<h2>ChenDoc 已准备好</h2><p>这是系统初始化创建的第一篇示例文档，你可以在后台编辑、发布或删除它。</p>";
     const docId = Number((await dbRun(db.insert(docs).values({
       spaceId,
       parentId: null,
       title: "欢迎使用 ChenDoc",
-      contentJson: JSON.stringify({
-        type: "doc",
-        content: [
-          { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "ChenDoc 已准备好" }] },
-          { type: "paragraph", content: [{ type: "text", text: "这是系统初始化创建的第一篇示例文档，你可以在后台编辑、发布或删除它。" }] }
-        ]
-      }),
-      contentHtml: "<h2>ChenDoc 已准备好</h2><p>这是系统初始化创建的第一篇示例文档，你可以在后台编辑、发布或删除它。</p>",
+      ...encryptDocumentContent(welcomeContentJson, welcomeContentHtml),
       status: "published",
       sort: 0,
       createdBy: adminId,
@@ -95,6 +97,7 @@ async function main() {
     await dbRun(db.insert(shares).values({
       docId,
       shareCode: 111,
+      shareToken: "111",
       isEnabled: false,
       viewCount: 0,
       createdAt: now(),

@@ -1,0 +1,91 @@
+.native-dialog {
+  width: min(420px, calc(100vw - 32px));
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--cd-text);
+  padding: 0;
+}
+
+.native-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.native-dialog__panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--cd-border);
+  border-radius: 14px;
+  background: var(--cd-panel);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+  padding: 20px;
+}
+
+.native-dialog__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.native-dialog__head h2 {
+  margin: 0;
+  color: var(--cd-ink);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.native-dialog__head p {
+  margin: 6px 0 0;
+  color: var(--cd-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.native-dialog__close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cd-muted);
+}
+
+.native-dialog__close:hover {
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+}
+
+.native-dialog__fields {
+  display: grid;
+  gap: 12px;
+}
+
+.native-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.native-dialog.is-danger .native-dialog__panel {
+  border-color: #ffd6df;
+}
+
+@media (max-width: 520px) {
+  .native-dialog {
+    width: calc(100vw - 24px);
+  }
+
+  .native-dialog__panel {
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .native-dialog__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}

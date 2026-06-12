@@ -9,7 +9,7 @@ import fastifyStatic from "@fastify/static";
 import { env } from "./config/env.js";
 import { packGatewayReply, unpackGatewayRequest } from "./gateway/middleware.js";
 import { gatewayRoutes } from "./gateway/routes.js";
-import { registerErrorHandler } from "./middleware/error.js";
+import { registerErrorHandler } from "./plugins/error-handler.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { captchaRoutes } from "./modules/captcha/captcha.routes.js";
 import { cryptoRoutes } from "./modules/crypto/crypto.routes.js";
@@ -29,13 +29,22 @@ export async function buildApp() {
       redact: [
         "req.headers.authorization",
         "*.password",
+        "*.dangerPassword",
+        "*.otp",
+        "*.totp",
+        "*.recoveryCode",
+        "*.captcha",
         "*.payload",
         "*.encryptedData",
         "*.encryptedPassword",
         "*.secretAccessKey",
+        "*.secret",
+        "*.totpSecret",
+        "*.recoveryCodes",
         "*.accessKeyId",
         "*.sessionKey",
         "*.token",
+        "*.authorization",
         "*.key",
         "*.keyId",
         "*.data",
@@ -46,7 +55,7 @@ export async function buildApp() {
       ]
     },
     disableRequestLogging: env.nodeEnv === "production",
-    trustProxy: true
+    trustProxy: env.trustProxy
   });
 
   registerErrorHandler(app);
@@ -117,7 +126,6 @@ export async function buildApp() {
       prefix: "/",
       decorateReply: false,
       index: false,
-      wildcard: false,
       setHeaders: (res, pathName) => {
         if (/\.(?:avif|css|gif|jpe?g|js|png|svg|webp|woff2?)$/i.test(pathName)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");

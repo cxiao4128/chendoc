@@ -1,8 +1,8 @@
 .doc-tree {
-  width: 252px;
-  min-width: 252px;
+  width: 244px;
+  min-width: 244px;
   border-right: 1px solid var(--cd-border);
-  background: #fbfbfc;
+  background: #fbfdff;
   overflow-y: auto;
 }
 
@@ -15,8 +15,14 @@
   justify-content: space-between;
   min-height: 48px;
   border-bottom: 1px solid var(--cd-border);
-  background: #fbfbfc;
+  background: #fbfdff;
   padding: 0 12px 0 16px;
+}
+
+.doc-tree__head strong {
+  color: var(--cd-ink);
+  font-size: 15px;
+  font-weight: 900;
 }
 
 .doc-tree__head button {
@@ -25,8 +31,9 @@
   width: 32px;
   height: 32px;
   border: 1px solid var(--cd-border);
-  border-radius: 7px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
 }
 
 .doc-tree__item {
@@ -36,13 +43,14 @@
   gap: 8px;
   width: calc(100% - 12px);
   min-height: 38px;
-  border: 0;
-  border-radius: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   color: var(--cd-muted);
   margin: 4px 6px;
   padding: 0 10px;
   text-align: left;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out;
 }
 
 .doc-tree__item span {
@@ -58,12 +66,13 @@
 
 .doc-tree__item:hover,
 .doc-tree__item.active {
-  background: #fff;
-  color: var(--cd-text);
+  border-color: rgba(37, 99, 235, 0.22);
+  background: var(--cd-panel);
+  color: var(--cd-primary-hover);
 }
 
 .doc-tree__item.active {
-  box-shadow: inset 3px 0 0 var(--cd-accent);
+  background: var(--cd-primary-soft);
 }
 
 .doc-tree__loading {
@@ -95,7 +104,7 @@
     min-height: 48px;
     border: 1px solid var(--cd-border);
     border-radius: 8px;
-    background: #fff;
+    background: var(--cd-panel);
     padding: 0 8px 0 12px;
   }
 
@@ -109,14 +118,14 @@
     width: auto;
     min-height: 48px;
     border: 1px solid var(--cd-border);
-    background: #fff;
+    background: var(--cd-panel);
     margin: 0;
     padding: 0 11px;
   }
 
   .doc-tree__item.active {
-    border-color: var(--cd-accent);
-    box-shadow: inset 0 -3px 0 var(--cd-accent);
+    border-color: var(--cd-primary);
+    box-shadow: none;
   }
 
   .doc-tree__item small {

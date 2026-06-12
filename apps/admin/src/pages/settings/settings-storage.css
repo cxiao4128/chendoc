@@ -1,12 +1,15 @@
 .settings-storage-page {
-  max-width: 980px;
-  padding: 28px;
+  width: min(1040px, 100%);
+  padding: 32px clamp(22px, 3vw, 38px) 52px;
   min-width: 0;
 }
 
 .settings-storage-page__head h1 {
   margin: 0;
-  font-size: 24px;
+  color: var(--cd-ink);
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.08;
 }
 
 .settings-storage-page__head p {
@@ -21,6 +24,9 @@
   gap: 16px;
   margin-top: 22px;
   padding: 18px;
+  border-radius: 8px;
+  background: var(--cd-panel);
+  box-shadow: none;
 }
 
 .settings-storage-page__wide {
@@ -35,7 +41,7 @@
 
 .settings-storage-page__ok {
   border: 1px solid #b8dbc8;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #edf8f0;
   color: var(--cd-success);
   padding: 9px 11px;
@@ -45,6 +51,10 @@
   .settings-storage-page {
     max-width: none;
     padding: 18px 12px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .settings-storage-page__head h1 {
+    font-size: 30px;
   }
 
   .settings-storage-page__form {

@@ -1,17 +1,18 @@
 import { DeleteObjectCommand, GetBucketCorsCommand, HeadObjectCommand, PutBucketCorsCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { CORSRule, HeadObjectCommandOutput } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { extname } from "node:path";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { db, dbGet, dbRun } from "../../db/client.js";
-import { uploads } from "../../db/schema.js";
+import { docs, uploads } from "../../db/schema.js";
 import { createR2Client, getR2CorsAllowedOrigins } from "../../config/r2.js";
 import { env } from "../../config/env.js";
 import { assertR2Ready, type R2Config } from "../settings/settings.service.js";
 import { now } from "../../utils/date.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 
 const presignSchema = z.object({
   fileName: z.string().min(1).max(220),
@@ -28,6 +29,7 @@ const completeSchema = presignSchema.extend({
 });
 
 const uploadTokenSchema = z.object({
+  userId: z.number().int().positive(),
   objectKey: z.string().min(8).max(260),
   fileName: z.string().min(1).max(220),
   mimeType: z.string().min(3).max(120),
@@ -36,6 +38,7 @@ const uploadTokenSchema = z.object({
   docId: z.number().int().positive().nullable()
 });
 
+type Actor = { id: number; role: "admin" | "user" };
 type UploadKind = z.infer<typeof presignSchema>["kind"];
 type UploadPolicy = Record<UploadKind, {
   mimeByExtension: Record<string, string[]>;
@@ -200,22 +203,22 @@ function validateFile(body: z.infer<typeof presignSchema>) {
   const policy = uploadPolicy[body.kind];
   const ext = extname(body.fileName).toLowerCase();
   const allowedMime = policy.mimeByExtension[ext];
-  if (!allowedMime) throw new Error("文件后缀不允许");
-  if (!allowedMime.includes(normalizeMimeType(body.mimeType))) throw new Error("文件 MIME 类型与后缀不匹配");
-  if (body.size > policy.maxMb * 1024 * 1024) throw new Error("文件超过大小限制");
+  if (!allowedMime) throw new BadRequestError("文件后缀不允许", "UPLOAD_EXTENSION_NOT_ALLOWED");
+  if (!allowedMime.includes(normalizeMimeType(body.mimeType))) throw new BadRequestError("文件 MIME 类型与后缀不匹配", "UPLOAD_MIME_MISMATCH");
+  if (body.size > policy.maxMb * 1024 * 1024) throw new BadRequestError("文件超过大小限制", "UPLOAD_TOO_LARGE");
 }
 
 function validateCompletedObject(expected: z.infer<typeof uploadTokenSchema>, object: HeadObjectCommandOutput) {
   if (object.ContentLength !== expected.size) {
-    throw new Error("R2 对象大小与上传凭证不匹配");
+    throw new BadRequestError("R2 对象大小与上传凭证不匹配", "UPLOAD_SIZE_MISMATCH");
   }
 
   const actualMimeType = normalizeMimeType(object.ContentType ?? "");
   if (!actualMimeType) {
-    throw new Error("R2 对象缺少 Content-Type");
+    throw new BadRequestError("R2 对象缺少 Content-Type", "UPLOAD_CONTENT_TYPE_MISSING");
   }
   if (actualMimeType !== normalizeMimeType(expected.mimeType)) {
-    throw new Error("R2 对象 Content-Type 与上传凭证不匹配");
+    throw new BadRequestError("R2 对象 Content-Type 与上传凭证不匹配", "UPLOAD_CONTENT_TYPE_MISMATCH");
   }
   validateFile({ ...expected, mimeType: actualMimeType });
 }
@@ -240,9 +243,21 @@ function verifyUploadToken(token: string) {
   return uploadTokenSchema.parse(decoded);
 }
 
-export async function createPresignedUpload(input: unknown) {
+async function assertUploadDocAccess(docId: number | null | undefined, actor: Actor) {
+  if (!docId) return;
+  const doc = await dbGet<{ id: number; createdBy: number | null }>(db
+    .select({ id: docs.id, createdBy: docs.createdBy })
+    .from(docs)
+    .where(and(eq(docs.id, docId), isNull(docs.deletedAt)))
+    .limit(1));
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  if (actor.role !== "admin" && doc.createdBy !== actor.id) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+}
+
+export async function createPresignedUpload(userId: number, actor: Actor, input: unknown) {
   const body = normalizeUploadInput(presignSchema.parse(input));
   validateFile(body);
+  await assertUploadDocAccess(body.docId ?? null, actor);
   const config = await assertR2Ready();
   const client = createR2Client(config);
   await ensureBrowserUploadCors(config, client);
@@ -256,6 +271,7 @@ export async function createPresignedUpload(input: unknown) {
   const uploadUrl = await getSignedUrl(client, command, { expiresIn: 300 });
   const publicUrl = publicUrlFromKey(config, key);
   const uploadToken = signUploadToken({
+    userId,
     objectKey: key,
     fileName: body.fileName,
     mimeType: body.mimeType,
@@ -271,14 +287,17 @@ export async function createPresignedUpload(input: unknown) {
   };
 }
 
-export async function completeUpload(userId: number, input: unknown) {
+export async function completeUpload(userId: number, actor: Actor, input: unknown) {
   const body = normalizeUploadInput(completeSchema.parse(input));
   const tokenPayload = verifyUploadToken(body.uploadToken);
+  if (tokenPayload.userId !== userId) {
+    throw new ForbiddenError("上传凭证不属于当前用户", "UPLOAD_TOKEN_FORBIDDEN");
+  }
   if (body.objectKey && body.objectKey !== tokenPayload.objectKey) {
-    throw new Error("上传对象不匹配");
+    throw new BadRequestError("上传对象不匹配", "UPLOAD_OBJECT_MISMATCH");
   }
   if (!objectKeyPattern.test(tokenPayload.objectKey)) {
-    throw new Error("对象路径不正确");
+    throw new BadRequestError("对象路径不正确", "UPLOAD_OBJECT_KEY_INVALID");
   }
   if (
     body.fileName !== tokenPayload.fileName ||
@@ -287,9 +306,10 @@ export async function completeUpload(userId: number, input: unknown) {
     body.kind !== tokenPayload.kind ||
     (body.docId ?? null) !== tokenPayload.docId
   ) {
-    throw new Error("上传完成参数不匹配");
+    throw new BadRequestError("上传完成参数不匹配", "UPLOAD_COMPLETE_MISMATCH");
   }
 
+  await assertUploadDocAccess(tokenPayload.docId, actor);
   validateFile(tokenPayload);
   const config = await assertR2Ready();
   const client = createR2Client(config);

@@ -1,24 +1,65 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { Menu, Search } from "lucide-vue-next";
+import { Bell, ChevronDown, CircleHelp, Menu, Search, Sparkles } from "lucide-vue-next";
+import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
+import { getSystemStatusApi } from "../../api/settings";
+import logoUrl from "../../assets/chendoc-logo.png";
 import "./app-header.css";
 
 defineEmits<{ menu: [] }>();
 const router = useRouter();
-const { docsPath } = useWorkspaceRoutes();
+const { base, docsPath } = useWorkspaceRoutes();
+const { auth } = useAuth();
 const keyword = ref("");
+const notificationOpen = ref(false);
+const notificationLoading = ref(false);
+const pendingReviewCount = ref<number | null>(null);
 
 function search() {
   const value = keyword.value.trim();
   if (!value) return;
-  const shareCode = value.match(/[A-Za-z0-9_-]{3,64}/)?.[0];
-  if (shareCode && value.includes("/r")) {
+  const shareCode = value.match(/\/r\/(\d{3,7})/)?.[1];
+  const numericShareCode = shareCode ? Number(shareCode) : 0;
+  const isAdminShareCode = numericShareCode >= 111 && numericShareCode <= 9999;
+  const isUserShareCode = numericShareCode >= 1_000_000 && numericShareCode <= 9_999_999;
+  if (shareCode && (isAdminShareCode || isUserShareCode)) {
     window.open(`/r/${shareCode}`, "_blank", "noopener,noreferrer");
     return;
   }
   router.push({ path: docsPath.value, query: { q: value } });
+}
+
+function openTemplates() {
+  router.push(`${base.value}/templates`);
+}
+
+async function openNotifications() {
+  notificationOpen.value = true;
+  notificationLoading.value = true;
+  try {
+    pendingReviewCount.value = auth.canAccessAdmin ? (await getSystemStatusApi()).status.shares.pendingReview : 0;
+  } finally {
+    notificationLoading.value = false;
+  }
+}
+
+function closeNotifications() {
+  notificationOpen.value = false;
+}
+
+function goReview() {
+  notificationOpen.value = false;
+  router.push(auth.canAccessAdmin ? "/admin/share-reviews" : docsPath.value);
+}
+
+function openHelp() {
+  window.open("https://github.com/cxiao4128/chendoc#readme", "_blank", "noopener,noreferrer");
+}
+
+function openProfile() {
+  router.push(auth.canAccessAdmin ? "/admin/settings" : docsPath.value);
 }
 </script>
 
@@ -29,7 +70,35 @@ function search() {
     </button>
     <form class="app-header__search" @submit.prevent="search">
       <Search :size="16" />
-      <input v-model="keyword" aria-label="搜索文档" placeholder="搜索文档，或输入 /r/111" />
+      <input v-model="keyword" aria-label="搜索文档" placeholder="搜索文档、关键词、标签或 / 快捷命令" />
     </form>
+    <div class="app-header__actions" aria-label="快捷入口">
+      <button class="app-header__icon is-primary" type="button" aria-label="模板中心" @click="openTemplates">
+        <Sparkles :size="18" />
+      </button>
+      <div class="app-header__notify">
+        <button class="app-header__icon" type="button" aria-label="审核通知" @click="openNotifications">
+          <Bell :size="17" />
+        </button>
+        <div v-if="notificationOpen" class="app-header__notification" role="dialog" aria-label="审核消息">
+          <strong>审核消息</strong>
+          <p v-if="notificationLoading">正在读取审核消息</p>
+          <p v-else-if="pendingReviewCount">有 {{ pendingReviewCount }} 个分享需要审核</p>
+          <p v-else>暂无需要审核的分享</p>
+          <div>
+            <button v-if="pendingReviewCount" class="cd-button primary" type="button" @click="goReview">去审核</button>
+            <button class="cd-button" type="button" @click="closeNotifications">关闭</button>
+          </div>
+        </div>
+      </div>
+      <button class="app-header__icon" type="button" aria-label="帮助" @click="openHelp">
+        <CircleHelp :size="17" />
+      </button>
+      <button class="app-header__user" type="button" aria-label="当前用户" @click="openProfile">
+        <span><img :src="logoUrl" alt="" /></span>
+        <strong>{{ auth.user?.username || "xchen" }}</strong>
+        <ChevronDown :size="15" />
+      </button>
+    </div>
   </header>
 </template>

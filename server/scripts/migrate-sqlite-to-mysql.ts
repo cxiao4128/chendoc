@@ -56,8 +56,9 @@ const tablePlans: TablePlan[] = [
   },
   {
     name: "auth_sessions",
-    columns: ["id", "user_id", "key_encrypted", "expire_at", "created_at"],
-    dateColumns: ["expire_at", "created_at"]
+    columns: ["id", "user_id", "key_encrypted", "expire_at", "last_seen_at", "created_at"],
+    dateColumns: ["expire_at", "last_seen_at", "created_at"],
+    defaults: { last_seen_at: null }
   },
   {
     name: "docs",
@@ -72,7 +73,7 @@ const tablePlans: TablePlan[] = [
   {
     name: "shares",
     columns: [
-      "id", "doc_id", "share_code", "custom_slug", "password_hash", "is_enabled", "review_status", "review_note",
+      "id", "doc_id", "share_code", "share_token", "custom_slug", "password_hash", "is_enabled", "review_status", "review_note",
       "review_content_hash", "requested_by", "reviewed_by", "reviewed_at", "expire_at", "view_count", "created_at", "updated_at"
     ],
     dateColumns: ["reviewed_at", "expire_at", "created_at", "updated_at"],
@@ -237,7 +238,12 @@ function readRows(sqlite: Database.Database, plan: TablePlan) {
   const selectColumns = plan.columns.filter((column) => existingColumns.has(column));
   const rows = sqlite.prepare(`SELECT ${selectColumns.map(qi).join(", ")} FROM ${qi(plan.name)} ORDER BY ${existingColumns.has("id") ? "id" : "rowid"}`).all() as Record<string, unknown>[];
   return rows.map((row) => plan.columns.map((column) => {
-    const value = Object.prototype.hasOwnProperty.call(row, column) ? row[column] : plan.defaults?.[column] ?? null;
+    const fallback = column === "last_seen_at"
+      ? row.created_at
+      : column === "share_token"
+        ? row.share_code
+        : plan.defaults?.[column] ?? null;
+    const value = Object.prototype.hasOwnProperty.call(row, column) ? row[column] : fallback;
     return normalizeValue(plan, column, value);
   }));
 }

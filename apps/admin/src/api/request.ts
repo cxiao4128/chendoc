@@ -1,10 +1,11 @@
-import { buildAuthorization, clearAuthSession, getSessionId, saveAuthSession } from "../security/sessionToken";
+import { buildAuthorization, clearAuthSession, getAuthToken, saveAuthSession, shouldRefreshAuthSession } from "../security/sessionToken";
 import { buildClientRiskHeader } from "../security/runtimeGuard";
 import { gatewayClientRequest, shouldUseGateway } from "../gateway/client";
 import { apiPaths, isCredentialEndpoint, resolveApiPath } from "./endpoints";
 
 const DEFAULT_ERROR_MESSAGE = "请求失败";
 const LOGIN_NOTICE_KEY = "chendoc_login_notice";
+const LOGIN_REDIRECT_KEY = "chendoc_login_redirect";
 
 export class ApiError extends Error {
   status: number;
@@ -26,16 +27,14 @@ export function getApiErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESS
 }
 
 export function getToken() {
-  localStorage.removeItem("chendoc_token");
-  return getSessionId();
+  return getAuthToken();
 }
 
-export function setToken(sessionId: string, sessionKey: string) {
-  saveAuthSession(sessionId, sessionKey);
+export function setToken(token: string, expiresAt: string | number | Date) {
+  saveAuthSession(token, expiresAt);
 }
 
 export function clearToken() {
-  localStorage.removeItem("chendoc_token");
   clearAuthSession();
 }
 
@@ -50,21 +49,24 @@ function authMessageFromCode(code: string) {
   return "登录状态已失效，请重新登录";
 }
 
+function rememberLoginState(redirect: string, notice?: string) {
+  try {
+    if (redirect && redirect !== "/") window.sessionStorage.setItem(LOGIN_REDIRECT_KEY, redirect);
+    if (notice) window.sessionStorage.setItem(LOGIN_NOTICE_KEY, notice);
+  } catch {
+    // Session storage is optional; the clean login URL is the contract.
+  }
+}
+
 function redirectToLogin(url: string, code?: string, message?: string) {
   if (!shouldRedirectUnauthorized(url)) return;
   clearToken();
   if (typeof window === "undefined" || window.location.pathname === "/login") return;
 
   const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const params = new URLSearchParams();
-  if (current && current !== "/") params.set("redirect", current);
   const notice = code ? authMessageFromCode(code) : message;
-  if (notice) {
-    window.sessionStorage.setItem(LOGIN_NOTICE_KEY, notice);
-    params.set("message", notice);
-  }
-  const query = params.toString();
-  window.location.assign(`/login${query ? `?${query}` : ""}`);
+  rememberLoginState(current, notice);
+  window.location.assign("/login");
 }
 
 export async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -74,6 +76,7 @@ export async function request<T>(url: string, options: RequestInit = {}): Promis
   if (riskHeader) headers.set("X-Client-Risk", riskHeader);
 
   if (!isCredentialEndpoint(url)) {
+    if (shouldAutoRefresh(url)) await refreshAuthSession();
     const authorization = await buildAuthorization();
     if (authorization) headers.set("Authorization", authorization);
   }
@@ -96,6 +99,24 @@ export async function request<T>(url: string, options: RequestInit = {}): Promis
   }
 
   return payload as T;
+}
+
+function shouldAutoRefresh(url: string) {
+  const path = resolveApiPath(url);
+  return path !== "/api/auth/refresh" && path !== "/api/auth/logout" && shouldRefreshAuthSession();
+}
+
+let refreshInFlight: Promise<void> | null = null;
+
+async function refreshAuthSession() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const response = await request<{ token: string; expiresAt?: string | number | Date }>("/api/auth/refresh", { method: "POST" });
+    setToken(response.token, response.expiresAt || Date.now() + 2 * 60 * 60 * 1000);
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 async function directRequest(url: string, options: RequestInit, headers: Headers) {

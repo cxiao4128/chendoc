@@ -1,5 +1,6 @@
 .invite-page {
-  padding: 28px;
+  width: min(1180px, 100%);
+  padding: 32px clamp(22px, 3vw, 38px) 52px;
 }
 
 .invite-page.is-mobile {
@@ -9,34 +10,41 @@
 .invite-page__mobile-hero {
   display: grid;
   gap: 8px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  padding: 18px;
 }
 
 .invite-page__mobile-hero span {
-  color: #5f6f8c;
+  color: var(--cd-primary);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .invite-page__mobile-hero h1 {
   margin: 0;
-  color: #17243e;
-  font-size: 31px;
+  color: var(--cd-ink);
+  font-size: 30px;
+  font-weight: 900;
   line-height: 1.05;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .invite-page__mobile-hero p {
   margin: 0;
-  color: #5a6781;
+  color: var(--cd-muted);
   font-size: 14px;
   line-height: 1.55;
 }
 
 .invite-page h1 {
   margin: 0;
-  font-size: 24px;
+  color: var(--cd-ink);
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.08;
 }
 
 .invite-page p {
@@ -56,10 +64,9 @@
 .invite-page__tools.is-mobile {
   grid-template-columns: 1fr;
   gap: 14px;
-  border: 1px solid rgba(205, 213, 226, 0.96);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 34px rgba(24, 35, 58, 0.08);
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
   margin: 16px 0;
   padding: 18px;
 }
@@ -73,10 +80,9 @@
 .invite-page__mobile-card {
   display: grid;
   gap: 14px;
-  border: 1px solid rgba(205, 213, 226, 0.96);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 34px rgba(24, 35, 58, 0.08);
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
   padding: 16px;
 }
 
@@ -88,7 +94,7 @@
 }
 
 .invite-page__mobile-head code {
-  color: #17243e;
+  color: var(--cd-ink);
   font-size: 15px;
   font-weight: 700;
 }
@@ -101,18 +107,18 @@
 .invite-page__mobile-meta div {
   display: grid;
   gap: 4px;
-  border-top: 1px solid rgba(228, 232, 240, 0.92);
+  border-top: 1px solid var(--cd-border);
   padding-top: 10px;
 }
 
 .invite-page__mobile-meta small {
-  color: #6a7791;
+  color: var(--cd-muted);
   font-size: 12px;
   font-weight: 700;
 }
 
 .invite-page__mobile-meta span {
-  color: #34415c;
+  color: var(--cd-text);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
@@ -130,8 +136,8 @@
   gap: 6px;
   min-height: 40px;
   border: 1px solid var(--cd-border);
-  border-radius: 14px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--cd-panel);
   color: var(--cd-muted);
   padding: 0 8px;
   font-weight: 700;
@@ -141,7 +147,8 @@
   overflow-x: auto;
   border: 1px solid var(--cd-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--cd-panel);
+  box-shadow: none;
 }
 
 .invite-page__row {
@@ -153,6 +160,11 @@
   min-height: 48px;
   border-bottom: 1px solid var(--cd-border);
   padding: 0 12px;
+  transition: background-color 140ms ease-out;
+}
+
+.invite-page__row:not(.invite-page__row--head):hover {
+  background: #fbfdff;
 }
 
 .invite-page__row:last-child {
@@ -160,7 +172,7 @@
 }
 
 .invite-page__row--head {
-  background: #fbfbfc;
+  background: var(--cd-paper);
   color: var(--cd-muted);
   font-size: 13px;
   font-weight: 700;
@@ -180,7 +192,7 @@
 }
 
 .invite-page__status.is-used {
-  background: #edf0f3;
+  background: var(--cd-surface);
   color: var(--cd-muted);
 }
 
@@ -202,13 +214,13 @@
   width: 30px;
   height: 30px;
   border: 1px solid var(--cd-border);
-  border-radius: 7px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--cd-panel);
   color: var(--cd-muted);
 }
 
 .invite-page__actions button:hover {
-  background: var(--cd-bg);
+  background: var(--cd-accent-soft);
   color: var(--cd-text);
 }
 
@@ -234,12 +246,16 @@
 
 .invite-page__loading.is-mobile span {
   height: 160px;
-  border-radius: 24px;
+  border-radius: 8px;
 }
 
 @media (max-width: 760px) {
   .invite-page {
     padding: 20px 16px;
+  }
+
+  .invite-page h1 {
+    font-size: 30px;
   }
 
   .invite-page__tools {

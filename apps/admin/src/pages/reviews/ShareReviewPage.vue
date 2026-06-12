@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { Check, ExternalLink, RefreshCcw, Search, X } from "lucide-vue-next";
+import { useRouter } from "vue-router";
+import { Check, ClipboardCheck, ExternalLink, MoreHorizontal, RefreshCcw, Search, Send, ShieldCheck, X, XCircle } from "lucide-vue-next";
 import { listShareReviewsApi, reviewShareApi, type ShareReviewItem } from "../../api/shares";
 
+const router = useRouter();
 const shares = ref<ShareReviewItem[]>([]);
 const loading = ref(false);
 const keyword = ref("");
 const statusFilter = ref<"all" | "pending" | "approved" | "rejected">("pending");
+const scopeFilter = ref<"all" | "public" | "protected">("all");
+const dateFilter = ref<"all" | "today" | "week">("all");
+const riskFilter = ref<"all" | "normal" | "attention">("all");
+const sortMode = ref<"updatedDesc" | "createdDesc" | "titleAsc">("updatedDesc");
 const savingId = ref<number | null>(null);
 const editState = reactive<Record<number, { shareCode: string; note: string }>>({});
 
@@ -21,18 +27,44 @@ const filteredShares = computed(() => {
   const q = keyword.value.trim().toLowerCase();
   return shares.value.filter((item) => {
     if (statusFilter.value !== "all" && item.reviewStatus !== statusFilter.value) return false;
+    if (scopeFilter.value === "protected" && !item.hasPassword) return false;
+    if (scopeFilter.value === "public" && item.hasPassword) return false;
+    if (dateFilter.value === "today" && !isToday(item.createdAt || item.updatedAt)) return false;
+    if (dateFilter.value === "week" && !isRecentDays(item.createdAt || item.updatedAt, 7)) return false;
+    if (riskFilter.value === "normal" && riskLevel(item) !== "normal") return false;
+    if (riskFilter.value === "attention" && riskLevel(item) === "normal") return false;
     if (!q) return true;
     return (
       item.docTitle.toLowerCase().includes(q) ||
       String(item.shareCode).includes(q) ||
       (item.ownerName || "").toLowerCase().includes(q)
     );
+  }).sort((left, right) => {
+    if (sortMode.value === "titleAsc") return left.docTitle.localeCompare(right.docTitle, "zh-CN");
+    if (sortMode.value === "createdDesc") return new Date(right.createdAt || right.updatedAt || 0).getTime() - new Date(left.createdAt || left.updatedAt || 0).getTime();
+    return new Date(right.updatedAt || right.createdAt || 0).getTime() - new Date(left.updatedAt || left.createdAt || 0).getTime();
   });
 });
+
+const todayApplications = computed(() => shares.value.filter((item) => isToday(item.createdAt || item.updatedAt)).length);
+const recentReviews = computed(() => shares.value.filter((item) => item.reviewStatus !== "pending").slice(0, 4));
+const attentionCount = computed(() => shares.value.filter((item) => riskLevel(item) !== "normal").length);
 
 function statusCount(status: typeof statusOptions[number]["value"]) {
   if (status === "all") return shares.value.length;
   return shares.value.filter((item) => item.reviewStatus === status).length;
+}
+
+function isToday(value?: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  const today = new Date();
+  return date.toDateString() === today.toDateString();
+}
+
+function isRecentDays(value: string | null | undefined, days: number) {
+  if (!value) return false;
+  return Date.now() - new Date(value).getTime() <= days * 24 * 60 * 60 * 1000;
 }
 
 function statusText(status?: string) {
@@ -41,14 +73,31 @@ function statusText(status?: string) {
   return "待审核";
 }
 
-function statusClass(status?: string) {
-  if (status === "approved") return "is-approved";
-  if (status === "rejected") return "is-rejected";
-  return "is-pending";
+function formatDate(value?: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date(value));
 }
 
-function formatDate(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : "-";
+function riskLevel(item: ShareReviewItem) {
+  if (item.reviewStatus === "rejected") return "attention";
+  if (item.hasPassword) return "normal";
+  if (item.viewCount > 100) return "attention";
+  return "normal";
+}
+
+function riskText(item: ShareReviewItem) {
+  return riskLevel(item) === "normal" ? "正常" : "需关注";
+}
+
+function riskClass(item: ShareReviewItem) {
+  return riskLevel(item) === "normal" ? "is-approved" : "is-rejected";
 }
 
 function ensureEdit(item: ShareReviewItem) {
@@ -76,17 +125,35 @@ async function review(item: ShareReviewItem, action: "approve" | "reject") {
   if (item.reviewStatus !== "pending") return;
   const state = ensureEdit(item);
   const shareCode = Number(state.shareCode.trim());
+  const isUserShareCode = Number.isInteger(shareCode) && shareCode >= 1_000_000 && shareCode <= 9_999_999;
   savingId.value = item.id;
   try {
     await reviewShareApi(item.id, {
       action,
-      shareCode: Number.isInteger(shareCode) && shareCode > 0 ? shareCode : item.shareCode,
+      shareCode: isUserShareCode ? shareCode : item.shareCode,
       note: state.note.trim() || null
     });
     await load();
   } finally {
     savingId.value = null;
   }
+}
+
+function resetFilters() {
+  statusFilter.value = "all";
+  scopeFilter.value = "all";
+  dateFilter.value = "all";
+  riskFilter.value = "all";
+  sortMode.value = "updatedDesc";
+  keyword.value = "";
+}
+
+function openMore(item: ShareReviewItem) {
+  if (item.reviewStatus === "approved" && item.shareCode) {
+    window.open(`/r/${item.shareCode}`, "_blank", "noopener,noreferrer");
+    return;
+  }
+  router.push(`/admin/docs/${item.docId}`);
 }
 
 onMounted(load);
@@ -96,18 +163,20 @@ onMounted(load);
   <section class="share-review-page">
     <header class="share-review-page__head">
       <div>
-        <h1>分享审核</h1>
-        <p>只审核普通用户文档。管理员自己的文档不会进入这里。</p>
+        <h1>分享审核 <span aria-hidden="true">✦</span></h1>
+        <p>所有公开分享申请在此进行安全审核，保障文档合规与安全。</p>
       </div>
       <button class="cd-button" type="button" :disabled="loading" @click="load">
         <RefreshCcw :size="16" />刷新
       </button>
     </header>
 
-    <form class="share-review-page__search" @submit.prevent>
-      <Search :size="16" />
-      <input v-model.trim="keyword" placeholder="搜索文档、用户或分享数字" />
-    </form>
+    <div class="share-review-page__stats">
+      <article><span><ClipboardCheck :size="28" /></span><b>待审核</b><strong>{{ statusCount("pending") }}</strong><small>来自真实分享申请</small></article>
+      <article><span><Send :size="28" /></span><b>今日申请</b><strong>{{ todayApplications }}</strong><small>按 createdAt 统计</small></article>
+      <article><span class="is-green"><ShieldCheck :size="28" /></span><b>已通过</b><strong>{{ statusCount("approved") }}</strong><small>当前审核结果</small></article>
+      <article><span class="is-red"><XCircle :size="28" /></span><b>需关注</b><strong>{{ attentionCount }}</strong><small>拒绝或高访问分享</small></article>
+    </div>
 
     <div class="share-review-page__filters" role="tablist" aria-label="审核状态">
       <button
@@ -122,54 +191,54 @@ onMounted(load);
       </button>
     </div>
 
-    <div v-if="loading" class="share-review-page__loading">
-      <span v-for="item in 5" :key="item" class="cd-skeleton" />
-    </div>
+    <div class="share-review-page__layout">
+      <main class="share-review-page__main-panel">
+        <form class="share-review-page__search" @submit.prevent>
+          <label>分享范围<select v-model="scopeFilter"><option value="all">全部范围</option><option value="public">公开分享</option><option value="protected">密码保护</option></select></label>
+          <label>提交时间<select v-model="dateFilter"><option value="all">全部时间</option><option value="today">今天</option><option value="week">7 天内</option></select></label>
+          <label>风险等级<select v-model="riskFilter"><option value="all">全部风险</option><option value="normal">正常</option><option value="attention">需关注</option></select></label>
+          <label>排序<select v-model="sortMode"><option value="updatedDesc">更新时间（最新）</option><option value="createdDesc">提交时间（最新）</option><option value="titleAsc">文档标题</option></select></label>
+          <button class="cd-button" type="button" @click="resetFilters"><Search :size="16" />重置</button>
+          <input v-model.trim="keyword" aria-label="搜索文档、用户或分享数字" placeholder="搜索文档、用户或分享数字" />
+        </form>
 
-    <div v-else-if="!filteredShares.length" class="share-review-page__empty">
-      <strong>暂无审核项</strong>
-      <span>普通用户申请公开分享后，会出现在这里。</span>
-    </div>
-
-    <div v-else class="share-review-page__list">
-      <article v-for="item in filteredShares" :key="item.id" class="share-review-page__item">
-        <div class="share-review-page__main">
-          <span class="share-review-page__status" :class="statusClass(item.reviewStatus)">
-            {{ statusText(item.reviewStatus) }}
-          </span>
-          <h2>{{ item.docTitle }}</h2>
-          <p>
-            <span>用户：{{ item.ownerName || item.ownerId || "未知" }}</span>
-            <span>申请：{{ formatDate(item.updatedAt) }}</span>
-            <span>访问：{{ item.viewCount }}</span>
-          </p>
-          <RouterLink class="cd-button" :to="`/admin/docs/${item.docId}`">
-            <ExternalLink :size="16" />阅读和编辑文档
-          </RouterLink>
+        <div v-if="loading" class="share-review-page__loading">
+          <span v-for="item in 5" :key="item" class="cd-skeleton" />
         </div>
 
-        <div class="share-review-page__form">
-          <label>
-            <span>分享数字</span>
-            <input v-model.trim="ensureEdit(item).shareCode" inputmode="numeric" :disabled="item.reviewStatus !== 'pending'" />
-          </label>
-          <label>
-            <span>审核备注</span>
-            <input v-model.trim="ensureEdit(item).note" placeholder="驳回时建议说明原因" :disabled="item.reviewStatus !== 'pending'" />
-          </label>
-          <div v-if="item.reviewStatus === 'pending'" class="share-review-page__actions">
-            <button class="cd-button primary" type="button" :disabled="savingId === item.id" @click="review(item, 'approve')">
-              <Check :size="16" />通过并发布
-            </button>
-            <button class="cd-button danger" type="button" :disabled="savingId === item.id" @click="review(item, 'reject')">
-              <X :size="16" />驳回
-            </button>
+        <div v-else-if="!filteredShares.length" class="share-review-page__empty">
+          <strong>暂无审核项</strong>
+          <span>普通用户申请公开分享后，会出现在这里。</span>
+        </div>
+
+        <div v-else class="share-review-page__table">
+          <div class="share-review-page__table-head">
+            <span></span><span>文档名称</span><span>申请人</span><span>原始位置</span><span>提交时间</span><span>分享范围</span><span>风险等级</span><span>备注</span><span>操作</span>
           </div>
-          <p v-else class="share-review-page__locked">
-            {{ item.reviewStatus === "approved" ? "文档已通过，不可重复点击审核。" : "文档未通过，用户更新文档内容后才可再次提交。" }}
-          </p>
+          <article v-for="item in filteredShares" :key="item.id">
+            <label><input type="checkbox" /></label>
+            <strong>{{ item.docTitle }}</strong>
+            <span>{{ item.ownerName || item.ownerId || "未知" }}</span>
+            <span>/文档中心/{{ item.shareCode }}</span>
+            <span>{{ formatDate(item.updatedAt) }}</span>
+            <span class="is-scope">{{ item.hasPassword ? "密码保护" : "公开分享" }}</span>
+            <span class="share-review-page__status" :class="riskClass(item)">{{ riskText(item) }}</span>
+            <span>{{ item.reviewNote || "待审核说明" }}</span>
+            <div class="share-review-page__actions">
+              <RouterLink class="cd-button" :to="`/admin/docs/${item.docId}`"><ExternalLink :size="14" />查看文档</RouterLink>
+              <button v-if="item.reviewStatus === 'pending'" class="cd-button" type="button" :disabled="savingId === item.id" @click="review(item, 'approve')"><Check :size="14" />通过</button>
+              <button v-if="item.reviewStatus === 'pending'" class="cd-button" type="button" :disabled="savingId === item.id" @click="review(item, 'reject')"><X :size="14" />驳回</button>
+              <button type="button" aria-label="更多" @click="openMore(item)"><MoreHorizontal :size="16" /></button>
+            </div>
+          </article>
         </div>
-      </article>
+      </main>
+
+      <aside class="share-review-page__aside">
+        <section><strong>审核规则 / 风险提示 <button type="button" @click="riskFilter = 'attention'">查看全部</button></strong><p>密码保护：正常</p><p>拒绝记录：需关注</p><p>访问量超过 100：需关注</p></section>
+        <section><strong>最近审核动态 <button type="button" @click="statusFilter = 'all'">查看全部</button></strong><p v-for="item in recentReviews" :key="item.id">{{ statusText(item.reviewStatus) }}：{{ item.docTitle }}</p><p v-if="!recentReviews.length">暂无审核动态</p></section>
+        <section><strong>审核统计</strong><div class="share-review-page__donut"><span>总计<br />{{ shares.length }}</span></div></section>
+      </aside>
     </div>
   </section>
 </template>

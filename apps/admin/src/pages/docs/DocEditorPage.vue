@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { ArrowLeft, BookOpen, Copy, ExternalLink, Link2, PanelRightOpen, RefreshCw, RotateCcw, Trash2, X } from "lucide-vue-next";
-import ChendocEditor from "../../components/editor/ChendocEditor.vue";
 import DocTree from "../../components/docs/DocTree.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
+import { nativeConfirm } from "../../services/nativeDialog";
 import { deleteDocApi, listDocVersionsApi, restoreDocVersionApi, type DocVersion } from "../../api/docs";
 import { createShareApi, getShareByDocApi, updateShareApi, type ShareItem, type SharePatch } from "../../api/shares";
 import { useAuthStore } from "../../stores/auth";
@@ -22,6 +22,24 @@ interface TocItem {
 type DocStoreCompat = {
   detailError?: unknown;
 };
+
+const EditorLoadingSkeleton = {
+  name: "EditorLoadingSkeleton",
+  setup() {
+    return () => h("div", { class: "doc-editor-page__editor-skeleton", "aria-label": "编辑器加载中" }, [
+      h("span", { class: "cd-skeleton" }),
+      h("span", { class: "cd-skeleton" }),
+      h("span", { class: "cd-skeleton" }),
+      h("span", { class: "cd-skeleton" })
+    ]);
+  }
+};
+
+const ChendocEditor = defineAsyncComponent({
+  loader: () => import("../../components/editor/ChendocEditor.vue"),
+  loadingComponent: EditorLoadingSkeleton,
+  delay: 120
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -45,7 +63,6 @@ const versions = ref<DocVersion[]>([]);
 const editorRefresh = ref(0);
 const shareEnabled = ref(false);
 const sharePassword = ref("");
-const shareSlug = ref("");
 const shareCodeInput = ref("");
 const shareStatus = ref("");
 const shareHasPassword = ref(false);
@@ -68,7 +85,7 @@ const detailErrorText = computed(() => normalizeError((docs as unknown as DocSto
 const saveErrorText = computed(() => saveError.value || "保存失败，当前编辑内容仍保留在本地。");
 const shareUrl = computed(() => {
   if (!share.value?.isEnabled) return "";
-  return `${location.origin}/r/${share.value.customSlug || share.value.shareCode}`;
+  return `${location.origin}/r/${share.value.shareCode}`;
 });
 const shareReviewText = computed(() => {
   if (!share.value?.reviewStatus || share.value.reviewStatus === "approved") return "";
@@ -85,7 +102,7 @@ const saveText = computed(() => {
 const mobileSheetTitle = computed(() => {
   if (mobileSheet.value === "docs") return "切换文档";
   if (mobileSheet.value === "toc") return "目录导航";
-  if (mobileSheet.value === "share") return "分享设置";
+  if (mobileSheet.value === "share") return "发布设置";
   if (mobileSheet.value === "versions") return "历史版本";
   return "";
 });
@@ -155,7 +172,6 @@ async function loadShare(docIdValue: number) {
   share.value = response.share;
   syncingShare = true;
   shareEnabled.value = !!share.value?.isEnabled || (!auth.isAdmin && share.value?.reviewStatus === "pending");
-  shareSlug.value = share.value?.customSlug || "";
   shareCodeInput.value = share.value?.shareCode ? String(share.value.shareCode) : "";
   sharePassword.value = "";
   shareHasPassword.value = !!share.value?.hasPassword;
@@ -321,7 +337,6 @@ async function saveShare(passwordConfirmed = false, clearPassword = false) {
     if (passwordConfirmed && sharePassword.value.trim()) patch.password = sharePassword.value.trim();
     if (clearPassword) patch.password = null;
     if (auth.isAdmin) {
-      patch.customSlug = shareSlug.value.trim() || null;
       const shareCode = Number(shareCodeInput.value.trim());
       patch.shareCode = Number.isInteger(shareCode) && shareCode > 0 ? shareCode : null;
     }
@@ -330,7 +345,6 @@ async function saveShare(passwordConfirmed = false, clearPassword = false) {
     share.value = response.share;
     syncingShare = true;
     shareEnabled.value = !!share.value?.isEnabled || (!auth.isAdmin && share.value?.reviewStatus === "pending");
-    shareSlug.value = share.value?.customSlug || "";
     shareCodeInput.value = share.value?.shareCode ? String(share.value.shareCode) : "";
     shareHasPassword.value = !!share.value?.hasPassword;
     sharePassword.value = "";
@@ -439,7 +453,7 @@ watch(() => route.fullPath, () => {
   mobileSheet.value = null;
 });
 watch(title, markDirty);
-watch([shareEnabled, shareSlug, shareCodeInput], scheduleShareSave);
+watch([shareEnabled, shareCodeInput], scheduleShareSave);
 
 onMounted(() => {
   void load();
@@ -451,7 +465,12 @@ onBeforeRouteLeave(async (_to, _from, next) => {
     next();
     return;
   }
-  if (window.confirm("当前文档还有未保存内容，确定离开吗？")) {
+  const confirmed = await nativeConfirm({
+    title: "离开编辑器",
+    message: "当前文档还有未保存内容，确定保存后离开吗？",
+    confirmText: "保存并离开"
+  });
+  if (confirmed) {
     await flushPendingSave();
     if (dirty.value) next(false);
     else next();
@@ -505,7 +524,7 @@ onBeforeUnmount(() => {
 
         <div v-if="saveState === 'error'" class="doc-editor-page__save-error is-mobile">
           <span>{{ saveErrorText }}</span>
-          <button class="cd-button primary" type="button" :disabled="saveState === 'saving' || !dirty" @click="retrySave">
+          <button class="cd-button primary" type="button" :disabled="!dirty" @click="retrySave">
             <RefreshCw :size="16" />重试保存
           </button>
         </div>
@@ -513,7 +532,7 @@ onBeforeUnmount(() => {
         <div class="doc-editor-page__mobile-actions">
           <button type="button" @click="mobileSheet = 'docs'">
             <BookOpen :size="18" />
-            <span>文档库</span>
+            <span>文档</span>
           </button>
           <button type="button" @click="mobileSheet = 'toc'">
             <Link2 :size="18" />
@@ -593,11 +612,7 @@ onBeforeUnmount(() => {
             </label>
             <label v-if="auth.isAdmin">
               <span>分享数字</span>
-              <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="例如 12345678" />
-            </label>
-            <label v-if="auth.isAdmin">
-              <span>自定义短链接</span>
-              <input v-model.trim="shareSlug" placeholder="留空默认使用数字链接" />
+              <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="888 / 1234567" />
             </label>
             <label>
               <span>访问密码</span>
@@ -685,7 +700,7 @@ onBeforeUnmount(() => {
             <input v-model="title" class="doc-editor-page__title" aria-label="文档标题" />
             <span class="doc-editor-page__save" :class="`is-${saveState}`">{{ saveText }}</span>
             <button class="cd-button" :class="{ primary: sharePanelOpen }" type="button" @click="sharePanelOpen = !sharePanelOpen">
-              <PanelRightOpen :size="16" />分享设置
+              <PanelRightOpen :size="16" />分享
             </button>
             <button class="cd-button" type="button" :disabled="shareLoading" @click="copyShare">
               <Copy :size="16" />{{ copied ? "已复制" : "复制链接" }}
@@ -700,7 +715,7 @@ onBeforeUnmount(() => {
 
           <div v-if="saveState === 'error'" class="doc-editor-page__save-error">
             <span>{{ saveErrorText }}</span>
-            <button class="cd-button primary" type="button" :disabled="saveState === 'saving' || !dirty" @click="retrySave">
+            <button class="cd-button primary" type="button" :disabled="!dirty" @click="retrySave">
               <RefreshCw :size="16" />重试保存
             </button>
           </div>
@@ -725,11 +740,7 @@ onBeforeUnmount(() => {
                 </label>
                 <label v-if="auth.isAdmin">
                   <span>分享数字</span>
-                  <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="例如 12345678" />
-                </label>
-                <label v-if="auth.isAdmin">
-                  <span>自定义短链接</span>
-                  <input v-model.trim="shareSlug" placeholder="留空默认使用数字链接" />
+                  <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="888 / 1234567" />
                 </label>
                 <label>
                   <span>访问密码</span>

@@ -1,11 +1,23 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { homeForUser, isAdminPath, isUsersPath } from "./access";
 
+const LOGIN_REDIRECT_KEY = "chendoc_login_redirect";
+
+function rememberLoginRedirect(path: string) {
+  if (!path || path === "/" || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(LOGIN_REDIRECT_KEY, path);
+  } catch {
+    // Session storage is optional; keep /login clean either way.
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/", component: () => import("../pages/login/LoginPage.vue") },
     { path: "/login", component: () => import("../pages/login/LoginPage.vue"), meta: { public: true } },
+    { path: "/forgot-password", component: () => import("../pages/login/ForgotPasswordPage.vue"), meta: { public: true } },
     { path: "/register", component: () => import("../pages/register/RegisterPage.vue"), meta: { public: true } },
     {
       path: "/admin",
@@ -16,8 +28,11 @@ const router = createRouter({
         { path: "docs", component: () => import("../pages/docs/DocListPage.vue") },
         { path: "docs/:id", component: () => import("../pages/docs/DocEditorPage.vue") },
         { path: "trash", component: () => import("../pages/docs/TrashPage.vue"), meta: { admin: true } },
+        { path: "templates", component: () => import("../pages/docs/TemplateCenterPage.vue") },
+        { path: "knowledge", component: () => import("../pages/docs/KnowledgeBasePage.vue") },
         { path: "invites", component: () => import("../pages/invites/InvitePage.vue"), meta: { admin: true } },
         { path: "share-reviews", component: () => import("../pages/reviews/ShareReviewPage.vue"), meta: { admin: true } },
+        { path: "security", component: () => import("../pages/settings/SecurityCenterPage.vue"), meta: { admin: true } },
         { path: "settings", component: () => import("../pages/settings/SettingsPage.vue"), meta: { admin: true } },
         { path: "settings/storage", component: () => import("../pages/settings/SettingsStoragePage.vue"), meta: { admin: true } },
         { path: "article-delete", component: () => import("../pages/danger/DangerPage.vue"), meta: { admin: true } },
@@ -32,7 +47,9 @@ const router = createRouter({
         { path: "", redirect: "/users/docs" },
         { path: "docs", component: () => import("../pages/docs/DocListPage.vue") },
         { path: "docs/:id", component: () => import("../pages/docs/DocEditorPage.vue") },
-        { path: "trash", component: () => import("../pages/docs/TrashPage.vue") }
+        { path: "trash", component: () => import("../pages/docs/TrashPage.vue") },
+        { path: "templates", component: () => import("../pages/docs/TemplateCenterPage.vue") },
+        { path: "knowledge", component: () => import("../pages/docs/KnowledgeBasePage.vue") }
       ]
     }
   ]
@@ -41,7 +58,11 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const { useAuthStore } = await import("../stores/auth");
   const auth = useAuthStore();
-  if (!auth.ready && auth.token) await auth.fetchMe();
+  if (!auth.ready) await auth.fetchMe();
+
+  if (to.path === "/login" && (Object.keys(to.query).length > 0 || to.hash)) {
+    return { path: "/login", replace: true };
+  }
 
   if (to.path === "/") {
     return auth.user ? homeForUser(auth.user) : "/login";
@@ -52,7 +73,8 @@ router.beforeEach(async (to) => {
   }
 
   if ((to.meta.auth || isAdminPath(to.path) || isUsersPath(to.path)) && !auth.user) {
-    return { path: "/login", query: { redirect: to.fullPath } };
+    rememberLoginRedirect(to.fullPath);
+    return "/login";
   }
 
   if (auth.user && isAdminPath(to.path) && !auth.canAccessAdmin) {

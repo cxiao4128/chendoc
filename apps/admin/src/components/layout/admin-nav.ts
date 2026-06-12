@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, Settings, Trash2 } from "lucide-vue-next";
+import { BookOpen, ClipboardCheck, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
 import type { WorkspaceBase } from "../../router/access";
 
 export interface AdminNavItem {
@@ -18,12 +18,17 @@ export const adminNavItems: AdminNavItem[] = [
   { to: "/admin/docs", label: "文档", icon: BookOpen },
   { to: "/admin/trash", label: "回收站", icon: Trash2, adminOnly: true },
   { to: "/admin/share-reviews", label: "审核", icon: ClipboardCheck, adminOnly: true },
-  { to: "/admin/settings", label: "系统设置", icon: Settings, adminOnly: true }
+  { to: "/admin/security", label: "安全中心", icon: ShieldCheck, adminOnly: true },
+  { to: "/admin/templates", label: "模板中心", icon: BookOpen },
+  { to: "/admin/knowledge", label: "知识库", icon: BookOpen },
+  { to: "/admin/settings", label: "系统管理", icon: Settings, adminOnly: true }
 ];
 
 export const userNavItems: AdminNavItem[] = [
   { to: "/users/docs", label: "文档", icon: BookOpen },
-  { to: "/users/trash", label: "回收站", icon: Trash2 }
+  { to: "/users/trash", label: "回收站", icon: Trash2 },
+  { to: "/users/templates", label: "模板中心", icon: BookOpen },
+  { to: "/users/knowledge", label: "知识库", icon: BookOpen }
 ];
 
 export function getWorkspaceNavItems(base: WorkspaceBase, canAccessAdmin: boolean) {
@@ -40,33 +45,57 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
 
   if (/^\/admin\/docs\/\d+/.test(normalizedPath)) {
     return {
-      eyebrow: "专注编辑",
-      title: "文档工作台",
-      description: "把文档切换、目录、历史和分享收进侧边面板，手机上也能像原生编辑器一样顺手。"
+      eyebrow: "编辑",
+      title: "编辑器",
+      description: "编辑、目录、版本、分享。"
     };
   }
 
   if (normalizedPath.startsWith("/admin/docs")) {
     return {
-      eyebrow: "内容中心",
-      title: "文档空间",
-      description: "快速搜索、切换和接力编辑最近文档，手机端继续保持轻量、原生的浏览手感。"
+      eyebrow: "ChenDoc",
+      title: "文档",
+      description: "文档、状态、分享。"
     };
   }
 
   if (normalizedPath.startsWith("/admin/invites")) {
     return {
-      eyebrow: "账户入口",
+      eyebrow: "账号准入",
       title: "邀请码",
-      description: "批量生成、复制和管理邀请码，手机上也能直接处理分享与发放。"
+      description: "注册卡密。"
     };
   }
 
   if (normalizedPath.startsWith("/admin/share-reviews")) {
     return {
-      eyebrow: "用户发布",
-      title: "分享审核",
-      description: "审核普通用户提交的公开分享，确认后再对外发布。"
+      eyebrow: "内容发布",
+      title: "发布审核",
+      description: "公开分享审核。"
+    };
+  }
+
+  if (normalizedPath.startsWith("/admin/security")) {
+    return {
+      eyebrow: "账户安全",
+      title: "安全中心",
+      description: "双因素认证、恢复码、危险操作验证。"
+    };
+  }
+
+  if (normalizedPath.startsWith("/admin/templates")) {
+    return {
+      eyebrow: "模板",
+      title: "模板中心",
+      description: "模板创建真实文档。"
+    };
+  }
+
+  if (normalizedPath.startsWith("/admin/knowledge")) {
+    return {
+      eyebrow: "知识",
+      title: "知识库",
+      description: "已发布和已分享文档。"
     };
   }
 
@@ -74,15 +103,15 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     return {
       eyebrow: "存储配置",
       title: "R2 对象存储",
-      description: "账号、端点和连通性测试都整理成单页流程，手机上不用来回跳配置页。"
+      description: "对象存储。"
     };
   }
 
   if (normalizedPath.startsWith("/admin/settings")) {
     return {
-      eyebrow: "后台管理",
-      title: "系统设置",
-      description: "站点外观、登录资源和后台配置都拆成更适合手机操作的分层结构。"
+      eyebrow: "产品控制",
+      title: "控制中心",
+      description: "品牌、账号、存储、日志、版本。"
     };
   }
 
@@ -90,21 +119,21 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
     return {
       eyebrow: "回收站",
       title: "恢复中心",
-      description: "删除后的内容集中保留，恢复和彻底删除都更清晰，避免手机端误触。"
+      description: "恢复、删除。"
     };
   }
 
   if (normalizedPath.startsWith("/admin/article-delete") || normalizedPath.startsWith("/admin/danger")) {
     return {
       eyebrow: "高风险操作",
-      title: "文章删除",
-      description: "保留明确的确认链路，让关键删除操作在手机端也不会显得仓促。"
+      title: "文档删除",
+      description: "受控删除。"
     };
   }
 
   return {
-    eyebrow: "内容中心",
-    title: "文档空间",
-    description: "快速搜索、切换和接力编辑最近文档，手机端继续保持轻量、原生的浏览手感。"
+    eyebrow: "ChenDoc",
+    title: "文档",
+    description: "文档。"
   };
 }

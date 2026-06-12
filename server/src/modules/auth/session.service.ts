@@ -1,18 +1,14 @@
-import { createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { eq, lt } from "drizzle-orm";
-import { z } from "zod";
-import { env } from "../../config/env.js";
 import { db, dbGet, dbRun } from "../../db/client.js";
 import { authSessions } from "../../db/schema.js";
-import { decryptValue, encryptValue } from "../../utils/crypto.js";
+import { jwtExpiresAt, signJwt, verifyJwt, type JwtUser } from "../../config/jwt.js";
 import { now } from "../../utils/date.js";
+import { decryptValue, encryptValue } from "../../utils/crypto.js";
+import { env } from "../../config/env.js";
 
 const MIN_AUTH_SESSION_MS = 60 * 60 * 1000;
-
-const authPayloadSchema = z.object({
-  sid: z.string().min(8),
-  t: z.number().int().positive()
-});
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 function parseDurationMs(value: string) {
   const match = value.trim().match(/^(\d+)\s*(ms|s|m|h|d)?$/i);
@@ -29,90 +25,116 @@ function parseDurationMs(value: string) {
   return Math.max(amount * multipliers[unit], MIN_AUTH_SESSION_MS);
 }
 
-function base64UrlDecode(value: string) {
+function tokenDigest(token: string) {
+  return `jwt:${createHash("sha256").update(token).digest("hex")}`;
+}
+
+function base64ToBase64url(value: string) {
+  return value.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64urlToBase64(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = "=".repeat((4 - normalized.length % 4) % 4);
-  return Buffer.from(normalized + padding, "base64");
+  return normalized + "=".repeat((4 - normalized.length % 4) % 4);
 }
 
-function uuidFromBytes(bytes: Buffer) {
-  const hex = bytes.toString("hex");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20)
-  ].join("-");
+function encryptJwtForClient(token: string) {
+  const [version, iv, tag, body] = encryptValue(token, env.configEncryptionKey).split(":");
+  if (version !== "v1" || !iv || !tag || !body) throw new Error("Unable to encrypt auth token.");
+  return ["CDJ1", iv, tag, body].map((part, index) => index === 0 ? part : base64ToBase64url(part)).join(".");
 }
 
-function deriveAuthIv(key: Buffer, sessionId: string, nonce: Buffer) {
-  return createHash("sha256")
-    .update("chendoc-auth-iv-v1")
-    .update(sessionId)
-    .update(nonce)
-    .update(key)
-    .digest()
-    .subarray(0, 12);
+function decryptJwtFromClient(token: string) {
+  const parts = token.split(".");
+  if (parts.length !== 4 || parts[0] !== "CDJ1") {
+    throw new Error("Invalid authorization token.");
+  }
+  return decryptValue(`v1:${base64urlToBase64(parts[1]!)}:${base64urlToBase64(parts[2]!)}:${base64urlToBase64(parts[3]!)}`, env.configEncryptionKey);
 }
 
-function decryptAuthPayload(key: Buffer, sessionId: string, nonce: Buffer, raw: Buffer) {
-  if (raw.length <= 16) throw new Error("Invalid authorization payload.");
-
-  const ciphertext = raw.subarray(0, -16);
-  const tag = raw.subarray(-16);
-  const decipher = createDecipheriv("aes-256-gcm", key, deriveAuthIv(key, sessionId, nonce));
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+function bearerToken(header: string) {
+  const match = header.trim().match(/^Bearer\s+(.+)$/i);
+  if (!match) throw new Error("Invalid authorization header.");
+  return match[1]!.trim();
 }
 
-export async function createAuthSession(userId: number) {
+function fallbackExpireAt() {
+  return new Date(Date.now() + parseDurationMs(env.jwtExpiresIn));
+}
+
+export async function createAuthSession(user: Omit<JwtUser, "exp" | "iat" | "jti">) {
   const sessionId = randomUUID();
-  const sessionKey = randomBytes(32).toString("base64");
+  const jwtToken = signJwt(user, sessionId);
+  const expireAt = jwtExpiresAt(jwtToken) ?? fallbackExpireAt();
   const createdAt = now();
-  const expireAt = new Date(createdAt.getTime() + parseDurationMs(env.jwtExpiresIn));
 
   await dbRun(db.insert(authSessions).values({
     id: sessionId,
-    userId,
-    keyEncrypted: encryptValue(sessionKey, env.configEncryptionKey),
+    userId: user.id,
+    keyEncrypted: tokenDigest(jwtToken),
     expireAt,
+    lastSeenAt: createdAt,
     createdAt
   }));
 
-  return { sessionId, sessionKey };
+  return { token: encryptJwtForClient(jwtToken), expiresAt: expireAt };
 }
 
-export async function verifyAuthSessionHeader(header: string) {
-  const raw = base64UrlDecode(header.trim());
-  if (raw.length <= 33 || raw[0] !== 1) {
-    throw new Error("Invalid authorization payload.");
+export async function renewAuthSession(sessionId: string, user: Omit<JwtUser, "exp" | "iat" | "jti">) {
+  const existing = await dbGet<typeof authSessions.$inferSelect>(db
+    .select()
+    .from(authSessions)
+    .where(eq(authSessions.id, sessionId))
+    .limit(1));
+  if (!existing || existing.userId !== user.id || existing.expireAt.getTime() <= Date.now()) {
+    throw new Error("Session expired.");
   }
 
-  const sessionId = uuidFromBytes(raw.subarray(1, 17));
-  const nonce = raw.subarray(17, 33);
-  const payload = raw.subarray(33);
+  const jwtToken = signJwt(user, sessionId);
+  const expireAt = jwtExpiresAt(jwtToken) ?? fallbackExpireAt();
+  await dbRun(db.update(authSessions).set({
+    keyEncrypted: tokenDigest(jwtToken),
+    expireAt,
+    lastSeenAt: now()
+  }).where(eq(authSessions.id, sessionId)));
+  return { token: encryptJwtForClient(jwtToken), expiresAt: expireAt };
+}
+
+export async function verifyAuthSessionToken(encryptedToken: string) {
+  const token = decryptJwtFromClient(encryptedToken);
+  const payload = verifyJwt(token);
+  const sessionId = payload.sessionId!;
 
   const session = await dbGet<typeof authSessions.$inferSelect>(db
     .select()
     .from(authSessions)
     .where(eq(authSessions.id, sessionId))
     .limit(1));
-  if (!session || session.expireAt.getTime() <= Date.now()) {
-    throw new Error("Session expired");
+  const currentTime = Date.now();
+  if (
+    !session ||
+    session.expireAt.getTime() <= currentTime ||
+    session.lastSeenAt.getTime() + IDLE_TIMEOUT_MS <= currentTime ||
+    session.userId !== payload.id ||
+    session.keyEncrypted !== tokenDigest(token)
+  ) {
+    throw new Error("Session expired.");
   }
 
-  const key = Buffer.from(decryptValue(session.keyEncrypted, env.configEncryptionKey), "base64");
-  if (key.length !== 32) {
-    throw new Error("Invalid session key");
-  }
+  await dbRun(db.update(authSessions).set({ lastSeenAt: now() }).where(eq(authSessions.id, sessionId)));
+  return { userId: session.userId, sessionId, tokenExpiresAt: payload.exp ? new Date(payload.exp * 1000) : session.expireAt };
+}
 
-  const authPayload = authPayloadSchema.parse(JSON.parse(decryptAuthPayload(key, sessionId, nonce, payload)));
-  if (authPayload.sid !== sessionId || Math.abs(Date.now() - authPayload.t) > 5 * 60 * 1000) {
-    throw new Error("Invalid authorization payload");
-  }
+export async function verifyAuthSessionHeader(header: string) {
+  return verifyAuthSessionToken(bearerToken(header));
+}
 
-  return { userId: session.userId };
+export async function revokeAuthSession(sessionId: string) {
+  await dbRun(db.delete(authSessions).where(eq(authSessions.id, sessionId)));
+}
+
+export async function revokeUserAuthSessions(userId: number) {
+  await dbRun(db.delete(authSessions).where(eq(authSessions.userId, userId)));
 }
 
 export async function cleanupExpiredAuthSessions() {

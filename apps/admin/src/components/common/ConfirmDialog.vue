@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
 import { X } from "lucide-vue-next";
 import "./confirm-dialog.css";
 
@@ -10,11 +11,21 @@ defineProps<{
   danger?: boolean;
 }>();
 defineEmits<{ confirm: [] }>();
+
+const dialogEl = ref<HTMLDialogElement | null>(null);
+
+watch(open, async (value) => {
+  await nextTick();
+  const dialog = dialogEl.value;
+  if (!dialog) return;
+  if (value && !dialog.open) dialog.showModal();
+  if (!value && dialog.open) dialog.close();
+}, { immediate: true });
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="confirm-dialog" role="dialog" aria-modal="true">
+    <dialog ref="dialogEl" class="confirm-dialog" :class="{ 'is-danger': danger }" @cancel.prevent="open = false">
       <div class="confirm-dialog__panel">
         <button class="confirm-dialog__close" type="button" aria-label="关闭" @click="open = false">
           <X :size="18" />
@@ -28,6 +39,6 @@ defineEmits<{ confirm: [] }>();
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   </Teleport>
 </template>

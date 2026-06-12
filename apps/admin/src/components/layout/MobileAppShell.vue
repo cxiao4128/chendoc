@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { BookOpen, ChevronRight, LogOut, Menu, Plus, UserRound, X } from "lucide-vue-next";
+import { Bell, BookOpen, ChevronRight, LogOut, Menu, Plus, UserRound, X } from "lucide-vue-next";
 import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { useDocStore } from "../../stores/doc";
@@ -25,7 +25,9 @@ const roleText = computed(() => {
   if (auth.user?.role === "admin") return "管理员";
   return "普通用户";
 });
-const workspaceTabs = computed(() => visibleLinks.value);
+const workspaceTabs = computed(() => visibleLinks.value.slice(0, 4));
+const isDocsHomeRoute = computed(() => /^\/(?:admin|users)\/docs\/?$/.test(route.path));
+const currentUserName = computed(() => auth.user?.username || "ChenDoc");
 
 watch(() => route.fullPath, () => {
   drawerOpen.value = false;
@@ -49,8 +51,26 @@ async function createDoc() {
     </template>
 
     <template v-else>
-      <header class="mobile-shell__header">
-        <div class="mobile-shell__subbar">
+      <header class="mobile-shell__header" :class="{ 'is-docs-home': isDocsHomeRoute }">
+        <div v-if="isDocsHomeRoute" class="mobile-shell__homebar">
+          <div class="mobile-shell__profile">
+            <img :src="logoUrl" alt="" />
+            <div>
+              <strong>{{ currentUserName }}</strong>
+              <small>{{ roleText }}</small>
+            </div>
+          </div>
+          <div class="mobile-shell__header-actions">
+            <button class="mobile-shell__action" type="button" aria-label="通知">
+              <Bell :size="18" />
+            </button>
+            <button class="mobile-shell__action" type="button" aria-label="打开账号与导航面板" @click="drawerOpen = true">
+              <Menu :size="18" />
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="mobile-shell__subbar">
           <div class="mobile-shell__subcopy">
             <small>{{ routeMeta.eyebrow }}</small>
             <strong>{{ routeMeta.title }}</strong>
@@ -64,7 +84,6 @@ async function createDoc() {
             </button>
           </div>
         </div>
-        <p class="mobile-shell__summary">{{ routeMeta.description }}</p>
       </header>
 
       <main class="mobile-shell__content">

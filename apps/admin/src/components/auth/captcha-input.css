@@ -11,11 +11,28 @@
   width: 100%;
   height: 48px;
   overflow: hidden;
-  border: 1px solid rgba(112, 126, 156, 0.2);
-  border-radius: 6px;
-  background: #fbfbf2;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(167, 151, 232, 0.28);
+  border-radius: var(--cd-radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(244, 240, 255, 0.82)),
+    var(--cd-primary-soft);
   padding: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  transition: border-color 150ms ease-out, transform 150ms ease-out, background-color 150ms ease-out;
+}
+
+.captcha-input__image:hover {
+  border-color: rgba(125, 107, 232, 0.42);
+}
+
+.captcha-input__image:active {
+  transform: translateY(1px);
+}
+
+.captcha-input__image:focus-visible,
+.captcha-input__refresh:focus-visible {
+  outline: 3px solid var(--cd-focus);
+  outline-offset: 2px;
 }
 
 .captcha-input__image img {
@@ -23,6 +40,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0.94;
 }
 
 .captcha-input__refresh {

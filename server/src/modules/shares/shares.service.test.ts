@@ -8,10 +8,12 @@ const tempDir = mkdtempSync(join(tmpdir(), "chendoc-shares-"));
 const testSecret = "x".repeat(32);
 
 process.env.NODE_ENV = "test";
+process.env.DATABASE_PROVIDER = "sqlite";
 process.env.DATABASE_URL = join(tempDir, "chendoc.sqlite");
 process.env.JWT_SECRET = testSecret;
 process.env.CONFIG_ENCRYPTION_KEY = testSecret;
 process.env.RSA_PRIVATE_KEY_ENCRYPTION_KEY = testSecret;
+process.env.CHENDOC_DOCUMENT_ENCRYPTION_KEY = testSecret;
 process.env.PUBLIC_SITE_URL = "http://127.0.0.1:8985";
 process.env.DEFAULT_ADMIN_PASSWORD = "Test!Password123";
 
@@ -20,6 +22,7 @@ await migrate();
 
 const { db, sqlite } = await import("../../db/client.js");
 const { docVersions, operationLogs, shares, users } = await import("../../db/schema.js");
+const { decryptDocumentRecord } = await import("../../utils/documentCrypto.js");
 const { createDoc, getDoc, listDocs, publishDoc, restoreDocVersion, softDeleteDoc, updateDoc } = await import("../docs/docs.service.js");
 const { createOrGetShare, getPublicShare, reviewUserShare, updateShare, verifySharePassword } = await import("./shares.service.js");
 
@@ -122,6 +125,55 @@ describe("share public access boundary", () => {
     expect(data?.doc.contentHtml).toBe("<p>private content</p>");
   });
 
+  test("admin shares use the short code pool and allow custom short codes", async () => {
+    const firstDoc = await createDocument();
+    const firstShare = await createShare(firstDoc.id, { isEnabled: true });
+    expect(firstShare.shareCode).toBe(111);
+
+    const customDoc = await createDocument();
+    const customShare = await createShare(customDoc.id, { isEnabled: true, shareCode: 888 });
+    expect(customShare.shareCode).toBe(888);
+
+    const nextDoc = await createDocument();
+    const nextShare = await createShare(nextDoc.id, { isEnabled: true });
+    expect(nextShare.shareCode).toBe(112);
+  });
+
+  test("public share lookup ignores legacy random share token values", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true });
+    db.update(shares).set({ shareToken: "random-token-should-not-open" }).where(eq(shares.id, share.id)).run();
+
+    expect(await getPublicShare("random-token-should-not-open")).toBeNull();
+    expect(await getPublicShare(share.shareCode)).toBeTruthy();
+  });
+
+  test("public share lookup rejects numeric codes outside both code pools", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true });
+    db.update(shares).set({ shareCode: 12345, shareToken: "12345" }).where(eq(shares.id, share.id)).run();
+
+    expect(await getPublicShare(12345)).toBeNull();
+    expect(await getPublicShare("12345")).toBeNull();
+  });
+
+  test("public share lookup rejects codes from the wrong owner pool", async () => {
+    const adminDoc = await createDocument();
+    const adminShare = await createShare(adminDoc.id, { isEnabled: true });
+    db.update(shares).set({ shareCode: 1_234_567, shareToken: "1234567" }).where(eq(shares.id, adminShare.id)).run();
+    expect(await getPublicShare(1_234_567)).toBeNull();
+
+    const userDoc = await createUserDocument();
+    const userShare = await createOrGetShare(userDoc.id, { isEnabled: true }, { id: userId, role: "user" });
+    db.update(shares).set({
+      shareCode: 888,
+      shareToken: "888",
+      isEnabled: true,
+      reviewStatus: "approved"
+    }).where(eq(shares.id, userShare!.id)).run();
+    expect(await getPublicShare(888)).toBeNull();
+  });
+
   test("enabled shares cannot expose deleted docs", async () => {
     const doc = await createDocument();
     const share = await createShare(doc.id, { isEnabled: true });
@@ -178,14 +230,15 @@ describe("share public access boundary", () => {
     const doc = await createDocument();
     const version = db.select().from(docVersions).where(eq(docVersions.docId, doc.id)).limit(1).get();
 
-    expect(version?.contentHtml).toBe("<p></p>");
+    expect(version?.contentHtml).toBe("");
+    expect(decryptDocumentRecord(version!).contentHtml).toBe("<p></p>");
 
     await restoreDocVersion(doc.id, version!.id, adminId, { id: adminId, role: "admin" });
 
     const restored = await getDoc(doc.id, { id: adminId, role: "admin" });
     const versions = db.select().from(docVersions).where(eq(docVersions.docId, doc.id)).all();
     expect(restored.contentHtml).toBe("<p></p>");
-    expect(versions.some((item) => item.contentHtml === "<p>private content</p>")).toBe(true);
+    expect(versions.some((item) => decryptDocumentRecord(item).contentHtml === "<p>private content</p>")).toBe(true);
   });
 });
 
@@ -259,27 +312,31 @@ describe("document search", () => {
 });
 
 describe("user document share review flow", () => {
-  test("ordinary user shares use an 8 digit code and stay private until approved", async () => {
+  test("ordinary user shares use a 7 digit code and stay private until approved", async () => {
     const doc = await createUserDocument();
     const share = await createOrGetShare(doc.id, { isEnabled: true }, { id: userId, role: "user" });
 
-    expect(share?.shareCode).toBeGreaterThanOrEqual(10000000);
-    expect(share?.shareCode).toBeLessThanOrEqual(99999999);
+    expect(share?.shareCode).toBeGreaterThanOrEqual(1_000_000);
+    expect(share?.shareCode).toBeLessThanOrEqual(9_999_999);
     expect(share?.isEnabled).toBe(false);
     expect(share?.reviewStatus).toBe("pending");
     expect(await getPublicShare(share!.shareCode)).toBeNull();
 
-    await reviewUserShare(share!.id, { action: "approve", shareCode: 87654321 }, adminId);
+    await expect(reviewUserShare(share!.id, { action: "approve", shareCode: 888 }, adminId))
+      .rejects.toThrow(/7 位/);
+
+    const approvedCode = share!.shareCode === 8_765_432 ? 8_765_433 : 8_765_432;
+    await reviewUserShare(share!.id, { action: "approve", shareCode: approvedCode }, adminId);
 
     expect(await getPublicShare(share!.shareCode)).toBeNull();
-    const approved = await getPublicShare(87654321);
+    const approved = await getPublicShare(approvedCode);
     expect(approved?.doc.contentHtml).toBe("<p>user content</p>");
   });
 
   test("ordinary users cannot customize share code or slug", async () => {
     const doc = await createUserDocument();
 
-    await expect(createOrGetShare(doc.id, { isEnabled: true, shareCode: 12345678 }, { id: userId, role: "user" }))
+    await expect(createOrGetShare(doc.id, { isEnabled: true, shareCode: 1_234_567 }, { id: userId, role: "user" }))
       .rejects.toThrow("普通用户不能自定义分享链接");
     await expect(createOrGetShare(doc.id, { isEnabled: true, customSlug: "mine" }, { id: userId, role: "user" }))
       .rejects.toThrow("普通用户不能自定义分享链接");

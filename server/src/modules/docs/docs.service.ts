@@ -3,8 +3,10 @@ import { z } from "zod";
 import { castAsText, db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { docs, docVersions, shares, uploads, users } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
+import { decryptDocumentRecord, encryptDocumentContent } from "../../utils/documentCrypto.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
-import { sanitizeDocumentHtml } from "../../utils/sanitize.js";
+import { NotFoundError } from "../../utils/errors.js";
+import { renderContentJsonToHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
 
 type Actor = { id: number; role: "admin" | "user" };
 type PageOptions = { page?: number; pageSize?: number };
@@ -131,11 +133,11 @@ async function pruneDocVersions(docId: number) {
 }
 
 async function createVersionSnapshot(docId: number, current: { title: string; contentJson: string; contentHtml: string }, userId: number) {
+  const encrypted = encryptDocumentContent(current.contentJson, current.contentHtml);
   await dbRun(db.insert(docVersions).values({
     docId,
     title: current.title,
-    contentJson: current.contentJson,
-    contentHtml: current.contentHtml,
+    ...encrypted,
     createdBy: userId,
     createdAt: now()
   }));
@@ -171,14 +173,15 @@ function canAccessDoc(actor: Actor | undefined, doc: { createdBy: number | null 
 }
 
 function assertCanAccessDoc(actor: Actor | undefined, doc: { createdBy: number | null }) {
-  if (!canAccessDoc(actor, doc)) throw new Error("文档不存在");
+  if (!canAccessDoc(actor, doc)) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
 }
 
 export async function listDocs(actor: Actor, query?: unknown) {
-  return await queryDocs(actor, query);
+  const options = normalizePageOptions();
+  return (await queryDocs(actor, query, options)).slice(0, options.pageSize);
 }
 
-async function queryDocs(actor: Actor, query?: unknown, options?: ReturnType<typeof normalizePageOptions>) {
+async function queryDocs(actor: Actor, query?: unknown, options: ReturnType<typeof normalizePageOptions> = normalizePageOptions()) {
   await normalizeLegacyDraftStatuses();
   const q = normalizeSearch(query);
   const pattern = `%${q}%`;
@@ -202,8 +205,8 @@ async function queryDocs(actor: Actor, query?: unknown, options?: ReturnType<typ
     .leftJoin(users, eq(docs.createdBy, users.id))
     .where(where)
     .orderBy(desc(docs.pinned), desc(docs.updatedAt))
-    .limit(options ? options.pageSize + 1 : 100000)
-    .offset(options?.offset ?? 0)))
+    .limit(options.pageSize + 1)
+    .offset(options.offset)))
     .map((doc: any) => normalizeDocRecord(doc));
 }
 
@@ -213,10 +216,11 @@ export async function listDocsPage(actor: Actor, query?: unknown, pageOptions?: 
 }
 
 export async function listTrashDocs(actor?: Actor) {
-  return await queryTrashDocs(actor);
+  const options = normalizePageOptions();
+  return (await queryTrashDocs(actor, options)).slice(0, options.pageSize);
 }
 
-async function queryTrashDocs(actor?: Actor, options?: ReturnType<typeof normalizePageOptions>) {
+async function queryTrashDocs(actor?: Actor, options: ReturnType<typeof normalizePageOptions> = normalizePageOptions()) {
   await normalizeLegacyDraftStatuses();
   const accessWhere = actor?.role === "user"
     ? and(isNotNull(docs.deletedAt), eq(docs.createdBy, actor.id))
@@ -228,8 +232,8 @@ async function queryTrashDocs(actor?: Actor, options?: ReturnType<typeof normali
     .leftJoin(users, eq(docs.createdBy, users.id))
     .where(accessWhere)
     .orderBy(desc(docs.deletedAt))
-    .limit(options ? options.pageSize + 1 : 100000)
-    .offset(options?.offset ?? 0)))
+    .limit(options.pageSize + 1)
+    .offset(options.offset)))
     .map((doc: any) => normalizeDocRecord(doc));
 }
 
@@ -241,12 +245,12 @@ export async function listTrashDocsPage(actor?: Actor, pageOptions?: PageOptions
 export async function createDoc(userId: number, input: unknown) {
   const body = docCreateSchema.parse(input);
   const createdAt = now();
+  const encrypted = encryptDocumentContent(JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] }), "<p></p>");
   const result = await dbRun(db.insert(docs).values({
     title: body.title,
     parentId: body.parentId ?? null,
     spaceId: body.spaceId ?? null,
-    contentJson: JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] }),
-    contentHtml: "<p></p>",
+    ...encrypted,
     tags: "[]",
     status: "published",
     sort: 0,
@@ -261,10 +265,11 @@ export async function createDoc(userId: number, input: unknown) {
 export async function getDoc(id: number, actor?: Actor) {
   await normalizeLegacyDraftStatuses();
   const doc = await dbGet<typeof docs.$inferSelect>(db.select().from(docs).where(and(eq(docs.id, id), isNull(docs.deletedAt))).limit(1));
-  if (!doc) throw new Error("文档不存在");
-  assertCanAccessDoc(actor, doc);
-  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, doc.id)).limit(1));
-  return { ...normalizeDocRecord(doc), share: safeShareRecord(share) };
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  const decrypted = decryptDocumentRecord(doc);
+  assertCanAccessDoc(actor, decrypted);
+  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, decrypted.id)).limit(1));
+  return { ...normalizeDocRecord(decrypted), share: safeShareRecord(share) };
 }
 
 export async function updateDoc(id: number, userId: number, input: unknown, actor?: Actor) {
@@ -275,7 +280,11 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
     : typeof body.contentJson === "string"
       ? body.contentJson
       : JSON.stringify(body.contentJson);
-  const contentHtml = body.contentHtml === undefined ? undefined : sanitizeDocumentHtml(body.contentHtml);
+  const contentHtml = contentJson !== undefined
+    ? renderContentJsonToHtml(contentJson)
+    : body.contentHtml === undefined
+      ? undefined
+      : sanitizeDocumentHtml(body.contentHtml);
   const titleChanged = body.title !== undefined && body.title !== current.title;
   const jsonChanged = contentJson !== undefined && contentJson !== current.contentJson;
   const htmlChanged = contentHtml !== undefined && contentHtml !== current.contentHtml;
@@ -290,8 +299,9 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
     updatedAt: now()
   };
   if (body.title !== undefined) patch.title = body.title;
-  if (contentJson !== undefined) patch.contentJson = contentJson;
-  if (contentHtml !== undefined) patch.contentHtml = contentHtml;
+  if (contentJson !== undefined || contentHtml !== undefined) {
+    Object.assign(patch, encryptDocumentContent(contentJson ?? current.contentJson, contentHtml ?? current.contentHtml));
+  }
   if (body.coverUrl !== undefined) patch.coverUrl = body.coverUrl;
   if (body.summary !== undefined) patch.summary = body.summary;
   if (body.tags !== undefined) patch.tags = JSON.stringify(body.tags);
@@ -352,7 +362,7 @@ export async function restoreDoc(id: number, userId: number, actor?: Actor) {
     .from(docs)
     .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
     .limit(1));
-  if (!existing) throw new Error("文档不存在");
+  if (!existing) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   assertCanAccessDoc(actor, existing);
   await dbRun(db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
   return await getDoc(id, actor);
@@ -380,7 +390,7 @@ export async function hardDeleteDoc(id: number, actor?: Actor) {
     .from(docs)
     .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
     .limit(1));
-  if (!existing) throw new Error("文档不存在");
+  if (!existing) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   assertCanAccessDoc(actor, existing);
   await dbTransaction(async (tx) => {
     await dbRun(tx.delete(shares).where(eq(shares.docId, id)));
@@ -439,12 +449,13 @@ export async function restoreDocVersion(docId: number, versionId: number, userId
     .from(docVersions)
     .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, docId)))
     .limit(1));
-  if (!version) throw new Error("版本不存在");
+  if (!version) throw new NotFoundError("版本不存在", "VERSION_NOT_FOUND");
+  const decryptedVersion = decryptDocumentRecord(version);
+  const encrypted = encryptDocumentContent(decryptedVersion.contentJson, decryptedVersion.contentHtml);
   await createVersionSnapshot(docId, current, userId);
   await dbRun(db.update(docs).set({
-    title: version.title,
-    contentJson: version.contentJson,
-    contentHtml: version.contentHtml,
+    title: decryptedVersion.title,
+    ...encrypted,
     updatedBy: userId,
     updatedAt: now()
   }).where(eq(docs.id, docId)));
@@ -453,7 +464,7 @@ export async function restoreDocVersion(docId: number, versionId: number, userId
       isEnabled: false,
       reviewStatus: "pending",
       reviewNote: null,
-      reviewContentHash: documentReviewHash(version),
+      reviewContentHash: documentReviewHash(decryptedVersion),
       requestedBy: userId,
       reviewedBy: null,
       reviewedAt: null,

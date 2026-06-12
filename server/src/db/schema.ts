@@ -18,6 +18,9 @@ export const uploads = activeSchema.uploads as typeof sqliteSchema.uploads;
 export const docVersions = activeSchema.docVersions as typeof sqliteSchema.docVersions;
 export const settings = activeSchema.settings as typeof sqliteSchema.settings;
 export const operationLogs = activeSchema.operationLogs as typeof sqliteSchema.operationLogs;
+export const loginFailures = activeSchema.loginFailures as typeof sqliteSchema.loginFailures;
+export const dangerVerifications = activeSchema.dangerVerifications as typeof sqliteSchema.dangerVerifications;
+export const auditLogs = activeSchema.auditLogs as typeof sqliteSchema.auditLogs;
 export const uniqueShareCode = activeSchema.uniqueShareCode as typeof sqliteSchema.uniqueShareCode;
 
 export type User = typeof sqliteSchema.users.$inferSelect;

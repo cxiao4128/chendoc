@@ -1,6 +1,6 @@
 .editor-toolbar-wrap {
   border-bottom: 1px solid var(--cd-border);
-  background: #fff;
+  background: var(--cd-panel);
 }
 
 .editor-toolbar {
@@ -19,7 +19,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: var(--cd-muted);
   cursor: pointer;
@@ -28,8 +28,14 @@
 .editor-toolbar button:hover,
 .editor-toolbar button.active {
   border-color: var(--cd-border);
-  background: var(--cd-bg);
+  background: #fff;
   color: var(--cd-text);
+}
+
+.editor-toolbar button.active {
+  border-color: rgba(37, 99, 235, 0.38);
+  background: var(--cd-accent-soft);
+  color: var(--cd-accent-hover);
 }
 
 .editor-toolbar button:disabled {
@@ -49,8 +55,8 @@
   flex: 0 0 auto;
   height: 34px;
   border: 1px solid var(--cd-border);
-  border-radius: 7px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--cd-panel);
   color: var(--cd-text);
   padding: 0 9px;
   font-size: 13px;
@@ -58,23 +64,8 @@
 }
 
 .editor-toolbar select:focus {
-  border-color: var(--cd-accent);
-  box-shadow: 0 0 0 3px var(--cd-accent-soft);
-}
-
-.editor-toolbar__hint {
-  position: sticky;
-  right: 0;
-  flex: 0 0 auto;
-  min-width: 74px;
-  border-left: 1px solid var(--cd-border);
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.72), #fff 18px);
-  color: var(--cd-text);
-  padding: 7px 2px 7px 18px;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
-  white-space: nowrap;
+  border-color: var(--cd-primary);
+  box-shadow: 0 0 0 3px var(--cd-focus);
 }
 
 @media (max-width: 900px) {
@@ -82,9 +73,8 @@
     position: sticky;
     top: var(--doc-editor-toolbar-top, 0px);
     z-index: 18;
-    border-bottom-color: rgba(206, 214, 228, 0.82);
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(18px) saturate(140%);
+    border-bottom-color: var(--cd-border);
+    background: var(--cd-panel);
   }
 
   .editor-toolbar {
@@ -96,21 +86,18 @@
 
   .editor-toolbar button,
   .editor-toolbar select {
-    border-color: rgba(209, 216, 228, 0.9);
-    border-radius: 10px;
-    background: #f7f9fc;
+    border-color: var(--cd-border);
+    border-radius: 8px;
+    background: var(--cd-panel);
     box-shadow: none;
   }
 
   .editor-toolbar button.active {
-    border-color: rgba(36, 91, 219, 0.22);
+    border-color: rgba(37, 99, 235, 0.34);
     background: var(--cd-accent-soft);
-    color: var(--cd-accent);
+    color: var(--cd-accent-hover);
   }
 
-  .editor-toolbar__hint {
-    display: none;
-  }
 }
 
 @media (max-width: 560px) {
