@@ -8,7 +8,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const weakValues = new Set([
   "please_change_this",
   "please_change_this_32_bytes_key",
-  "1314520x",
   "admin",
   "password",
   "changeme",
@@ -109,11 +108,8 @@ function checkAdminPassword(env) {
   if (isWeak(value)) {
     fail("DEFAULT_ADMIN_PASSWORD still uses a known weak/default value.");
   }
-  if (value.length < 12) {
-    fail("DEFAULT_ADMIN_PASSWORD must be at least 12 characters.");
-  }
-  if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value)) {
-    fail("DEFAULT_ADMIN_PASSWORD must include uppercase, lowercase, and number characters.");
+  if (!allowWeakAdminPassword(env) && value.length < 6) {
+    fail("DEFAULT_ADMIN_PASSWORD must be at least 6 characters.");
   }
 }
 

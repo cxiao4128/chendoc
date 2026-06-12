@@ -30,12 +30,12 @@ async function remove() {
 <template>
   <section class="danger-page">
     <div class="danger-page__head">
-      <h1>文章删除</h1>
-      <p>输入文章 ID 查询并软删除文章。操作会写入日志，第一版不会自动删除 R2 对象。</p>
+      <h1>文档删除</h1>
+      <p>输入文档 ID 查询并软删除文档。操作会写入日志，不会自动删除 R2 对象。</p>
     </div>
     <form class="danger-page__search cd-card" @submit.prevent="query">
       <label class="cd-label">
-        文章 ID
+        文档 ID
         <input v-model="id" class="cd-input" type="number" min="1" required />
       </label>
       <button class="cd-button" type="submit"><Search :size="16" />查询</button>
@@ -49,8 +49,8 @@ async function remove() {
         <div><dt>分享编号</dt><dd>{{ doc.shareCode ? `/r/${doc.shareCode}` : "未分享" }}</dd></div>
         <div><dt>删除状态</dt><dd>{{ doc.deletedAt ? "已删除" : "未删除" }}</dd></div>
       </dl>
-      <button class="cd-button danger" type="button" :disabled="!!doc.deletedAt" @click="confirmOpen = true"><Trash2 :size="16" />删除该文章</button>
+      <button class="cd-button danger" type="button" :disabled="!!doc.deletedAt" @click="confirmOpen = true"><Trash2 :size="16" />删除该文档</button>
     </article>
-    <ConfirmDialog v-model="confirmOpen" danger title="二次确认删除" message="确认软删除这篇文章？操作会记录到 operation_logs。" confirm-text="确认删除" @confirm="remove" />
+    <ConfirmDialog v-model="confirmOpen" danger title="二次确认删除" message="确认软删除这篇文档？操作会记录到 operation_logs。" confirm-text="确认删除" @confirm="remove" />
   </section>
 </template>

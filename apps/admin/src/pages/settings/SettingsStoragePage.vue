@@ -60,7 +60,7 @@ onMounted(load);
   <section class="settings-storage-page">
     <div class="settings-storage-page__head">
       <h1>R2 对象存储</h1>
-      <p>Access Key 与 Secret 保存时会加密入库，页面只显示脱敏值。</p>
+      <p>密钥加密保存。</p>
     </div>
     <form class="settings-storage-page__form cd-card" @submit.prevent="save">
       <label class="cd-label">Account ID<input v-model.trim="form.accountId" class="cd-input" required /></label>

@@ -13,7 +13,7 @@ const saving = ref(false);
 const error = ref("");
 const { ensureShare } = useShare();
 
-const shareUrl = computed(() => share.value ? `${location.origin}/r/${share.value.customSlug || share.value.shareCode}` : "");
+const shareUrl = computed(() => share.value ? `${location.origin}/r/${share.value.shareCode}` : "");
 const canUseLink = computed(() => !!share.value?.isEnabled && !!shareUrl.value);
 
 watch(open, async (value) => {

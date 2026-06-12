@@ -23,10 +23,10 @@ const roleLabel = computed(() => {
 <template>
   <aside class="app-sidebar" :class="{ 'is-open': open, 'is-collapsed': collapsed }">
     <div class="app-sidebar__brand">
-      <span class="app-sidebar__mark">
+      <span class="app-sidebar__wordmark">
         <img :src="logoUrl" alt="" />
       </span>
-      <div>
+      <div class="app-sidebar__brand-copy">
         <strong>ChenDoc</strong>
         <small>陈书</small>
       </div>
@@ -34,7 +34,7 @@ const roleLabel = computed(() => {
         <Menu :size="17" />
       </button>
     </div>
-    <nav class="app-sidebar__nav" aria-label="后台导航">
+    <nav class="app-sidebar__nav" aria-label="ChenDoc 工作台导航">
       <RouterLink v-for="item in visibleLinks" :key="item.to" :to="item.to" :title="collapsed ? item.label : undefined" @click="$emit('close')">
         <component :is="item.icon" :size="17" />
         <span>{{ item.label }}</span>
@@ -48,11 +48,11 @@ const roleLabel = computed(() => {
         <strong>{{ auth.user?.username || "已登录" }}</strong>
         <small>{{ roleLabel }}</small>
       </div>
-      <button type="button" title="退出登录" aria-label="退出登录" @click="logout">
-        <LogOut :size="16" />
-        <span>退出</span>
-      </button>
     </div>
+    <button class="app-sidebar__logout" type="button" title="退出登录" aria-label="退出登录" @click="logout">
+      <LogOut :size="17" />
+      <span>退出</span>
+    </button>
   </aside>
   <button v-if="open" class="app-sidebar__scrim" type="button" aria-label="关闭导航" @click="$emit('close')" />
 </template>

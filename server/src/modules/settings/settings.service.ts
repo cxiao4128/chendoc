@@ -1,14 +1,15 @@
 import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { authSessions, docs, docVersions, invites, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
+import { authSessions, captchas, docs, docVersions, invites, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { createR2Client } from "../../config/r2.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { maskSecret } from "../../utils/maskSecret.js";
 import { now } from "../../utils/date.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
+import { hashPassword, validateUserRegistration } from "../../utils/password.js";
 
 const sensitiveKeys = new Set(["r2.access_key_id", "r2.secret_access_key"]);
 
@@ -30,6 +31,7 @@ export interface SiteConfig {
   preferRemoteLogo: boolean;
   preferRemoteWallpaper: boolean;
   copyright: string;
+  recoveryContact: string;
 }
 
 type ManagedUser = {
@@ -48,8 +50,20 @@ type UserActor = {
   isSuperAdmin?: boolean;
 };
 
-const defaultRemoteLogoUrl = "https://cc.jy920.asia/chendoc-health/ChatGPT%20Image%202026%E5%B9%B44%E6%9C%8829%E6%97%A5%2019_47_58.png";
-const defaultRemoteWallpaperUrl = "https://cc.jy920.asia/chendoc-health/4096x2714.jpg";
+type SystemAction =
+  | "cleanupExpiredSessions"
+  | "cleanupExpiredCaptchas"
+  | "emptyTrash"
+  | "refreshStatus"
+  | "healthCheck";
+
+const defaultRemoteLogoUrl = "";
+const defaultRemoteWallpaperUrl = "";
+const APP_VERSION = "2.5.0";
+const REMOTE_ASSET_TIMEOUT_MS = 5000;
+const REMOTE_LOGO_MAX_BYTES = 1024 * 1024;
+const REMOTE_WALLPAPER_MAX_BYTES = 5 * 1024 * 1024;
+const allowedRemoteAssetTypes = new Set(["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"]);
 
 export const r2ConfigSchema = z.object({
   accountId: z.string().trim().min(1),
@@ -68,8 +82,102 @@ const siteConfigSchema = z.object({
   authWallpaperUrl: z.string().trim().url().or(z.literal("")).default(defaultRemoteWallpaperUrl),
   preferRemoteLogo: z.boolean().default(false),
   preferRemoteWallpaper: z.boolean().default(false),
-  copyright: z.string().trim().max(120).default("Copyright © 2026 陈书. All rights reserved")
+  copyright: z.string().trim().max(120).default("Copyright © 2026 陈书. All rights reserved"),
+  recoveryContact: z.string().trim().max(120).default("请联系管理员")
 });
+
+function safeRemoteAssetUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error("远程资源地址不正确");
+  }
+  if (url.protocol !== "https:") throw new Error("远程资源必须使用 HTTPS");
+  const host = url.hostname.toLowerCase();
+  const allowedHosts = env.remoteAssetAllowedHosts;
+  if (allowedHosts.length && !allowedHosts.includes(host)) {
+    throw new Error("远程资源域名不在白名单中");
+  }
+  if (!allowedHosts.length) {
+    throw new Error("未配置 CHENDOC_REMOTE_ASSET_HOSTS，不能启用远程资源");
+  }
+  return url.toString();
+}
+
+function publicRemoteAssetUrl(value: string) {
+  if (!value.trim()) return "";
+  try {
+    return safeRemoteAssetUrl(value);
+  } catch {
+    return "";
+  }
+}
+
+async function fetchRemoteAssetResponse(url: string, method: "HEAD" | "GET") {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REMOTE_ASSET_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method,
+      redirect: "manual",
+      signal: controller.signal,
+      headers: method === "GET" ? { Range: "bytes=0-0" } : undefined
+    });
+    if (response.body) await response.body.cancel().catch(() => undefined);
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function contentLengthFromResponse(response: Response) {
+  const rangeTotal = response.headers.get("content-range")?.match(/\/(\d+)$/)?.[1];
+  const raw = rangeTotal || response.headers.get("content-length") || "";
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+async function validateRemoteAssetUrl(value: string, kind: "logo" | "wallpaper") {
+  const url = safeRemoteAssetUrl(value);
+  const maxBytes = kind === "logo" ? REMOTE_LOGO_MAX_BYTES : REMOTE_WALLPAPER_MAX_BYTES;
+  const label = kind === "logo" ? "Logo" : "登录壁纸";
+  let response: Response;
+
+  try {
+    response = await fetchRemoteAssetResponse(url, "HEAD");
+    if (response.status === 405 || response.status === 501) {
+      response = await fetchRemoteAssetResponse(url, "GET");
+    }
+  } catch {
+    throw new Error(`${label} 远程资源无法访问`);
+  }
+
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error(`${label} 远程资源不允许重定向`);
+  }
+  if (!response.ok) {
+    throw new Error(`${label} 远程资源无法访问`);
+  }
+
+  const contentType = (response.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
+  if (!allowedRemoteAssetTypes.has(contentType)) {
+    throw new Error(`${label} 远程资源 Content-Type 必须是受支持的图片类型`);
+  }
+
+  const contentLength = contentLengthFromResponse(response);
+  if (contentLength === null) {
+    throw new Error(`${label} 远程资源缺少可校验的文件大小`);
+  }
+  if (contentLength > maxBytes) {
+    throw new Error(`${label} 远程资源文件过大`);
+  }
+
+  return url;
+}
 
 function decodeSettingRow(row: typeof settings.$inferSelect) {
   return row.encrypted ? decryptValue(row.value, env.configEncryptionKey) : row.value;
@@ -141,6 +249,222 @@ export async function listOperationLogs(limit = 80) {
     .where(ne(operationLogs.action, "share.update"))
     .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
     .limit(limit));
+}
+
+function startOfLocalDay(offsetDays = 0) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + offsetDays);
+  return date;
+}
+
+function percentDelta(today: number, yesterday: number) {
+  if (!yesterday) return today ? 100 : 0;
+  return Math.round(((today - yesterday) / yesterday) * 100);
+}
+
+function systemMemoryMb() {
+  return Math.round(process.memoryUsage().rss / 1024 / 1024);
+}
+
+function r2ConfigStatus(config: R2Config | null, error?: string) {
+  const configured = !!(
+    config &&
+    config.accountId &&
+    config.accessKeyId &&
+    config.secretAccessKey &&
+    config.bucket &&
+    config.publicUrl
+  );
+  return {
+    configured,
+    bucket: config?.bucket || "",
+    publicUrl: config?.publicUrl || "",
+    endpoint: config?.endpoint || "",
+    region: config?.region || "auto",
+    message: error || (configured ? "R2 配置完整" : "R2 配置未完整填写")
+  };
+}
+
+async function safeR2Config() {
+  try {
+    return { config: await getR2Config(true), error: "" };
+  } catch (error) {
+    return {
+      config: null,
+      error: error instanceof Error ? error.message : "R2 配置读取失败"
+    };
+  }
+}
+
+export async function getSystemOverview() {
+  const todayStart = startOfLocalDay();
+  const yesterdayStart = startOfLocalDay(-1);
+  const processStartedAt = new Date(Date.now() - Math.floor(process.uptime() * 1000));
+  const [
+    docRows,
+    uploadRows,
+    shareRows,
+    sessionRows,
+    captchaRows,
+    recentLogRows,
+    r2Result
+  ] = await Promise.all([
+    dbAll<{ id: number; status: "draft" | "published" | "archived"; deletedAt: Date | null }>(db
+      .select({ id: docs.id, status: docs.status, deletedAt: docs.deletedAt })
+      .from(docs)),
+    dbAll<{ id: number; kind: "image" | "video" | "file"; fileSize: number }>(db
+      .select({ id: uploads.id, kind: uploads.kind, fileSize: uploads.fileSize })
+      .from(uploads)),
+    dbAll<{ id: number; isEnabled: boolean; reviewStatus: string; passwordHash: string | null; viewCount: number }>(db
+      .select({
+        id: shares.id,
+        isEnabled: shares.isEnabled,
+        reviewStatus: shares.reviewStatus,
+        passwordHash: shares.passwordHash,
+        viewCount: shares.viewCount
+      })
+      .from(shares)),
+    dbAll<{ id: string; expireAt: Date }>(db
+      .select({ id: authSessions.id, expireAt: authSessions.expireAt })
+      .from(authSessions)),
+    dbAll<{ id: string; expireAt: Date; usedAt: Date | null }>(db
+      .select({ id: captchas.id, expireAt: captchas.expireAt, usedAt: captchas.usedAt })
+      .from(captchas)),
+    dbAll<{ id: number; createdAt: Date }>(db
+      .select({ id: operationLogs.id, createdAt: operationLogs.createdAt })
+      .from(operationLogs)
+      .where(gte(operationLogs.createdAt, yesterdayStart))),
+    safeR2Config()
+  ]);
+
+  const currentTime = Date.now();
+  const todayLogs = recentLogRows.filter((row) => row.createdAt >= todayStart).length;
+  const yesterdayLogs = recentLogRows.filter((row) => row.createdAt >= yesterdayStart && row.createdAt < todayStart).length;
+  const storageBytes = uploadRows.reduce((total, row) => total + Number(row.fileSize || 0), 0);
+  const uploadsByKind = uploadRows.reduce<Record<"image" | "video" | "file", number>>((current, row) => {
+    current[row.kind] += 1;
+    return current;
+  }, { image: 0, video: 0, file: 0 });
+  const docsInTrash = docRows.filter((doc) => !!doc.deletedAt).length;
+  const activeSessions = sessionRows.filter((session) => session.expireAt.getTime() > currentTime).length;
+  const expiredSessions = sessionRows.length - activeSessions;
+  const activeCaptchas = captchaRows.filter((captcha) => !captcha.usedAt && captcha.expireAt.getTime() > currentTime).length;
+  const staleCaptchas = captchaRows.length - activeCaptchas;
+  const activeShares = shareRows.filter((share) => share.isEnabled).length;
+  const pendingShares = shareRows.filter((share) => share.reviewStatus === "pending").length;
+  const protectedShares = shareRows.filter((share) => !!share.passwordHash).length;
+  const totalShareViews = shareRows.reduce((total, share) => total + Number(share.viewCount || 0), 0);
+
+  return {
+    version: `v${APP_VERSION}`,
+    generatedAt: now(),
+    service: {
+      status: "running" as const,
+      label: "运行中",
+      uptimeSeconds: Math.floor(process.uptime()),
+      startedAt: processStartedAt,
+      memoryMb: systemMemoryMb(),
+      nodeEnv: env.nodeEnv,
+      publicSiteUrl: env.publicSiteUrl
+    },
+    database: {
+      status: "ok" as const,
+      label: "正常",
+      provider: env.databaseProvider
+    },
+    storage: {
+      fileCount: uploadRows.length,
+      totalBytes: storageBytes,
+      byKind: uploadsByKind
+    },
+    logs: {
+      today: todayLogs,
+      yesterday: yesterdayLogs,
+      delta: todayLogs - yesterdayLogs,
+      deltaPercent: percentDelta(todayLogs, yesterdayLogs)
+    },
+    docs: {
+      total: docRows.length,
+      active: docRows.length - docsInTrash,
+      trash: docsInTrash,
+      published: docRows.filter((doc) => doc.status === "published" && !doc.deletedAt).length
+    },
+    shares: {
+      total: shareRows.length,
+      active: activeShares,
+      pendingReview: pendingShares,
+      passwordProtected: protectedShares,
+      totalViews: totalShareViews
+    },
+    security: {
+      activeSessions,
+      expiredSessions,
+      activeCaptchas,
+      staleCaptchas
+    },
+    r2: r2ConfigStatus(r2Result.config, r2Result.error)
+  };
+}
+
+async function emptyTrashDocs() {
+  const trashRows = await dbAll<{ id: number }>(db
+    .select({ id: docs.id })
+    .from(docs)
+    .where(isNotNull(docs.deletedAt)));
+  const trashIds = trashRows.map((row) => row.id);
+  if (!trashIds.length) return 0;
+
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.delete(shares).where(inArray(shares.docId, trashIds)));
+    await dbRun(tx.delete(docVersions).where(inArray(docVersions.docId, trashIds)));
+    await dbRun(tx.update(uploads).set({ docId: null }).where(inArray(uploads.docId, trashIds)));
+    await dbRun(tx.delete(docs).where(inArray(docs.id, trashIds)));
+  });
+
+  return trashIds.length;
+}
+
+export async function runSystemMaintenanceAction(action: SystemAction) {
+  const timestamp = now();
+  if (action === "cleanupExpiredSessions") {
+    const result = await dbRun(db.delete(authSessions).where(lte(authSessions.expireAt, timestamp)));
+    return { action, changed: result.changes, message: `已清理 ${result.changes} 个过期登录会话` };
+  }
+
+  if (action === "cleanupExpiredCaptchas") {
+    const result = await dbRun(db.delete(captchas).where(or(lte(captchas.expireAt, timestamp), isNotNull(captchas.usedAt))));
+    return { action, changed: result.changes, message: `已清理 ${result.changes} 个过期或已使用验证码` };
+  }
+
+  if (action === "emptyTrash") {
+    const changed = await emptyTrashDocs();
+    return { action, changed, message: `已永久清理 ${changed} 篇回收站文档` };
+  }
+
+  if (action === "refreshStatus") {
+    return { action, changed: 0, message: "运行状态已刷新", status: await getSystemOverview() };
+  }
+
+  return { action, changed: 0, message: "系统健康检测完成", status: await getSystemOverview() };
+}
+
+export async function exportSystemConfig() {
+  const [siteConfig, r2Config, settingsList, overview] = await Promise.all([
+    getSiteConfig(),
+    getR2Config(false),
+    listSettings(true),
+    getSystemOverview()
+  ]);
+
+  return {
+    version: `v${APP_VERSION}`,
+    exportedAt: now(),
+    site: siteConfig,
+    r2: r2Config,
+    settings: settingsList,
+    overview
+  };
 }
 
 async function recentUserActivity(userId: number) {
@@ -361,6 +685,26 @@ export async function deleteManagedUser(id: number, actor: UserActor) {
   });
 }
 
+export async function getManagedUserPasswordView(id: number, actor: UserActor) {
+  const user = await getManagedUserRecord(id);
+  assertCanManageAdminUser(user, actor);
+  return {
+    viewable: false as const,
+    message: "密码已加密存储，不能查看明文。请直接重置密码。"
+  };
+}
+
+export async function resetManagedUserPassword(id: number, password: string, actor: UserActor) {
+  const user = await getManagedUserRecord(id);
+  assertCanManageAdminUser(user, actor);
+  const validationMessage = validateUserRegistration(user.username, password);
+  if (validationMessage) throw new Error(validationMessage);
+  const passwordHash = await hashPassword(password);
+  await dbRun(db.update(users).set({ passwordHash, updatedAt: now() }).where(eq(users.id, id)));
+  await dbRun(db.delete(authSessions).where(eq(authSessions.userId, id)));
+  return await getManagedUser(id);
+}
+
 export async function getSiteConfig(): Promise<SiteConfig> {
   const values = await settingValues([
     "site.brand_name",
@@ -369,29 +713,34 @@ export async function getSiteConfig(): Promise<SiteConfig> {
     "site.auth_wallpaper_url",
     "site.prefer_remote_logo",
     "site.prefer_remote_wallpaper",
-    "site.copyright"
+    "site.copyright",
+    "site.recovery_contact"
   ]);
 
   return {
     brandName: valueFromSettings(values, "site.brand_name", "陈书 / ChensDoc"),
     shortName: valueFromSettings(values, "site.short_name", "陈书"),
-    logoUrl: valueFromSettings(values, "site.logo_url", defaultRemoteLogoUrl),
-    authWallpaperUrl: valueFromSettings(values, "site.auth_wallpaper_url", defaultRemoteWallpaperUrl),
-    preferRemoteLogo: booleanFromSettings(values, "site.prefer_remote_logo", false),
-    preferRemoteWallpaper: booleanFromSettings(values, "site.prefer_remote_wallpaper", false),
-    copyright: valueFromSettings(values, "site.copyright", "Copyright © 2026 陈书. All rights reserved")
+    logoUrl: publicRemoteAssetUrl(valueFromSettings(values, "site.logo_url", defaultRemoteLogoUrl)),
+    authWallpaperUrl: publicRemoteAssetUrl(valueFromSettings(values, "site.auth_wallpaper_url", defaultRemoteWallpaperUrl)),
+    preferRemoteLogo: booleanFromSettings(values, "site.prefer_remote_logo", false) && !!publicRemoteAssetUrl(valueFromSettings(values, "site.logo_url", defaultRemoteLogoUrl)),
+    preferRemoteWallpaper: booleanFromSettings(values, "site.prefer_remote_wallpaper", false) && !!publicRemoteAssetUrl(valueFromSettings(values, "site.auth_wallpaper_url", defaultRemoteWallpaperUrl)),
+    copyright: valueFromSettings(values, "site.copyright", "Copyright © 2026 陈书. All rights reserved"),
+    recoveryContact: valueFromSettings(values, "site.recovery_contact", "请联系管理员")
   };
 }
 
 export async function saveSiteConfig(input: unknown) {
   const body = siteConfigSchema.parse(input);
+  const logoUrl = body.logoUrl ? await validateRemoteAssetUrl(body.logoUrl, "logo") : "";
+  const wallpaperUrl = body.authWallpaperUrl ? await validateRemoteAssetUrl(body.authWallpaperUrl, "wallpaper") : "";
   await setSetting("site.brand_name", body.brandName);
   await setSetting("site.short_name", body.shortName);
-  await setSetting("site.logo_url", body.logoUrl);
-  await setSetting("site.auth_wallpaper_url", body.authWallpaperUrl);
-  await setSetting("site.prefer_remote_logo", String(body.preferRemoteLogo), "boolean");
-  await setSetting("site.prefer_remote_wallpaper", String(body.preferRemoteWallpaper), "boolean");
+  await setSetting("site.logo_url", logoUrl);
+  await setSetting("site.auth_wallpaper_url", wallpaperUrl);
+  await setSetting("site.prefer_remote_logo", String(body.preferRemoteLogo && !!logoUrl), "boolean");
+  await setSetting("site.prefer_remote_wallpaper", String(body.preferRemoteWallpaper && !!wallpaperUrl), "boolean");
   await setSetting("site.copyright", body.copyright);
+  await setSetting("site.recovery_contact", body.recoveryContact);
   return await getSiteConfig();
 }
 

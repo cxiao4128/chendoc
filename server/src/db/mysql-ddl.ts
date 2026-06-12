@@ -10,7 +10,10 @@ export const MYSQL_TABLE_NAMES = [
   "uploads",
   "doc_versions",
   "settings",
-  "operation_logs"
+  "operation_logs",
+  "login_failures",
+  "danger_verifications",
+  "audit_logs"
 ] as const;
 
 const tableOptions = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -22,6 +25,10 @@ export const MYSQL_CREATE_TABLES = [
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(16) NOT NULL DEFAULT 'user',
     status VARCHAR(16) NOT NULL DEFAULT 'active',
+    totp_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    totp_secret_encrypted TEXT NULL,
+    totp_recovery_codes_encrypted MEDIUMTEXT NULL,
+    totp_updated_at DATETIME(3) NULL,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
@@ -79,6 +86,7 @@ export const MYSQL_CREATE_TABLES = [
     user_id INT NOT NULL,
     key_encrypted TEXT NOT NULL,
     expire_at DATETIME(3) NOT NULL,
+    last_seen_at DATETIME(3) NOT NULL,
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
     KEY auth_sessions_user_idx (user_id),
@@ -92,6 +100,14 @@ export const MYSQL_CREATE_TABLES = [
     title VARCHAR(191) NOT NULL,
     content_json MEDIUMTEXT NOT NULL,
     content_html MEDIUMTEXT NOT NULL,
+    content_json_ciphertext MEDIUMTEXT NULL,
+    content_json_iv VARCHAR(64) NULL,
+    content_json_tag VARCHAR(64) NULL,
+    content_json_key_version VARCHAR(32) NULL,
+    content_html_ciphertext MEDIUMTEXT NULL,
+    content_html_iv VARCHAR(64) NULL,
+    content_html_tag VARCHAR(64) NULL,
+    content_html_key_version VARCHAR(32) NULL,
     cover_url TEXT NULL,
     summary TEXT NULL,
     tags TEXT NOT NULL,
@@ -115,6 +131,7 @@ export const MYSQL_CREATE_TABLES = [
     id INT NOT NULL AUTO_INCREMENT,
     doc_id INT NOT NULL,
     share_code INT NOT NULL,
+    share_token VARCHAR(64) NOT NULL,
     custom_slug VARCHAR(191) NULL,
     password_hash VARCHAR(255) NULL,
     is_enabled TINYINT(1) NOT NULL DEFAULT 1,
@@ -130,6 +147,7 @@ export const MYSQL_CREATE_TABLES = [
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY shares_share_code_unique (share_code),
+    UNIQUE KEY shares_share_token_unique (share_token),
     UNIQUE KEY shares_custom_slug_unique (custom_slug),
     KEY shares_doc_idx (doc_id)
   ) ${tableOptions}`,
@@ -155,6 +173,14 @@ export const MYSQL_CREATE_TABLES = [
     title VARCHAR(191) NOT NULL,
     content_json MEDIUMTEXT NOT NULL,
     content_html MEDIUMTEXT NOT NULL,
+    content_json_ciphertext MEDIUMTEXT NULL,
+    content_json_iv VARCHAR(64) NULL,
+    content_json_tag VARCHAR(64) NULL,
+    content_json_key_version VARCHAR(32) NULL,
+    content_html_ciphertext MEDIUMTEXT NULL,
+    content_html_iv VARCHAR(64) NULL,
+    content_html_tag VARCHAR(64) NULL,
+    content_html_key_version VARCHAR(32) NULL,
     created_by INT NULL,
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
@@ -185,6 +211,52 @@ export const MYSQL_CREATE_TABLES = [
     PRIMARY KEY (id),
     KEY operation_logs_target_idx (target_type, target_id),
     KEY operation_logs_user_idx (user_id)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS login_failures (
+    id INT NOT NULL AUTO_INCREMENT,
+    username VARCHAR(191) NOT NULL,
+    scope VARCHAR(16) NOT NULL DEFAULT 'user',
+    dimension VARCHAR(16) NOT NULL,
+    dimension_value VARCHAR(191) NOT NULL,
+    fail_count INT NOT NULL DEFAULT 0,
+    first_failed_at DATETIME(3) NOT NULL,
+    last_failed_at DATETIME(3) NOT NULL,
+    locked_until DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY login_failures_dimension_unique (username, scope, dimension, dimension_value),
+    KEY login_failures_lookup_idx (username, scope, dimension),
+    KEY login_failures_last_failed_idx (last_failed_at),
+    KEY login_failures_locked_idx (locked_until)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS danger_verifications (
+    id INT NOT NULL AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    verified_at DATETIME(3) NOT NULL,
+    expire_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY danger_verifications_session_unique (session_id),
+    KEY danger_verifications_user_idx (user_id),
+    KEY danger_verifications_expire_idx (expire_at)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS audit_logs (
+    id INT NOT NULL AUTO_INCREMENT,
+    user_id INT NULL,
+    username VARCHAR(191) NULL,
+    action VARCHAR(96) NOT NULL,
+    result VARCHAR(24) NOT NULL,
+    ip VARCHAR(64) NULL,
+    user_agent TEXT NULL,
+    risk_level VARCHAR(16) NOT NULL DEFAULT 'low',
+    detail MEDIUMTEXT NULL,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    KEY audit_logs_user_idx (user_id),
+    KEY audit_logs_action_idx (action),
+    KEY audit_logs_created_idx (created_at)
   ) ${tableOptions}`
 ] as const;
 
@@ -199,5 +271,8 @@ export const MYSQL_INDEXES = [
   { table: "shares", name: "shares_review_idx", columns: "`review_status`, `created_at`" },
   { table: "shares", name: "shares_doc_review_idx", columns: "`doc_id`, `review_status`" },
   { table: "operation_logs", name: "operation_logs_created_idx", columns: "`created_at`" },
-  { table: "operation_logs", name: "operation_logs_user_created_idx", columns: "`user_id`, `created_at`" }
+  { table: "operation_logs", name: "operation_logs_user_created_idx", columns: "`user_id`, `created_at`" },
+  { table: "shares", name: "shares_public_lookup_idx", columns: "`share_code`, `is_enabled`, `review_status`" },
+  { table: "login_failures", name: "login_failures_cleanup_idx", columns: "`last_failed_at`, `locked_until`" },
+  { table: "danger_verifications", name: "danger_verifications_cleanup_idx", columns: "`expire_at`" }
 ] as const;

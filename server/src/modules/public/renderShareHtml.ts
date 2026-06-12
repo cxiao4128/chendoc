@@ -1,4 +1,4 @@
-import { escapeHtml } from "../../utils/sanitize.js";
+import { escapeHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
 import { sharePageStyle } from "./sharePageStyle.js";
 
 function renderShareLayout(input: {
@@ -9,6 +9,7 @@ function renderShareLayout(input: {
   logoUrl: string;
   canonicalUrl?: string;
   imageMeta?: string;
+  scriptNonce?: string;
 }) {
   const title = escapeHtml(input.title);
   const description = escapeHtml(input.description);
@@ -62,6 +63,7 @@ export function renderShareHtml(input: {
   const title = escapeHtml(input.title);
   const summary = escapeHtml(input.summary || input.title);
   const coverUrl = input.coverUrl ? escapeHtml(input.coverUrl) : "";
+  const contentHtml = input.contentHtml ? sanitizeDocumentHtml(input.contentHtml) : "";
   const imageMeta = coverUrl
     ? `<meta property="og:image" content="${coverUrl}">
   <meta name="twitter:image" content="${coverUrl}">`
@@ -75,9 +77,11 @@ export function renderShareHtml(input: {
     canonicalUrl: input.shareUrl,
     imageMeta,
     body: `<header>
+      <p class="share-kicker">ChenDoc</p>
       <h1>${title}</h1>
+      <p class="lead">${escapeHtml(input.siteName)} · ${escapeHtml(input.updatedAt.toLocaleString("zh-CN"))}</p>
     </header>
-    <article class="content">${input.contentHtml || '<div class="empty">这篇文档还没有内容。</div>'}</article>`
+    <article class="content">${contentHtml || '<div class="empty">这篇文档还没有内容。</div>'}</article>`
   });
 }
 
@@ -87,24 +91,28 @@ export function renderSharePasswordHtml(input: {
   shareUrl: string;
   siteName: string;
   logoUrl: string;
+  scriptNonce?: string;
   errorMessage?: string;
 }) {
   const title = escapeHtml(input.title);
   const errorMessage = input.errorMessage ? escapeHtml(input.errorMessage) : "";
   const encodedShareKey = encodeURIComponent(input.shareKey);
   const shareUrl = escapeHtml(input.shareUrl);
+  const scriptNonceAttr = input.scriptNonce ? ` nonce="${escapeHtml(input.scriptNonce)}"` : "";
 
   return renderShareLayout({
     title: input.title,
-    description: "请输入访问密码以继续查看分享内容。",
+    description: "访问密码",
     siteName: input.siteName,
     logoUrl: input.logoUrl,
     canonicalUrl: input.shareUrl,
+    scriptNonce: input.scriptNonce,
     body: `<header>
+      <p class="share-kicker">ChenDoc</p>
       <h1>${title}</h1>
-      <p class="lead">这个分享设置了访问密码，输入正确密码后即可继续查看。</p>
+      <p class="lead">访问密码</p>
     </header>
-    <section class="share-card">
+    <section class="share-card" data-share-card>
       <div class="share-meta">
         <span class="share-label">分享链接</span>
         <a class="share-url" href="${shareUrl}">${shareUrl}</a>
@@ -117,16 +125,20 @@ export function renderSharePasswordHtml(input: {
             <button class="share-button" type="submit">确认密码</button>
           </div>
         </label>
-        <p class="share-status${errorMessage ? " is-error" : ""}" data-share-status>${errorMessage || "输入后会直接打开正文。"}</p>
+        <p class="share-status${errorMessage ? " is-error" : ""}" data-share-status>${errorMessage || ""}</p>
       </form>
     </section>
-    <script>
+    <article class="content" data-share-content hidden></article>
+    <script${scriptNonceAttr}>
       const form = document.querySelector("[data-share-form]");
       const passwordInput = document.querySelector("[data-share-password]");
       const status = document.querySelector("[data-share-status]");
       const submitButton = form?.querySelector("button[type=\\"submit\\"]");
+      const content = document.querySelector("[data-share-content]");
+      const card = document.querySelector("[data-share-card]");
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
+      let fingerprintCache = "";
 
       function b2bytes(value) {
         const binary = atob(value);
@@ -170,8 +182,24 @@ export function renderSharePasswordHtml(input: {
         return b2ab(u2b(value));
       }
 
-      async function loadChallenge() {
-        const response = await fetch("/api/crypto/challenge", { cache: "no-store" });
+      async function fingerprint() {
+        if (fingerprintCache) return fingerprintCache;
+        const source = [
+          navigator.userAgent,
+          navigator.language,
+          navigator.platform,
+          screen.width + "x" + screen.height + "x" + screen.colorDepth,
+          Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+        ].join("|");
+        fingerprintCache = ab2u(await crypto.subtle.digest("SHA-256", textEncoder.encode(source)));
+        return fingerprintCache;
+      }
+
+      async function loadChallenge(action) {
+        const response = await fetch("/api/crypto/challenge?action=" + encodeURIComponent(action), {
+          cache: "no-store",
+          headers: { "X-Client-Fingerprint": await fingerprint() }
+        });
         if (!response.ok) throw new Error("无法加载请求校验，请刷新后重试。");
         return response.json();
       }
@@ -192,13 +220,18 @@ export function renderSharePasswordHtml(input: {
         return { iv: ab2u(iv.buffer), body: ab2u(encryptedBody) };
       }
 
+      async function hmac(keyBytes, value) {
+        const hmacKey = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+        return ab2u(await crypto.subtle.sign("HMAC", hmacKey, textEncoder.encode(value)));
+      }
+
       async function encryptGatewayBody(action, payload) {
         const [keyResponse, challenge] = await Promise.all([
           fetch("/api/crypto/public-key", { cache: "no-store" }).then((response) => {
             if (!response.ok) throw new Error("无法加载加密密钥，请刷新后重试。");
             return response.json();
           }),
-          loadChallenge()
+          loadChallenge(action)
         ]);
         const publicKey = await crypto.subtle.importKey(
           "spki",
@@ -210,23 +243,28 @@ export function renderSharePasswordHtml(input: {
         const aesKeyBytes = crypto.getRandomValues(new Uint8Array(32));
         const encryptedKey = await encryptBytes(publicKey, aesKeyBytes);
         const encryptedBody = await encryptAes(aesKeyBytes, payload);
+        const timestamp = Date.now();
+        const nonce = crypto.randomUUID();
+        const challengeNonce = challenge.nonce;
         const packet = {
-          v: "2.1",
+          v: "xchen",
           keyId: keyResponse.keyId,
           key: encryptedKey,
           iv: encryptedBody.iv,
-          challenge: challenge.nonce,
-          timestamp: Date.now(),
-          nonce: crypto.randomUUID(),
+          challenge: challengeNonce,
+          timestamp,
+          nonce,
+          fingerprint: await fingerprint(),
           action,
-          body: encryptedBody.body
+          body: encryptedBody.body,
+          signature: await hmac(aesKeyBytes, [action, String(timestamp), nonce, encryptedBody.body, challengeNonce].join("\\n"))
         };
         const outerKeyBytes = crypto.getRandomValues(new Uint8Array(32));
         const encryptedOuterKey = await encryptBytes(publicKey, outerKeyBytes);
         const encryptedPacket = await encryptAes(outerKeyBytes, packet);
         return {
           envelope: {
-            data: ["G21", encryptedOuterKey, encryptedPacket.iv, encryptedPacket.body].join(".")
+            data: ["chendoc", keyResponse.keyId, encryptedOuterKey, encryptedPacket.iv, encryptedPacket.body].join(".")
           },
           key: aesKeyBytes
         };
@@ -236,7 +274,7 @@ export function renderSharePasswordHtml(input: {
         const encoded = payload?.data;
         if (!encoded) return payload;
         const parts = encoded.split(".");
-        if (parts.length !== 3 || parts[0] !== "G21R") return payload;
+        if (parts.length !== 3 || parts[0] !== "XCHEN") return payload;
         const aesKey = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["decrypt"]);
         const plaintext = await crypto.subtle.decrypt(
           { name: "AES-GCM", iv: u2ab(parts[1]), tagLength: 128 },
@@ -248,16 +286,19 @@ export function renderSharePasswordHtml(input: {
         throw new Error(responsePacket.message || "密码不正确，请重试。");
       }
 
-      async function requestGateway(action, payload) {
-        const packed = await encryptGatewayBody(action, payload);
+      async function requestGateway(action, requestPayload, authToken) {
+        const packed = await encryptGatewayBody(action, requestPayload);
+        const headers = { "Content-Type": "application/json" };
+        headers["X-Client-Fingerprint"] = await fingerprint();
+        if (authToken) headers.Authorization = "Bearer " + authToken;
         const response = await fetch("/api/gateway", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(packed.envelope)
         });
-        const payload = await decryptGatewayResponse(await response.json(), packed.key);
-        if (!response.ok) throw new Error(payload?.message || "密码不正确，请重试。");
-        return payload;
+        const responsePayload = await decryptGatewayResponse(await response.json(), packed.key);
+        if (!response.ok) throw new Error(responsePayload?.message || "密码不正确，请重试。");
+        return responsePayload;
       }
 
       form?.addEventListener("submit", async (event) => {
@@ -281,9 +322,13 @@ export function renderSharePasswordHtml(input: {
           if (!payload.ok || !payload.token) {
             throw new Error(payload?.message || "密码不正确，请重试。");
           }
-          const nextUrl = new URL(window.location.href);
-          nextUrl.searchParams.set("accessToken", payload.token);
-          window.location.replace(nextUrl.toString());
+          const unlocked = await requestGateway("p3", { params: { shareKey: "${encodedShareKey}" } }, payload.token);
+          if (!unlocked?.doc?.contentHtml) throw new Error("正文加载失败，请刷新后重试。");
+          if (content) {
+            content.innerHTML = unlocked.doc.contentHtml;
+            content.hidden = false;
+          }
+          if (card) card.remove();
         } catch (error) {
           status.textContent = error instanceof Error ? error.message : "密码校验失败，请稍后重试。";
           status.classList.add("is-error");
@@ -314,8 +359,9 @@ export function renderShareUnavailableHtml(input: {
     siteName: input.siteName,
     logoUrl: input.logoUrl,
     body: `<header>
+      <p class="share-kicker">ChenDoc</p>
       <h1>${title}</h1>
-      <p class="lead">当前这个分享链接暂时无法打开。</p>
+      <p class="lead">无法打开</p>
     </header>
     <section class="share-card">
       <p class="share-status is-error">${message}</p>

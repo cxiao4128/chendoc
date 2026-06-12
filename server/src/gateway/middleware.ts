@@ -63,7 +63,14 @@ export async function unpackGatewayRequest(request: FastifyRequest, reply: Fasti
 
   if (isGatewayEnvelope(request.body)) {
     try {
-      const decoded = await unpackGatewayPacket(request.body);
+      const fingerprint = Array.isArray(request.headers["x-client-fingerprint"])
+        ? request.headers["x-client-fingerprint"][0]
+        : request.headers["x-client-fingerprint"];
+      const decoded = await unpackGatewayPacket(request.body, {
+        ip: request.ip,
+        userAgent: request.headers["user-agent"],
+        fingerprint
+      });
       request.packet = decoded.packet;
       request.gatewayAesKey = decoded.aesKey;
       request.body = decoded.body;
@@ -81,7 +88,8 @@ export async function unpackGatewayRequest(request: FastifyRequest, reply: Fasti
 }
 
 export async function packGatewayReply(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
-  if (env.nodeEnv !== "production" || !isApiRequest(request)) return payload;
+  if (!isApiRequest(request)) return payload;
+  if (env.nodeEnv !== "production" && !request.gatewayAesKey) return payload;
   if (isInternalGatewayRequest(request) || isGatewayBootstrapRequest(request)) return payload;
   if (reply.statusCode === 204) return payload;
 

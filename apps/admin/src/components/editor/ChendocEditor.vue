@@ -1,21 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { Editor, EditorContent } from "@tiptap/vue-3";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Placeholder from "@tiptap/extension-placeholder";
-import UnderlineExtension from "@tiptap/extension-underline";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
-import { TextStyle } from "@tiptap/extension-text-style";
-import FontFamily from "@tiptap/extension-font-family";
-import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
-import { common, createLowlight } from "lowlight";
+import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
+import type { Component } from "vue";
+import type { Editor } from "@tiptap/vue-3";
 import EditorToolbar from "./EditorToolbar.vue";
-import { ChendocImage } from "./chendoc-image-extension";
-import { Video } from "./video-extension";
-import { useUpload } from "../../composables/useUpload";
+import { nativePrompt } from "../../services/nativeDialog";
 import "./chendoc-editor.css";
 
 interface TocItem {
@@ -60,8 +48,9 @@ const emit = defineEmits<{
   toc: [items: TocItem[]];
 }>();
 
-const lowlight = createLowlight(common);
 const slashOpen = ref(false);
+const editorLoading = ref(true);
+const editorLoadError = ref("");
 const pasteUploading = ref(false);
 const uploadError = ref("");
 const previewImage = ref("");
@@ -89,7 +78,14 @@ const slashMenuStyle = computed(() => ({
   left: `${slashMenu.left}px`
 }));
 
-const { uploadFile } = useUpload();
+const editorContentComponent = shallowRef<Component | null>(null);
+const editor = shallowRef<Editor | null>(null);
+let editorLoadToken = 0;
+
+async function uploadFile(file: File, docId?: number | null) {
+  const { useUpload } = await import("../../composables/useUpload");
+  return useUpload().uploadFile(file, docId);
+}
 
 function parseContent(value: string) {
   try {
@@ -220,7 +216,7 @@ async function uploadAndInsertVideo(file: File) {
   uploadError.value = "";
   try {
     const url = await uploadFile(file, props.docId);
-    editor.value?.chain().focus().setVideo({ src: url, title: file.name }).run();
+    (editor.value?.chain().focus() as any)?.setVideo({ src: url, title: file.name }).run();
   } catch (err) {
     uploadError.value = err instanceof Error ? err.message : "视频上传失败";
   } finally {
@@ -306,79 +302,77 @@ function checkTypedShortcut() {
   }
 }
 
-const editor = ref<Editor | null>(new Editor({
-  extensions: [
-    StarterKit.configure({ codeBlock: false }),
-    UnderlineExtension,
-    TextStyle,
-    FontFamily,
-    TaskList,
-    TaskItem.configure({ nested: true }),
-    Table.configure({ resizable: true }),
-    TableRow,
-    TableHeader,
-    TableCell,
-    CodeBlockLowlight.configure({ lowlight }),
-    ChendocImage.configure({ HTMLAttributes: { loading: "lazy" } }),
-    Video,
-    Link.configure({
-      openOnClick: false,
-      autolink: true,
-      linkOnPaste: true,
-      HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" }
-    }),
-    Placeholder.configure({ placeholder: "输入正文，支持 Markdown 快捷输入，也可以按 / 插入内容" })
-  ],
-  content: parseContent(props.contentJson),
-  onUpdate: ({ editor: next }) => emitContent(next),
-  onSelectionUpdate: ({ editor: next }) => syncImageSelection(next),
-  editorProps: {
-    attributes: {
-      class: "chendoc-editor__surface"
-    },
-    handlePaste(_view, event) {
-      const file = fileFromPaste(event);
-      if (!file) return false;
-      event.preventDefault();
-      void uploadAndInsertFile(file);
-      return true;
-    },
-    handleDrop(view, event) {
-      const files = Array.from(event.dataTransfer?.files || []);
-      if (files.length) {
-        event.preventDefault();
-        files.forEach((file) => void uploadAndInsertFile(file));
-        return true;
+async function loadEditorRuntime() {
+  editorLoading.value = true;
+  editorLoadError.value = "";
+  const token = ++editorLoadToken;
+  try {
+    const runtime = await import("./editor-runtime");
+    if (token !== editorLoadToken) return;
+    editorContentComponent.value = markRaw(runtime.EditorContent);
+    editor.value = markRaw(runtime.createChendocEditor({
+      content: parseContent(props.contentJson),
+      onUpdate: ({ editor: next }: { editor: Editor }) => emitContent(next),
+      onSelectionUpdate: ({ editor: next }: { editor: Editor }) => syncImageSelection(next),
+      editorProps: {
+        attributes: {
+          class: "chendoc-editor__surface"
+        },
+        handlePaste(_view: Editor["view"], event: ClipboardEvent) {
+          const file = fileFromPaste(event);
+          if (!file) return false;
+          event.preventDefault();
+          void uploadAndInsertFile(file);
+          return true;
+        },
+        handleDrop(view: Editor["view"], event: DragEvent) {
+          const files = Array.from(event.dataTransfer?.files || []);
+          if (files.length) {
+            event.preventDefault();
+            files.forEach((file) => void uploadAndInsertFile(file));
+            return true;
+          }
+          return moveDraggedBlock(view, event);
+        },
+        handleTextInput(_view: Editor["view"], _from: number, _to: number, text: string) {
+          if (text === "/" || text.toLowerCase() === "p") {
+            window.setTimeout(checkTypedShortcut);
+          }
+          return false;
+        },
+        handleKeyDown(_view: Editor["view"], event: KeyboardEvent) {
+          if (event.key === "Escape") slashOpen.value = false;
+          return false;
+        },
+        handleClick(_view: Editor["view"], _pos: number, event: MouseEvent) {
+          const target = event.target as HTMLElement;
+          const image = target.closest("img");
+          if (image?.getAttribute("src")) {
+            previewImage.value = image.getAttribute("src") || "";
+            return true;
+          }
+          const pre = target.closest("pre");
+          if (pre?.textContent && navigator.clipboard) {
+            void navigator.clipboard.writeText(pre.textContent);
+            pre.classList.add("is-copied");
+            window.setTimeout(() => pre.classList.remove("is-copied"), 1200);
+          }
+          return false;
+        }
       }
-      return moveDraggedBlock(view, event);
-    },
-    handleTextInput(_view, _from, _to, text) {
-      if (text === "/" || text.toLowerCase() === "p") {
-        window.setTimeout(checkTypedShortcut);
-      }
-      return false;
-    },
-    handleKeyDown(_view, event) {
-      if (event.key === "Escape") slashOpen.value = false;
-      return false;
-    },
-    handleClick(_view, _pos, event) {
-      const target = event.target as HTMLElement;
-      const image = target.closest("img");
-      if (image?.getAttribute("src")) {
-        previewImage.value = image.getAttribute("src") || "";
-        return true;
-      }
-      const pre = target.closest("pre");
-      if (pre?.textContent && navigator.clipboard) {
-        void navigator.clipboard.writeText(pre.textContent);
-        pre.classList.add("is-copied");
-        window.setTimeout(() => pre.classList.remove("is-copied"), 1200);
-      }
-      return false;
+    }));
+    window.setTimeout(() => {
+      collectToc();
+      syncImageSelection();
+    });
+  } catch (error) {
+    if (token === editorLoadToken) {
+      editorLoadError.value = error instanceof Error ? error.message : "编辑器加载失败";
     }
+  } finally {
+    if (token === editorLoadToken) editorLoading.value = false;
   }
-}));
+}
 
 watch(() => [props.docId, props.contentJson] as const, ([nextDocId, nextContentJson], previous) => {
   const next = editor.value;
@@ -399,7 +393,7 @@ watch(() => [props.docId, props.contentJson] as const, ([nextDocId, nextContentJ
     return;
   }
 
-  next.commands.setContent(incomingContent, false);
+  next.commands.setContent(incomingContent, { emitUpdate: false });
   window.setTimeout(() => {
     collectToc(next);
     syncImageSelection(next);
@@ -407,10 +401,7 @@ watch(() => [props.docId, props.contentJson] as const, ([nextDocId, nextContentJ
 });
 
 onMounted(() => {
-  window.setTimeout(() => {
-    collectToc();
-    syncImageSelection();
-  });
+  void loadEditorRuntime();
 });
 
 function insertImage(url: string) {
@@ -443,11 +434,17 @@ function normalizeUrl(value: string) {
   return `https://${trimmed}`;
 }
 
-function promptForLink() {
+async function promptForLink() {
   const next = editor.value;
   if (!next) return;
   const currentUrl = next.getAttributes("link").href || "";
-  const input = window.prompt("链接地址", currentUrl);
+  const input = await nativePrompt({
+    title: "链接地址",
+    label: "URL",
+    value: currentUrl,
+    placeholder: "https://example.com",
+    confirmText: "应用链接"
+  });
   if (input === null) return;
   const url = normalizeUrl(input);
   if (!url) next.chain().focus().unsetLink().run();
@@ -479,7 +476,7 @@ function runSlash(command: InsertCommand) {
   if (command === "h3") next.chain().focus().toggleHeading({ level: 3 }).run();
   if (command === "quote") next.chain().focus().toggleBlockquote().run();
   if (command === "code") next.chain().focus().toggleCodeBlock().run();
-  if (command === "table") next.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  if (command === "table") (next.chain().focus() as any).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   if (command === "hr") next.chain().focus().setHorizontalRule().run();
   if (command === "bullet") next.chain().focus().toggleBulletList().run();
   if (command === "ordered") next.chain().focus().toggleOrderedList().run();
@@ -510,7 +507,10 @@ function startBlockDrag(event: DragEvent) {
   if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
 }
 
-onBeforeUnmount(() => editor.value?.destroy());
+onBeforeUnmount(() => {
+  editorLoadToken += 1;
+  editor.value?.destroy();
+});
 </script>
 
 <template>
@@ -581,7 +581,17 @@ onBeforeUnmount(() => editor.value?.destroy());
       </div>
     </div>
 
-    <EditorContent class="chendoc-editor__content" :editor="editor" />
+    <div v-if="editorLoadError" class="chendoc-editor__runtime-state is-error">
+      <strong>编辑器加载失败</strong>
+      <span>{{ editorLoadError }}</span>
+    </div>
+    <div v-else-if="editorLoading || !editor || !editorContentComponent" class="chendoc-editor__runtime-state" aria-label="编辑器加载中">
+      <span class="cd-skeleton" />
+      <span class="cd-skeleton" />
+      <span class="cd-skeleton" />
+      <span class="cd-skeleton" />
+    </div>
+    <component v-else :is="editorContentComponent" class="chendoc-editor__content" :editor="editor" />
 
     <button v-if="previewImage" class="chendoc-editor__preview" type="button" @click="previewImage = ''">
       <img :src="previewImage" alt="" />

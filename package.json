@@ -1,29 +1,38 @@
 {
   "name": "chendoc",
-  "version": "2.1.0",
+  "version": "2.5.0",
   "private": true,
   "type": "module",
-  "description": "ChenDoc / Chen Shu lightweight private documentation system.",
+  "description": "ChenDoc / Chen Shu commercial document management and knowledge publishing platform.",
   "workspaces": [
     "apps/admin",
     "server"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:admin\"",
+    "dev": "set NODE_ENV=production&& set DATABASE_PROVIDER=sqlite&& set DATABASE_URL=./data/chendoc.sqlite&& set CHENDOC_ALLOW_SQLITE_RUNTIME=true&& npm run build && npm run start",
     "dev:server": "npm --prefix server run dev",
-    "dev:admin": "npm --prefix apps/admin run dev",
+    "dev:admin": "npm --prefix apps/admin run build && node scripts/copy-admin-dist.js",
     "build": "npm --prefix apps/admin run build && node scripts/copy-admin-dist.js && npm --prefix server run build",
     "start": "npm --prefix server run start",
     "test": "npm --workspace @chendoc/server run test",
     "test:server": "npm --workspace @chendoc/server run test",
     "db:migrate": "npm --prefix server run db:migrate",
     "migrate:sqlite-to-mysql": "npm --prefix server run migrate:sqlite-to-mysql",
-    "db:backup": "node scripts/backup-sqlite.js",
+    "db:backup": "node scripts/backup-db.js",
     "deploy:preflight": "node scripts/preflight-deploy.js",
+    "security:audit": "npm audit --omit=dev",
+    "security:audit:signatures": "npm audit signatures",
+    "html:resanitize": "npm --prefix server run html:resanitize",
     "admin:init": "npm --prefix server run admin:init",
     "r2:import": "npm --prefix server run r2:import"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "overrides": {
+    "atomic-sleep": "1.0.0",
+    "brace-expansion": "5.0.6",
+    "fast-uri": "3.1.2",
+    "fast-xml-builder": "1.2.0"
   }
 }

@@ -41,8 +41,8 @@ export const mysqlPool = databaseProvider === "mysql"
   ? mysql.createPool({
     uri: env.databaseUrl,
     connectTimeout: 10000,
-    connectionLimit: 5,
-    maxIdle: 5,
+    connectionLimit: env.mysqlPool.connectionLimit,
+    maxIdle: env.mysqlPool.maxIdle,
     idleTimeout: 30000,
     waitForConnections: true,
     queueLimit: 50,

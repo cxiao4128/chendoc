@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, dbAll, dbRun } from "../../db/client.js";
 import { spaces } from "../../db/schema.js";
@@ -9,8 +9,18 @@ const spaceSchema = z.object({
   description: z.string().trim().max(500).optional().nullable()
 });
 
-export async function listSpaces() {
-  return await dbAll<typeof spaces.$inferSelect>(db.select().from(spaces));
+type Actor = { id: number; role: "admin" | "user" };
+
+function accessWhere(actor: Actor, id?: number) {
+  const base = actor.role === "admin" ? undefined : eq(spaces.ownerId, actor.id);
+  if (!id) return base;
+  return base ? and(eq(spaces.id, id), base) : eq(spaces.id, id);
+}
+
+export async function listSpaces(actor: Actor) {
+  const where = accessWhere(actor);
+  const query = db.select().from(spaces);
+  return await dbAll<typeof spaces.$inferSelect>(where ? query.where(where) : query);
 }
 
 export async function createSpace(userId: number, input: unknown) {
@@ -26,14 +36,16 @@ export async function createSpace(userId: number, input: unknown) {
   return { id: Number(result.lastInsertRowid) };
 }
 
-export async function updateSpace(id: number, input: unknown) {
+export async function updateSpace(id: number, input: unknown, actor: Actor) {
   const body = spaceSchema.partial().parse(input);
   const patch: Partial<typeof spaces.$inferInsert> = { updatedAt: now() };
   if (body.name !== undefined) patch.name = body.name;
   if (body.description !== undefined) patch.description = body.description;
-  await dbRun(db.update(spaces).set(patch).where(eq(spaces.id, id)));
+  const result = await dbRun(db.update(spaces).set(patch).where(accessWhere(actor, id)!));
+  if (result.changes < 1) throw new Error("空间不存在");
 }
 
-export async function deleteSpace(id: number) {
-  await dbRun(db.delete(spaces).where(eq(spaces.id, id)));
+export async function deleteSpace(id: number, actor: Actor) {
+  const result = await dbRun(db.delete(spaces).where(accessWhere(actor, id)!));
+  if (result.changes < 1) throw new Error("空间不存在");
 }

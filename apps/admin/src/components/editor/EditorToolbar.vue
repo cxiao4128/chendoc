@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import {
   Bold,
   CheckSquare,
@@ -22,6 +21,7 @@ import {
   Video
 } from "lucide-vue-next";
 import type { Editor } from "@tiptap/vue-3";
+import { nativePrompt } from "../../services/nativeDialog";
 import "./editor-toolbar.css";
 
 interface EditorStylePatch {
@@ -36,7 +36,6 @@ const emit = defineEmits<{
   uploadVideo: [];
   styleChange: [patch: EditorStylePatch];
 }>();
-const toolbarHint = ref("选择工具");
 
 function normalizeUrl(value: string) {
   const trimmed = value.trim();
@@ -45,11 +44,17 @@ function normalizeUrl(value: string) {
   return `https://${trimmed}`;
 }
 
-function promptForLink() {
+async function promptForLink() {
   const editor = props.editor;
   if (!editor) return;
   const currentUrl = editor.getAttributes("link").href || "";
-  const nextUrl = window.prompt("链接地址", currentUrl);
+  const nextUrl = await nativePrompt({
+    title: "链接地址",
+    label: "URL",
+    value: currentUrl,
+    placeholder: "https://example.com",
+    confirmText: "应用链接"
+  });
   if (nextUrl === null) return;
   const url = normalizeUrl(nextUrl);
   if (!url) editor.chain().focus().unsetLink().run();
@@ -64,24 +69,18 @@ function setFontFamily(value: string) {
 }
 
 function insertTable() {
-  props.editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  (props.editor?.chain().focus() as any)?.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
 }
 
 function valueFromSelect(event: Event) {
   return (event.target as HTMLSelectElement).value;
 }
 
-function updateToolbarHint(event: Event) {
-  const target = event.target as HTMLElement | null;
-  const control = target?.closest<HTMLElement>("[aria-label], [title]");
-  const label = control?.getAttribute("aria-label") || control?.getAttribute("title");
-  if (label) toolbarHint.value = label;
-}
 </script>
 
 <template>
   <div class="editor-toolbar-wrap">
-    <div class="editor-toolbar" role="toolbar" aria-label="编辑工具栏" @pointerover="updateToolbarHint" @focusin="updateToolbarHint" @click="updateToolbarHint">
+    <div class="editor-toolbar" role="toolbar" aria-label="编辑工具栏">
       <select title="字体" aria-label="字体" :disabled="!editor" @change="setFontFamily(valueFromSelect($event))">
         <option value="">系统默认</option>
         <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">系统字体</option>
@@ -168,7 +167,6 @@ function updateToolbarHint(event: Event) {
       <button type="button" title="视频" aria-label="视频" :disabled="!editor" @click="emit('uploadVideo')">
         <Video :size="16" />
       </button>
-      <span class="editor-toolbar__hint">{{ toolbarHint }}</span>
     </div>
   </div>
 </template>

@@ -2,10 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { dangerDeleteDoc, findDocById } from "./danger.service.js";
 
 export async function dangerRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
+  const dangerousAdmin = [authenticate, requireAdmin, requireDangerVerification];
 
   app.get("/api/admin/docs/by-id/:id", { preHandler: adminOnly }, async (request, reply) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
@@ -14,7 +16,7 @@ export async function dangerRoutes(app: FastifyInstance) {
     return { doc };
   });
 
-  app.delete("/api/admin/docs/by-id/:id", { preHandler: adminOnly }, async (request) => {
+  app.delete("/api/admin/docs/by-id/:id", { preHandler: dangerousAdmin }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     await dangerDeleteDoc({
       id: params.id,

@@ -7,10 +7,10 @@ import { completeUpload, createPresignedUpload, deleteUpload, getUploadPolicy } 
 export async function uploadsRoutes(app: FastifyInstance) {
   app.get("/api/uploads/policy", { preHandler: authenticate }, async () => ({ policy: getUploadPolicy() }));
 
-  app.post("/api/uploads/presign", { preHandler: authenticate }, async (request) => createPresignedUpload(request.body));
+  app.post("/api/uploads/presign", { preHandler: authenticate }, async (request) => createPresignedUpload(request.user!.id, request.user!, request.body));
 
   app.post("/api/uploads/complete", { preHandler: authenticate }, async (request) => ({
-    upload: await completeUpload(request.user!.id, request.body)
+    upload: await completeUpload(request.user!.id, request.user!, request.body)
   }));
 
   app.delete("/api/uploads/:id", { preHandler: [authenticate, requireAdmin] }, async (request) => {

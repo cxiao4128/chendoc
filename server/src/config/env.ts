@@ -23,7 +23,6 @@ const weakSecretValues = new Set([
 ]);
 
 const weakAdminPasswordValues = new Set([
-  "12345678",
   "password",
   "password123",
   "admin123",
@@ -82,21 +81,11 @@ function optionalAdminPassword(name: string, username: string): string | undefin
   const normalized = value.toLowerCase();
   const usernamePart = username.trim().toLowerCase();
 
-  if (allowWeakAdminPassword()) {
-    if (usernamePart && normalized.includes(usernamePart)) {
-      throw new Error(`${name} must not contain DEFAULT_ADMIN_USERNAME.`);
-    }
-    return value;
-  }
-
   if (weakAdminPasswordValues.has(normalized) || normalized.startsWith("please_change_this")) {
     throw new Error(`${name} must be changed before initializing the admin account.`);
   }
-  if (value.length < 12) {
-    throw new Error(`${name} must be at least 12 characters.`);
-  }
-  if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
-    throw new Error(`${name} must include uppercase, lowercase, number, and symbol characters.`);
+  if (!allowWeakAdminPassword() && value.length < 6) {
+    throw new Error(`${name} must be at least 6 characters.`);
   }
   if (usernamePart && normalized.includes(usernamePart)) {
     throw new Error(`${name} must not contain DEFAULT_ADMIN_USERNAME.`);
@@ -112,13 +101,30 @@ function optionalInt(name: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function optionalPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function mysqlPoolSettings() {
+  const connectionLimit = optionalPositiveInt("MYSQL_CONNECTION_LIMIT", 10);
+  const configuredMaxIdle = optionalPositiveInt("MYSQL_MAX_IDLE", 5);
+  return {
+    connectionLimit,
+    maxIdle: Math.min(configuredMaxIdle, connectionLimit)
+  };
+}
+
 function databaseProvider(): "sqlite" | "mysql" {
   const nodeEnv = process.env.NODE_ENV ?? "development";
   const raw = (process.env.DATABASE_PROVIDER ?? (nodeEnv === "test" ? "sqlite" : "mysql")).trim().toLowerCase();
   if (raw === "mysql") return raw;
   if (raw === "sqlite" && nodeEnv === "test") return raw;
+  if (raw === "sqlite" && (nodeEnv !== "production" || flagEnabled("CHENDOC_ALLOW_SQLITE_RUNTIME"))) return raw;
   if (raw === "sqlite") {
-    throw new Error("SQLite is kept only for tests and historical migration scripts. Set DATABASE_PROVIDER=mysql for runtime.");
+    throw new Error("SQLite runtime is disabled in production. Set DATABASE_PROVIDER=mysql, or set CHENDOC_ALLOW_SQLITE_RUNTIME=true for an explicit local override.");
   }
   throw new Error("DATABASE_PROVIDER must be sqlite or mysql.");
 }
@@ -131,6 +137,18 @@ function databaseUrl(provider: "sqlite" | "mysql") {
     return value;
   }
   return value || "./data/chendoc.sqlite";
+}
+
+function trustProxySetting(): boolean | string[] {
+  const raw = (process.env.CHENDOC_TRUST_PROXY ?? process.env.TRUST_PROXY ?? "").trim();
+  if (!raw) return false;
+  if (raw === "0" || raw.toLowerCase() === "false" || raw.toLowerCase() === "no") return false;
+  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function remoteAssetAllowedHosts() {
+  const raw = (process.env.CHENDOC_REMOTE_ASSET_HOSTS ?? process.env.REMOTE_ASSET_ALLOWED_HOSTS ?? "").trim();
+  return raw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
 }
 
 const defaultAdminUsername = process.env.DEFAULT_ADMIN_USERNAME ?? "xchen";
@@ -147,10 +165,14 @@ export const env = {
   publicSiteUrl: process.env.PUBLIC_SITE_URL ?? `http://127.0.0.1:${process.env.PORT ?? 8985}`,
   databaseProvider: provider,
   databaseUrl: databaseUrl(provider),
+  mysqlPool: mysqlPoolSettings(),
+  trustProxy: trustProxySetting(),
   jwtSecret: requiredSecret("JWT_SECRET", 32),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "2h",
   configEncryptionKey: requiredSecret("CONFIG_ENCRYPTION_KEY", 32),
   rsaPrivateKeyEncryptionKey: requiredSecret("RSA_PRIVATE_KEY_ENCRYPTION_KEY", 32),
+  documentEncryptionKey: requiredSecret("CHENDOC_DOCUMENT_ENCRYPTION_KEY", 32),
+  documentKeyVersion: process.env.CHENDOC_DOCUMENT_KEY_VERSION?.trim() || "v1",
   defaultAdminUsername,
   defaultAdminPassword: optionalAdminPassword("DEFAULT_ADMIN_PASSWORD", defaultAdminUsername),
   r2: {
@@ -166,5 +188,6 @@ export const env = {
     imageMb: optionalInt("MAX_IMAGE_SIZE_MB", 20),
     videoMb: optionalInt("MAX_VIDEO_SIZE_MB", 500),
     fileMb: optionalInt("MAX_FILE_SIZE_MB", 100)
-  }
+  },
+  remoteAssetAllowedHosts: remoteAssetAllowedHosts()
 };

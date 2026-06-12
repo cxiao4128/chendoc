@@ -1,16 +1,110 @@
 .admin-layout {
+  --cd-bg: #fbfcff;
+  --cd-surface: #f7f8ff;
+  --cd-panel: #ffffff;
+  --cd-paper: #fbfcff;
+  --cd-border: #e4e7f4;
+  --cd-border-strong: #c8cdec;
+  --cd-text: #24304d;
+  --cd-muted: #657191;
+  --cd-faint: #9ea8c7;
+  --cd-primary: #7d6be8;
+  --cd-primary-hover: #6652d4;
+  --cd-primary-soft: #f2efff;
+  --cd-accent: #7d6be8;
+  --cd-accent-hover: #6652d4;
+  --cd-accent-soft: #f2efff;
+  --cd-shadow: 0 18px 42px rgba(82, 73, 146, 0.10);
+  --cd-shadow-soft: 0 10px 24px rgba(82, 73, 146, 0.07);
+  --cd-radius: 12px;
+  --cd-header: 80px;
+  position: relative;
   min-height: 100dvh;
-  background: #fff;
+  background: var(--cd-bg);
+  isolation: isolate;
+}
+
+.admin-layout::before {
+  content: "";
+  position: fixed;
+  inset: var(--cd-header) 0 0 var(--cd-sidebar);
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 47% 4%, rgba(125, 107, 232, 0.13) 0 1px, transparent 2px),
+    radial-gradient(circle at 73% 9%, rgba(125, 107, 232, 0.20) 0 2px, transparent 3px),
+    radial-gradient(680px 260px at 58% -60px, rgba(125, 107, 232, 0.08), transparent 70%),
+    linear-gradient(118deg, transparent 42%, rgba(125, 107, 232, 0.10) 42.3%, transparent 42.8%),
+    linear-gradient(22deg, transparent 58%, rgba(125, 107, 232, 0.08) 58.2%, transparent 58.6%);
+  opacity: 0.75;
 }
 
 .admin-layout__main {
   min-width: 0;
   min-height: 100dvh;
   margin-left: var(--cd-sidebar);
+  transition: margin-left 160ms ease-out;
 }
 
 .admin-layout.is-collapsed .admin-layout__main {
   margin-left: 72px;
+}
+
+.admin-layout.is-collapsed::before {
+  left: 72px;
+}
+
+.admin-layout .cd-button,
+.mobile-shell .cd-button {
+  border-color: var(--cd-border);
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  box-shadow: 0 6px 16px rgba(82, 73, 146, 0.04);
+}
+
+.admin-layout .cd-button:hover,
+.mobile-shell .cd-button:hover {
+  border-color: var(--cd-border-strong);
+  background: var(--cd-paper);
+  color: var(--cd-ink);
+}
+
+.admin-layout .cd-button:active,
+.mobile-shell .cd-button:active {
+  transform: translateY(1px);
+}
+
+.admin-layout .cd-button.primary,
+.mobile-shell .cd-button.primary {
+  border-color: var(--cd-primary);
+  background: linear-gradient(135deg, #8d7df2, #6752d8);
+  color: #fff;
+}
+
+.admin-layout .cd-button.primary:hover,
+.mobile-shell .cd-button.primary:hover {
+  border-color: var(--cd-primary-hover);
+  background: var(--cd-primary-hover);
+  color: #fff;
+}
+
+.admin-layout .cd-card,
+.mobile-shell .cd-card {
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.admin-layout .cd-button.danger,
+.mobile-shell .cd-button.danger {
+  border-color: #ffd6df;
+  background: #fff7f9;
+  color: #ef3f68;
+}
+
+.admin-layout .cd-button.danger:hover,
+.mobile-shell .cd-button.danger:hover {
+  border-color: #ffb8c8;
+  background: #fff0f4;
+  color: #df1f4f;
 }
 
 @media (max-width: 900px) {
@@ -20,5 +114,9 @@
 
   .admin-layout__main {
     margin-left: 0;
+  }
+
+  .admin-layout::before {
+    left: 0;
   }
 }

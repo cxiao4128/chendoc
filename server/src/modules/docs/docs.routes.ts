@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import {
   createDoc,
@@ -22,6 +23,7 @@ import {
 
 export async function docsRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
+  const dangerousAdmin = [authenticate, requireAdmin, requireDangerVerification];
   const listQuerySchema = z.object({
     q: z.string().optional(),
     page: z.coerce.number().int().positive().default(1),
@@ -116,7 +118,7 @@ export async function docsRoutes(app: FastifyInstance) {
     }
     return { ok: true, restoredIds };
   });
-  app.post("/api/admin/docs/trash/bulk-hard-delete", { preHandler: adminOnly }, async (request) => {
+  app.post("/api/admin/docs/trash/bulk-hard-delete", { preHandler: dangerousAdmin }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
     const deletedIds = await bulkHardDeleteTrashDocs(body.ids, request.user!);
     if (deletedIds.length) {
@@ -162,7 +164,7 @@ export async function docsRoutes(app: FastifyInstance) {
     });
     return { doc };
   });
-  app.delete("/api/admin/docs/:id/hard", { preHandler: adminOnly }, async (request) => {
+  app.delete("/api/admin/docs/:id/hard", { preHandler: dangerousAdmin }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     await hardDeleteDoc(params.id, request.user!);
     await writeAuditLog({

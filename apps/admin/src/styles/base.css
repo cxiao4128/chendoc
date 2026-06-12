@@ -16,6 +16,16 @@ a {
   text-decoration: none;
 }
 
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"])::placeholder {
+  text-align: center;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+  color: var(--cd-ink);
+}
+
 .cd-button {
   display: inline-flex;
   align-items: center;
@@ -24,34 +34,36 @@ a {
   min-width: 0;
   min-height: 36px;
   border: 1px solid var(--cd-border);
-  border-radius: 7px;
+  border-radius: var(--cd-radius);
   background: var(--cd-panel);
   color: var(--cd-text);
   padding: 0 13px;
-  font-weight: 650;
+  font-weight: 700;
   white-space: nowrap;
   transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out, box-shadow 140ms ease-out;
 }
 
 .cd-button:hover {
-  background: #f8f9fb;
+  background: var(--cd-primary-soft);
   border-color: var(--cd-border-strong);
+  color: var(--cd-primary-hover);
 }
 
 .cd-button.primary {
-  background: var(--cd-accent);
-  border-color: var(--cd-accent);
+  background: var(--cd-primary);
+  border-color: var(--cd-primary);
   color: #fff;
 }
 
 .cd-button.primary:hover {
-  background: var(--cd-accent-hover);
-  border-color: var(--cd-accent-hover);
+  background: var(--cd-primary-hover);
+  border-color: var(--cd-primary-hover);
+  color: #fff;
 }
 
 .cd-button.danger {
   background: #fff;
-  border-color: #f0c7c2;
+  border-color: #fecaca;
   color: var(--cd-danger);
 }
 
@@ -63,7 +75,7 @@ a {
 .cd-input:focus-visible,
 .cd-textarea:focus-visible,
 .cd-select:focus-visible {
-  outline: 2px solid rgba(36, 91, 219, 0.18);
+  outline: 2px solid var(--cd-focus);
   outline-offset: 2px;
 }
 
@@ -78,8 +90,8 @@ a {
   width: 100%;
   min-height: 40px;
   border: 1px solid var(--cd-border);
-  border-radius: 7px;
-  background: #fff;
+  border-radius: var(--cd-radius);
+  background: var(--cd-panel);
   color: var(--cd-text);
   padding: 9px 11px;
   outline: none;
@@ -93,7 +105,7 @@ a {
 .cd-textarea:focus,
 .cd-select:focus {
   border-color: var(--cd-accent);
-  box-shadow: 0 0 0 3px var(--cd-accent-soft);
+  box-shadow: 0 0 0 3px var(--cd-focus);
 }
 
 .cd-label {
@@ -107,8 +119,8 @@ a {
 .cd-error {
   color: var(--cd-danger);
   background: var(--cd-danger-soft);
-  border: 1px solid #f0c7c2;
-  border-radius: 7px;
+  border: 1px solid #e7b8a8;
+  border-radius: var(--cd-radius);
   padding: 9px 11px;
 }
 
@@ -116,12 +128,13 @@ a {
   border: 1px solid var(--cd-border);
   border-radius: var(--cd-radius);
   background: var(--cd-panel);
+  box-shadow: var(--cd-shadow-soft);
 }
 
 .cd-skeleton {
   min-height: 16px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #edf0f3, #f8f9fb, #edf0f3);
+  background: linear-gradient(90deg, #e2e8f0, #f8fafc, #e2e8f0);
   background-size: 200% 100%;
   animation: cd-pulse 1.2s ease-in-out infinite;
 }

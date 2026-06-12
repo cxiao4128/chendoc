@@ -10,7 +10,7 @@ export interface UserProfile {
 }
 
 async function submitSignIn(body: Record<string, unknown>) {
-  return request<{ sessionId: string; sessionKey: string; user: UserProfile }>(apiPaths.signIn(), {
+  return request<{ token: string; expiresAt?: string; user: UserProfile }>(apiPaths.signIn(), {
     method: "POST",
     body: JSON.stringify(body)
   });
@@ -30,4 +30,8 @@ function fetchProfile() {
   });
 }
 
-export { submitSignIn as a0, submitSignUp as a1, fetchProfile as a2 };
+function logoutApi() {
+  return request<{ ok: true }>("/api/auth/logout", { method: "POST" });
+}
+
+export { submitSignIn as a0, submitSignUp as a1, fetchProfile as a2, logoutApi as a3 };

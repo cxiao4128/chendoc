@@ -19,6 +19,20 @@ echo "Node: $(node -v)"
 echo "NPM: $(npm -v)"
 echo "Database: MySQL runtime required (set DATABASE_PROVIDER=mysql in .env)"
 
+read_env_value() {
+  local name="$1"
+  local value
+  value="$( (grep -E "^[[:space:]]*(export[[:space:]]+)?${name}=" .env || true) | tail -n 1 | sed -E "s/^[[:space:]]*(export[[:space:]]+)?${name}=//" | sed -E "s/[[:space:]]+#.*$//" | sed -E "s/^['\"]//; s/['\"]$//")"
+  printf "%s" "$value"
+}
+
+DATABASE_PROVIDER_VALUE="$(read_env_value DATABASE_PROVIDER)"
+DATABASE_URL_VALUE="$(read_env_value DATABASE_URL)"
+if [ "${DATABASE_PROVIDER_VALUE:-mysql}" != "mysql" ] || [[ "${DATABASE_URL_VALUE:-}" != mysql://* ]]; then
+  echo "Production server uses MySQL. Set DATABASE_PROVIDER=mysql and DATABASE_URL=mysql://... in .env before deployment."
+  exit 1
+fi
+
 node -e "const major=Number(process.versions.node.split('.')[0]); if (major < 20) { console.error('Node.js 20+ is required.'); process.exit(1); }"
 node scripts/preflight-deploy.js
 
@@ -28,9 +42,11 @@ else
   npm install --workspaces --include-workspace-root
 fi
 
+NPM_AUDIT_REGISTRY="${NPM_AUDIT_REGISTRY:-https://registry.npmjs.org}"
+npm --registry="$NPM_AUDIT_REGISTRY" audit --omit=dev
+npm run db:backup
+npm run db:migrate
 npm run build
-
-echo "Skip database migration. Run npm run db:migrate manually only when you need schema changes."
 
 if [ "${CHENDOC_INIT_ADMIN:-0}" = "1" ]; then
   echo "Initializing admin account..."

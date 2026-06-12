@@ -27,7 +27,7 @@ const site = reactive({
   authWallpaperUrl: bundledWallpaperUrl,
   preferRemoteLogo: false,
   preferRemoteWallpaper: false,
-  copyright: "Copyright © 2026 陈书. All rights reserved"
+  copyright: "2026 陈书"
 });
 
 const effectiveLogoUrl = computed(() => site.logoUrl || bundledLogoUrl);
@@ -110,10 +110,10 @@ onMounted(async () => {
   <main class="register-page" :class="{ 'is-wallpaper-ready': wallpaperReady, 'is-custom-wallpaper': isCustomWallpaper }" :style="authStyle">
     <header class="auth-topbar">
       <RouterLink class="auth-brand" to="/login">
-        <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" />
+        <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" referrerpolicy="no-referrer" />
         <span class="auth-brand__copy">
           <strong>{{ brandTitle }}</strong>
-          <small>chensdoc</small>
+          <small>文档管理平台</small>
         </span>
       </RouterLink>
     </header>
@@ -121,7 +121,7 @@ onMounted(async () => {
     <section class="auth-stage" aria-label="注册陈书账号">
       <form class="auth-card auth-card--register" @submit.prevent="submit">
         <div class="auth-card__icon">
-          <img :src="effectiveLogoUrl" alt="" />
+          <img :src="effectiveLogoUrl" alt="" referrerpolicy="no-referrer" />
         </div>
         <h1>{{ brandTitle }}</h1>
 

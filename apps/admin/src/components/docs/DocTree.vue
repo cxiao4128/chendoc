@@ -11,7 +11,6 @@ defineProps<{
 defineEmits<{ create: []; select: [id: number] }>();
 
 function sharePath(doc: DocSummary) {
-  if (doc.customSlug) return `/r/${doc.customSlug}`;
   return doc.shareCode ? `/r/${doc.shareCode}` : "";
 }
 </script>
@@ -19,7 +18,7 @@ function sharePath(doc: DocSummary) {
 <template>
   <aside class="doc-tree">
     <div class="doc-tree__head">
-      <strong>文档</strong>
+      <strong>文档资产</strong>
       <button type="button" aria-label="新建文档" @click="$emit('create')">
         <Plus :size="16" />
       </button>

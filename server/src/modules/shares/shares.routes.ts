@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
@@ -13,6 +14,7 @@ import {
   publicDocPayload,
   reviewUserShare,
   updateShare,
+  ShareAccessError,
   verifyShareAccessToken,
   verifySharePassword
 } from "./shares.service.js";
@@ -80,18 +82,27 @@ export async function sharesRoutes(app: FastifyInstance) {
 
   app.get("/api/public/r/:shareKey", async (request, reply) => {
     const params = z.object({ shareKey: z.string().trim().min(1).max(64) }).parse(request.params);
-    const query = z.object({ accessToken: z.string().optional() }).parse(request.query);
     const data = await getPublicShare(params.shareKey);
     if (!data) return reply.code(404).send({ message: "分享不存在或已关闭" });
     const authToken = request.headers.authorization?.startsWith("Bearer ")
       ? request.headers.authorization.slice("Bearer ".length)
       : undefined;
-    const canReadContent = !data.protected || verifyShareAccessToken(query.accessToken ?? authToken, data.share.shareCode, data.doc.id);
+    const canReadContent = !data.protected || verifyShareAccessToken(authToken, data.share, data.doc.id);
+    const payloadData = canReadContent ? await getPublicShare(params.shareKey, true) ?? data : data;
+    if (canReadContent) {
+      const etag = `"${createHash("sha1").update(`${payloadData.doc.id}:${payloadData.doc.updatedAt.getTime()}`).digest("base64url")}"`;
+      if (request.headers["if-none-match"] === etag) return reply.code(304).send();
+      reply.header("ETag", etag);
+      reply.header("Last-Modified", payloadData.doc.updatedAt.toUTCString());
+      reply.header("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    } else {
+      reply.header("Cache-Control", "no-store");
+    }
     return {
-      doc: publicDocPayload(data, canReadContent),
+      doc: publicDocPayload(payloadData, canReadContent),
       share: {
         shareCode: data.share.shareCode,
-        customSlug: data.share.customSlug,
+        customSlug: null,
         viewCount: data.share.viewCount
       },
       protected: data.protected,
@@ -99,9 +110,19 @@ export async function sharesRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/api/public/r/:shareKey/verify-password", async (request) => {
+  app.post("/api/public/r/:shareKey/verify-password", async (request, reply) => {
     const params = z.object({ shareKey: z.string().trim().min(1).max(64) }).parse(request.params);
     const body = z.object({ password: z.string().min(1).max(80) }).parse(request.body);
-    return verifySharePassword(params.shareKey, body.password);
+    try {
+      return await verifySharePassword(params.shareKey, body.password, {
+        ip: request.ip,
+        userAgent: request.headers["user-agent"]
+      });
+    } catch (error) {
+      if (error instanceof ShareAccessError) {
+        return reply.code(error.statusCode).send({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
   });
 }

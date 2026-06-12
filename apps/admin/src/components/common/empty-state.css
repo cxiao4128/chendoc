@@ -2,17 +2,23 @@
   display: grid;
   justify-items: center;
   gap: 10px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  box-shadow: none;
   padding: 44px 20px;
   color: var(--cd-muted);
   text-align: center;
 }
 
 .empty-state svg {
-  color: var(--cd-faint);
+  color: var(--cd-accent);
 }
 
 .empty-state strong {
-  color: var(--cd-text);
+  color: var(--cd-ink);
+  font-size: 20px;
+  font-weight: 900;
 }
 
 .empty-state p {

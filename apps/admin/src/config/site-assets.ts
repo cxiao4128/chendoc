@@ -1,9 +1,9 @@
 import type { SiteConfigView } from "../api/settings";
 
 export const bundledLogoUrl = "/site-assets/chendoc-logo.png";
-export const bundledWallpaperUrl = "/site-assets/desktop-bg.webp";
-export const defaultRemoteLogoUrl = "https://cc.jy920.asia/chendoc-health/ChatGPT%20Image%202026%E5%B9%B44%E6%9C%8829%E6%97%A5%2019_47_58.png";
-export const defaultRemoteWallpaperUrl = "https://cc.jy920.asia/chendoc-health/4096x2714.jpg";
+export const bundledWallpaperUrl = "/site-assets/desktop-bg.png";
+export const defaultRemoteLogoUrl = "";
+export const defaultRemoteWallpaperUrl = "";
 
 function resolveRemoteAsset(enabled: boolean, value: string, bundledUrl: string) {
   const trimmed = value.trim();
@@ -19,7 +19,7 @@ export function withBundledSiteAssets(config: SiteConfigView): SiteConfigView {
   };
 }
 
-export function preloadImageAsset(url: string): Promise<boolean> {
+export function preloadImageAsset(url: string, timeoutMs = 2500): Promise<boolean> {
   if (!url || typeof window === "undefined") return Promise.resolve(false);
 
   return new Promise((resolve) => {
@@ -28,10 +28,15 @@ export function preloadImageAsset(url: string): Promise<boolean> {
     const done = (ok: boolean) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(timeout);
       resolve(ok);
     };
+    const timeout = window.setTimeout(() => done(false), timeoutMs);
 
     image.decoding = "async";
+    if ("fetchPriority" in image) {
+      (image as HTMLImageElement & { fetchPriority: string }).fetchPriority = "high";
+    }
     image.onload = () => done(true);
     image.onerror = () => done(false);
     image.src = url;
