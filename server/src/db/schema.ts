@@ -21,6 +21,7 @@ export const operationLogs = activeSchema.operationLogs as typeof sqliteSchema.o
 export const loginFailures = activeSchema.loginFailures as typeof sqliteSchema.loginFailures;
 export const dangerVerifications = activeSchema.dangerVerifications as typeof sqliteSchema.dangerVerifications;
 export const auditLogs = activeSchema.auditLogs as typeof sqliteSchema.auditLogs;
+export const logs = activeSchema.logs as typeof sqliteSchema.logs;
 export const uniqueShareCode = activeSchema.uniqueShareCode as typeof sqliteSchema.uniqueShareCode;
 
 export type User = typeof sqliteSchema.users.$inferSelect;

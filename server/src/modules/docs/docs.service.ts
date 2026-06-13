@@ -5,15 +5,21 @@ import { docs, docVersions, shares, uploads, users } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
 import { decryptDocumentRecord, encryptDocumentContent } from "../../utils/documentCrypto.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
-import { NotFoundError } from "../../utils/errors.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
+import { generateDocUid } from "../../utils/docUid.js";
+import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { renderContentJsonToHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
+import { canAccessDocument, type DocumentAction, type DocumentActor } from "./documentAccess.js";
 
-type Actor = { id: number; role: "admin" | "user" };
+type Actor = DocumentActor;
 type PageOptions = { page?: number; pageSize?: number };
+type DocOwnerRole = "user" | "doc_admin" | "super_admin";
+type DocScope = "user" | "admin" | "system";
 const VERSION_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_DOC_VERSIONS = 50;
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 50;
+const DOC_UID_RETRY_LIMIT = 5;
 
 const docCreateSchema = z.object({
   title: z.string().trim().min(1).max(160),
@@ -54,8 +60,78 @@ function normalizeDocRecord<T extends { status: "draft" | "published" | "archive
   return { ...doc, status: normalizeDocStatus(doc.status) };
 }
 
+function normalizeActor(actor: Actor | undefined) {
+  return actor?.isSuperAdmin
+    ? { ...actor, isSuperAdmin: true }
+    : actor;
+}
+
+async function actorFromUserId(userId: number): Promise<Actor> {
+  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, userId)).limit(1));
+  if (!user) return { id: userId, role: "user" };
+  return {
+    id: user.id,
+    role: user.role,
+    isSuperAdmin: isSuperAdminUser(user)
+  };
+}
+
+function ownerRoleForActor(actor: Actor): DocOwnerRole {
+  if (actor.role === "user") return "user";
+  return actor.isSuperAdmin ? "super_admin" : "doc_admin";
+}
+
+function scopeForOwnerRole(ownerRole: DocOwnerRole): DocScope {
+  return ownerRole === "user" ? "user" : "admin";
+}
+
+async function createUniqueDocUid(length = 24) {
+  for (let attempt = 0; attempt < DOC_UID_RETRY_LIMIT; attempt += 1) {
+    const docUid = generateDocUid(length);
+    const existing = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.docUid, docUid)).limit(1));
+    if (!existing) return docUid;
+  }
+  throw new Error("doc_uid 生成冲突，请重试");
+}
+
+function docUidParam(value: string) {
+  if (!/^[A-Za-z0-9]{16,32}$/.test(value)) {
+    throw new BadRequestError("文档标识不正确", "INVALID_DOC_UID");
+  }
+  return value;
+}
+
+function accessDenied() {
+  return new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
+}
+
+function assertCanAccessDoc(actor: Actor | undefined, doc: { ownerId: number | null; isSuperAdminDoc: boolean | number }, action: DocumentAction) {
+  if (!canAccessDocument(normalizeActor(actor), doc, action)) throw accessDenied();
+}
+
+function queryAccessWhere(actor: Actor, deletedCondition: any): any {
+  const normalized = normalizeActor(actor)!;
+  if (normalized?.isSuperAdmin) return deletedCondition;
+  const base = and(deletedCondition as any, eq(docs.isSuperAdminDoc, false));
+  if (normalized.role === "admin") return base;
+  return and(base, eq(docs.ownerId, normalized.id));
+}
+
+export function safeDocPayload<T extends Record<string, unknown>>(doc: T) {
+  const { id: _id, ...rest } = doc;
+  return rest;
+}
+
+export function safeDocListPayload<T extends Record<string, unknown>>(rows: T[]) {
+  return rows.map((row) => safeDocPayload(row));
+}
+
 function uniquePositiveIds(ids: number[]) {
   return Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
+}
+
+function uniqueDocUids(docUids: string[]) {
+  return Array.from(new Set(docUids.map((uid) => docUidParam(uid)).filter(Boolean)));
 }
 
 function normalizePageOptions(options?: PageOptions) {
@@ -85,7 +161,6 @@ function safeShareRecord(share: typeof shares.$inferSelect | undefined | null) {
   if (!share) return null;
   return {
     id: share.id,
-    docId: share.docId,
     shareCode: share.shareCode,
     customSlug: share.customSlug,
     isEnabled: share.isEnabled,
@@ -147,6 +222,7 @@ async function createVersionSnapshot(docId: number, current: { title: string; co
 function listSelect() {
   return {
     id: docs.id,
+    docUid: docs.docUid,
     spaceId: docs.spaceId,
     parentId: docs.parentId,
     title: docs.title,
@@ -154,7 +230,14 @@ function listSelect() {
     status: docs.status,
     pinned: docs.pinned,
     sort: docs.sort,
+    ownerId: docs.ownerId,
+    ownerRole: docs.ownerRole,
+    scope: docs.scope,
+    isSuperAdminDoc: docs.isSuperAdminDoc,
+    visibility: docs.visibility,
+    tenantKey: docs.tenantKey,
     createdBy: docs.createdBy,
+    updatedBy: docs.updatedBy,
     ownerUsername: users.username,
     updatedAt: docs.updatedAt,
     createdAt: docs.createdAt,
@@ -166,16 +249,6 @@ function listSelect() {
   };
 }
 
-function canAccessDoc(actor: Actor | undefined, doc: { createdBy: number | null }) {
-  if (!actor) return true;
-  if (actor.role === "admin") return true;
-  return doc.createdBy === actor.id;
-}
-
-function assertCanAccessDoc(actor: Actor | undefined, doc: { createdBy: number | null }) {
-  if (!canAccessDoc(actor, doc)) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-}
-
 export async function listDocs(actor: Actor, query?: unknown) {
   const options = normalizePageOptions();
   return (await queryDocs(actor, query, options)).slice(0, options.pageSize);
@@ -185,7 +258,7 @@ async function queryDocs(actor: Actor, query?: unknown, options: ReturnType<type
   await normalizeLegacyDraftStatuses();
   const q = normalizeSearch(query);
   const pattern = `%${q}%`;
-  const accessWhere = actor.role === "admin" ? isNull(docs.deletedAt) : and(isNull(docs.deletedAt), eq(docs.createdBy, actor.id));
+  const accessWhere = queryAccessWhere(actor, isNull(docs.deletedAt));
   const where = q
     ? and(
       accessWhere,
@@ -222,8 +295,8 @@ export async function listTrashDocs(actor?: Actor) {
 
 async function queryTrashDocs(actor?: Actor, options: ReturnType<typeof normalizePageOptions> = normalizePageOptions()) {
   await normalizeLegacyDraftStatuses();
-  const accessWhere = actor?.role === "user"
-    ? and(isNotNull(docs.deletedAt), eq(docs.createdBy, actor.id))
+  const accessWhere = actor
+    ? queryAccessWhere(actor, isNotNull(docs.deletedAt))
     : isNotNull(docs.deletedAt);
   return (await dbAll(db
     .select(listSelect())
@@ -242,11 +315,15 @@ export async function listTrashDocsPage(actor?: Actor, pageOptions?: PageOptions
   return pagedResult(await queryTrashDocs(actor, options), options);
 }
 
-export async function createDoc(userId: number, input: unknown) {
+export async function createDoc(userId: number, input: unknown, actor?: Actor) {
   const body = docCreateSchema.parse(input);
+  const creator = normalizeActor(actor) ?? await actorFromUserId(userId);
+  const ownerRole = ownerRoleForActor(creator);
+  const docUid = await createUniqueDocUid();
   const createdAt = now();
   const encrypted = encryptDocumentContent(JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] }), "<p></p>");
   const result = await dbRun(db.insert(docs).values({
+    docUid,
     title: body.title,
     parentId: body.parentId ?? null,
     spaceId: body.spaceId ?? null,
@@ -254,8 +331,14 @@ export async function createDoc(userId: number, input: unknown) {
     tags: "[]",
     status: "published",
     sort: 0,
+    ownerId: userId,
+    ownerRole,
     createdBy: userId,
     updatedBy: userId,
+    scope: scopeForOwnerRole(ownerRole),
+    isSuperAdminDoc: ownerRole === "super_admin",
+    visibility: "private",
+    tenantKey: "default",
     createdAt,
     updatedAt: createdAt
   }));
@@ -267,9 +350,33 @@ export async function getDoc(id: number, actor?: Actor) {
   const doc = await dbGet<typeof docs.$inferSelect>(db.select().from(docs).where(and(eq(docs.id, id), isNull(docs.deletedAt))).limit(1));
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   const decrypted = decryptDocumentRecord(doc);
-  assertCanAccessDoc(actor, decrypted);
+  if (actor) assertCanAccessDoc(actor, decrypted, "read");
   const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, decrypted.id)).limit(1));
   return { ...normalizeDocRecord(decrypted), share: safeShareRecord(share) };
+}
+
+export async function getDocByUid(docUid: string, actor: Actor) {
+  await normalizeLegacyDraftStatuses();
+  const uid = docUidParam(docUid);
+  const doc = await dbGet<typeof docs.$inferSelect>(db.select().from(docs).where(and(eq(docs.docUid, uid), isNull(docs.deletedAt))).limit(1));
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  const decrypted = decryptDocumentRecord(doc);
+  assertCanAccessDoc(actor, decrypted, "read");
+  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, decrypted.id)).limit(1));
+  return { ...normalizeDocRecord(decrypted), share: safeShareRecord(share) };
+}
+
+async function docIdByUid(docUid: string, actor: Actor, action: DocumentAction, includeDeleted = false) {
+  const uid = docUidParam(docUid);
+  const where = includeDeleted ? eq(docs.docUid, uid) : and(eq(docs.docUid, uid), isNull(docs.deletedAt));
+  const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
+    .from(docs)
+    .where(where)
+    .limit(1));
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  assertCanAccessDoc(actor, doc, action);
+  return doc.id;
 }
 
 export async function updateDoc(id: number, userId: number, input: unknown, actor?: Actor) {
@@ -308,6 +415,7 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
   if (body.pinned !== undefined) patch.pinned = body.pinned;
   if (body.status !== undefined) patch.status = normalizeDocStatus(body.status);
   if (body.sort !== undefined) patch.sort = body.sort;
+  if (actor?.role === "user" && reviewRelevantChanged) patch.visibility = "private";
 
   await dbRun(db.update(docs).set(patch).where(eq(docs.id, id)));
   if (actor?.role === "user" && reviewRelevantChanged) {
@@ -330,8 +438,9 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
 }
 
 export async function softDeleteDoc(id: number, userId: number, actor?: Actor) {
-  await getDoc(id, actor);
+  const current = await getDoc(id, actor);
   await dbRun(db.update(docs).set({ deletedAt: now(), updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
+  return { docUid: current.docUid, ownerId: current.ownerId };
 }
 
 export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) {
@@ -341,13 +450,13 @@ export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: A
 
   await dbTransaction(async (tx) => {
     for (const id of uniqueIds) {
-      const doc = await dbGet<{ id: number; createdBy: number | null }>(tx
-        .select({ id: docs.id, createdBy: docs.createdBy })
+      const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(tx
+        .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
         .from(docs)
         .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
         .limit(1));
       if (!doc) continue;
-      assertCanAccessDoc(actor, doc);
+      assertCanAccessDoc(actor, doc, "batch");
       const result = await dbRun(tx.update(docs).set({ deletedAt, updatedBy: userId, updatedAt: deletedAt }).where(eq(docs.id, id)));
       if (result.changes > 0) deletedIds.push(id);
     }
@@ -357,13 +466,13 @@ export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: A
 }
 
 export async function restoreDoc(id: number, userId: number, actor?: Actor) {
-  const existing = await dbGet<{ id: number; createdBy: number | null }>(db
-    .select({ id: docs.id, createdBy: docs.createdBy })
+  const existing = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
     .from(docs)
     .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
     .limit(1));
   if (!existing) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  assertCanAccessDoc(actor, existing);
+  if (actor) assertCanAccessDoc(actor, existing, "restore");
   await dbRun(db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
   return await getDoc(id, actor);
 }
@@ -372,11 +481,11 @@ export async function bulkRestoreDocs(ids: number[], userId: number, actor?: Act
   const uniqueIds = uniquePositiveIds(ids);
   if (!uniqueIds.length) return [];
 
-  const rows = await dbAll<{ id: number; createdBy: number | null }>(db
-    .select({ id: docs.id, createdBy: docs.createdBy })
+  const rows = await dbAll<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
     .from(docs)
     .where(and(inArray(docs.id, uniqueIds), isNotNull(docs.deletedAt))));
-  const restoredIds = rows.filter((row) => canAccessDoc(actor, row)).map((row) => row.id);
+  const restoredIds = rows.filter((row) => canAccessDocument(normalizeActor(actor), row, "batch")).map((row) => row.id);
   if (!restoredIds.length) return [];
 
   const updatedAt = now();
@@ -385,13 +494,13 @@ export async function bulkRestoreDocs(ids: number[], userId: number, actor?: Act
 }
 
 export async function hardDeleteDoc(id: number, actor?: Actor) {
-  const existing = await dbGet<{ id: number; createdBy: number | null }>(db
-    .select({ id: docs.id, createdBy: docs.createdBy })
+  const existing = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
     .from(docs)
     .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
     .limit(1));
   if (!existing) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  assertCanAccessDoc(actor, existing);
+  if (actor) assertCanAccessDoc(actor, existing, "permanent_delete");
   await dbTransaction(async (tx) => {
     await dbRun(tx.delete(shares).where(eq(shares.docId, id)));
     await dbRun(tx.delete(docVersions).where(eq(docVersions.docId, id)));
@@ -404,11 +513,11 @@ export async function bulkHardDeleteTrashDocs(ids: number[], actor?: Actor) {
   const uniqueIds = uniquePositiveIds(ids);
   if (!uniqueIds.length) return [];
 
-  const rows = await dbAll<{ id: number; createdBy: number | null }>(db
-    .select({ id: docs.id, createdBy: docs.createdBy })
+  const rows = await dbAll<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
     .from(docs)
     .where(and(inArray(docs.id, uniqueIds), isNotNull(docs.deletedAt))));
-  const deletedIds = rows.filter((row) => canAccessDoc(actor, row)).map((row) => row.id);
+  const deletedIds = rows.filter((row) => canAccessDocument(normalizeActor(actor), row, "batch")).map((row) => row.id);
   if (!deletedIds.length) return [];
 
   await dbTransaction(async (tx) => {
@@ -421,9 +530,77 @@ export async function bulkHardDeleteTrashDocs(ids: number[], actor?: Actor) {
   return deletedIds;
 }
 
-export async function publishDoc(id: number, userId: number) {
+async function accessibleDocsByUids(docUids: string[], actor: Actor, action: DocumentAction, deleted: "active" | "trash") {
+  const uids = uniqueDocUids(docUids);
+  if (!uids.length) return [];
+  const deletedWhere = deleted === "trash" ? isNotNull(docs.deletedAt) : isNull(docs.deletedAt);
+  const rows = await dbAll<{ id: number; docUid: string; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, docUid: docs.docUid, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
+    .from(docs)
+    .where(and(inArray(docs.docUid, uids), deletedWhere)));
+  return rows.filter((row) => canAccessDocument(normalizeActor(actor), row, action));
+}
+
+export async function updateDocByUid(docUid: string, userId: number, input: unknown, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "update");
+  return await updateDoc(id, userId, input, actor);
+}
+
+export async function softDeleteDocByUid(docUid: string, userId: number, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "delete");
+  return await softDeleteDoc(id, userId, actor);
+}
+
+export async function bulkSoftDeleteDocsByUid(docUids: string[], userId: number, actor: Actor) {
+  const rows = await accessibleDocsByUids(docUids, actor, "batch", "active");
+  if (!rows.length) return [];
+  const deletedAt = now();
+  const ids = rows.map((row) => row.id);
+  await dbRun(db.update(docs).set({ deletedAt, updatedBy: userId, updatedAt: deletedAt }).where(inArray(docs.id, ids)));
+  return rows.map((row) => row.docUid);
+}
+
+export async function restoreDocByUid(docUid: string, userId: number, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "restore", true);
+  return await restoreDoc(id, userId, actor);
+}
+
+export async function bulkRestoreDocsByUid(docUids: string[], userId: number, actor: Actor) {
+  const rows = await accessibleDocsByUids(docUids, actor, "batch", "trash");
+  if (!rows.length) return [];
+  const updatedAt = now();
+  const ids = rows.map((row) => row.id);
+  await dbRun(db.update(docs).set({ deletedAt: null, updatedBy: userId, updatedAt }).where(inArray(docs.id, ids)));
+  return rows.map((row) => row.docUid);
+}
+
+export async function hardDeleteDocByUid(docUid: string, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "permanent_delete", true);
+  await hardDeleteDoc(id, actor);
+}
+
+export async function bulkHardDeleteTrashDocsByUid(docUids: string[], actor: Actor) {
+  const rows = await accessibleDocsByUids(docUids, actor, "batch", "trash");
+  if (!rows.length) return [];
+  const ids = rows.map((row) => row.id);
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.delete(shares).where(inArray(shares.docId, ids)));
+    await dbRun(tx.delete(docVersions).where(inArray(docVersions.docId, ids)));
+    await dbRun(tx.update(uploads).set({ docId: null }).where(inArray(uploads.docId, ids)));
+    await dbRun(tx.delete(docs).where(inArray(docs.id, ids)));
+  });
+  return rows.map((row) => row.docUid);
+}
+
+export async function publishDocByUid(docUid: string, userId: number, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "update");
+  return await publishDoc(id, userId, actor);
+}
+
+export async function publishDoc(id: number, userId: number, actor?: Actor) {
+  if (actor) await getDoc(id, actor);
   await dbRun(db.update(docs).set({ status: "published", updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
-  return await getDoc(id);
+  return await getDoc(id, actor);
 }
 
 export async function listDocVersions(docId: number, actor?: Actor) {
@@ -431,7 +608,6 @@ export async function listDocVersions(docId: number, actor?: Actor) {
   return await dbAll(db
     .select({
       id: docVersions.id,
-      docId: docVersions.docId,
       title: docVersions.title,
       createdBy: docVersions.createdBy,
       createdAt: docVersions.createdAt
@@ -440,6 +616,11 @@ export async function listDocVersions(docId: number, actor?: Actor) {
     .where(eq(docVersions.docId, docId))
     .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
     .limit(50));
+}
+
+export async function listDocVersionsByUid(docUid: string, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "history");
+  return await listDocVersions(id, actor);
 }
 
 export async function restoreDocVersion(docId: number, versionId: number, userId: number, actor?: Actor) {
@@ -472,4 +653,9 @@ export async function restoreDocVersion(docId: number, versionId: number, userId
     }).where(eq(shares.docId, docId)));
   }
   return await getDoc(docId, actor);
+}
+
+export async function restoreDocVersionByUid(docUid: string, versionId: number, userId: number, actor: Actor) {
+  const id = await docIdByUid(docUid, actor, "history");
+  return await restoreDocVersion(id, versionId, userId, actor);
 }

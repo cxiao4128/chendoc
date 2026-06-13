@@ -55,7 +55,7 @@ type ActivePanel = "overview" | "logs" | "appearance" | "recovery" | "users" | "
 type UserDetailTab = "info" | "roles" | "login" | "actions";
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v2.5.0";
+const APP_VERSION = "v2.5.1";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -995,7 +995,7 @@ onBeforeUnmount(() => {
                 <header><h3>文档资产</h3></header>
                 <p v-if="!selectedUser.docs?.length" class="settings-page__logs-empty">暂无文档</p>
                 <template v-else>
-                  <RouterLink v-for="doc in selectedUser.docs" :key="doc.id" :to="`/admin/docs/${doc.id}`">
+                  <RouterLink v-for="doc in selectedUser.docs" :key="doc.docUid" :to="`/admin/docs/${doc.docUid}`">
                     <span>
                       <strong>{{ doc.title }}</strong>
                       <small>{{ doc.deletedAt ? "已在回收站" : "正常" }} · {{ formatLogDate(doc.updatedAt) }}</small>

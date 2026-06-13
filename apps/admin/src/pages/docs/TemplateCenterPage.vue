@@ -42,8 +42,8 @@ async function createFromTemplate(template: typeof templates[number]) {
   creatingKey.value = template.key;
   try {
     const doc = await docs.createDoc(template.title);
-    await docs.saveDoc(doc.id, { summary: template.summary, contentHtml: template.html });
-    router.push(docPath(doc.id));
+    await docs.saveDoc(doc.docUid, { summary: template.summary, contentHtml: template.html });
+    router.push(docPath(doc.docUid));
   } finally {
     creatingKey.value = "";
   }
@@ -70,7 +70,7 @@ async function createFromTemplate(template: typeof templates[number]) {
 
     <section class="utility-page__panel">
       <strong>最近文档</strong>
-      <RouterLink v-for="doc in recentDocs" :key="doc.id" :to="docPath(doc.id)">
+      <RouterLink v-for="doc in recentDocs" :key="doc.docUid" :to="docPath(doc.docUid)">
         {{ doc.title }}
       </RouterLink>
     </section>

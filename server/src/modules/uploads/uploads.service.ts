@@ -19,7 +19,7 @@ const presignSchema = z.object({
   mimeType: z.string().min(3).max(120),
   size: z.number().int().positive(),
   kind: z.enum(["image", "video", "file"]),
-  docId: z.number().int().positive().optional().nullable()
+  docUid: z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/).optional().nullable()
 });
 
 const completeSchema = presignSchema.extend({
@@ -35,10 +35,10 @@ const uploadTokenSchema = z.object({
   mimeType: z.string().min(3).max(120),
   size: z.number().int().positive(),
   kind: z.enum(["image", "video", "file"]),
-  docId: z.number().int().positive().nullable()
+  docUid: z.string().regex(/^[A-Za-z0-9]{16,32}$/).nullable()
 });
 
-type Actor = { id: number; role: "admin" | "user" };
+type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
 type UploadKind = z.infer<typeof presignSchema>["kind"];
 type UploadPolicy = Record<UploadKind, {
   mimeByExtension: Record<string, string[]>;
@@ -243,21 +243,23 @@ function verifyUploadToken(token: string) {
   return uploadTokenSchema.parse(decoded);
 }
 
-async function assertUploadDocAccess(docId: number | null | undefined, actor: Actor) {
-  if (!docId) return;
-  const doc = await dbGet<{ id: number; createdBy: number | null }>(db
-    .select({ id: docs.id, createdBy: docs.createdBy })
+async function uploadDocId(docUid: string | null | undefined, actor: Actor) {
+  if (!docUid) return null;
+  const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
+    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
     .from(docs)
-    .where(and(eq(docs.id, docId), isNull(docs.deletedAt)))
+    .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
     .limit(1));
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  if (actor.role !== "admin" && doc.createdBy !== actor.id) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  if (!actor.isSuperAdmin && doc.isSuperAdminDoc) throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
+  if (actor.role !== "admin" && doc.ownerId !== actor.id) throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
+  return doc.id;
 }
 
 export async function createPresignedUpload(userId: number, actor: Actor, input: unknown) {
   const body = normalizeUploadInput(presignSchema.parse(input));
   validateFile(body);
-  await assertUploadDocAccess(body.docId ?? null, actor);
+  await uploadDocId(body.docUid ?? null, actor);
   const config = await assertR2Ready();
   const client = createR2Client(config);
   await ensureBrowserUploadCors(config, client);
@@ -277,7 +279,7 @@ export async function createPresignedUpload(userId: number, actor: Actor, input:
     mimeType: body.mimeType,
     size: body.size,
     kind: body.kind,
-    docId: body.docId ?? null
+    docUid: body.docUid ?? null
   });
   return {
     uploadUrl,
@@ -304,12 +306,12 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     body.mimeType !== tokenPayload.mimeType ||
     body.size !== tokenPayload.size ||
     body.kind !== tokenPayload.kind ||
-    (body.docId ?? null) !== tokenPayload.docId
+    (body.docUid ?? null) !== tokenPayload.docUid
   ) {
     throw new BadRequestError("上传完成参数不匹配", "UPLOAD_COMPLETE_MISMATCH");
   }
 
-  await assertUploadDocAccess(tokenPayload.docId, actor);
+  const docId = await uploadDocId(tokenPayload.docUid, actor);
   validateFile(tokenPayload);
   const config = await assertR2Ready();
   const client = createR2Client(config);
@@ -321,7 +323,7 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
   const publicUrl = publicUrlFromKey(config, tokenPayload.objectKey);
   const result = await dbRun(db.insert(uploads).values({
     userId,
-    docId: tokenPayload.docId,
+    docId,
     objectKey: tokenPayload.objectKey,
     publicUrl,
     mimeType: tokenPayload.mimeType,

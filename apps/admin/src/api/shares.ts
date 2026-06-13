@@ -2,7 +2,6 @@ import { request } from "./request";
 
 export interface ShareItem {
   id: number;
-  docId: number;
   shareCode: number;
   customSlug?: string | null;
   isEnabled: boolean;
@@ -27,17 +26,18 @@ export interface SharePatch {
 }
 
 export interface ShareReviewItem extends ShareItem {
+  docUid: string;
   docTitle: string;
   ownerId?: number | null;
   ownerName?: string | null;
 }
 
-export function createShareApi(docId: number) {
-  return request<{ share: ShareItem }>(`/api/docs/${docId}/share`, { method: "POST", body: JSON.stringify({}) });
+export function createShareApi(docUid: string) {
+  return request<{ share: ShareItem }>(`/api/docs/${docUid}/share`, { method: "POST", body: JSON.stringify({}) });
 }
 
-export function getShareByDocApi(docId: number) {
-  return request<{ share: ShareItem | null }>(`/api/shares/doc/${docId}`);
+export function getShareByDocApi(docUid: string) {
+  return request<{ share: ShareItem | null }>(`/api/shares/doc/${docUid}`);
 }
 
 export function updateShareApi(id: number, body: SharePatch) {

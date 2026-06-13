@@ -1,6 +1,6 @@
 # ChenDoc / 陈书
 
-当前版本 / Current version: `v2.5.0`
+当前版本 / Current version: `v2.5.1`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -95,6 +95,22 @@ bash ./stop.sh           # 停止服务
 - 上线前建议测试登录、公开分享、分享审核、注册卡密、R2 上传和管理员安全中心。
 
 ### 更新日志
+
+#### 2.5.1
+
+版本号：`2.5.1`
+
+展示版本：`v2.5.1`
+
+本次更新内容：
+
+- 优化登录页首屏加载，表单先渲染，不再等待站点配置、远程 Logo 或壁纸预加载完成。
+- 登录路由守卫跳过无会话访问 `/login` 时的 `fetchMe()`，避免首屏前触发 `/api/auth/me` 和网关 challenge。
+- 登录默认壁纸改用 `desktop-bg.webp`，保留 `desktop-bg-small.webp` 首屏占位，并移除 1.3MB Logo preload。
+
+更新时间：2026-06-13 15:16:16 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 #### 2.5.0
 
@@ -197,6 +213,16 @@ http://127.0.0.1:8985
 ```
 
 ### Changelog
+
+#### 2.5.1
+
+- Optimized login first paint: the form renders immediately without waiting for site config, remote Logo, or wallpaper preloading.
+- Skipped `fetchMe()` for no-session `/login` visits, avoiding `/api/auth/me` and gateway challenge work before first paint.
+- Switched the bundled login wallpaper to `desktop-bg.webp`, kept `desktop-bg-small.webp` as the first-paint placeholder, and removed the 1.3MB Logo preload.
+
+Updated at: 2026-06-13 15:16:16 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
 #### 2.5.0
 

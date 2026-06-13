@@ -88,7 +88,7 @@ function kindFromFile(file: File, policy: UploadPolicy): UploadKind {
 }
 
 export function useUpload() {
-  async function uploadFile(file: File, docId?: number | null) {
+  async function uploadFile(file: File, docUid?: string | null) {
     const policy = await loadUploadPolicy();
     const kind = kindFromFile(file, policy);
     const prepared = kind === "image" ? await convertImageToWebp(file, policy) : ensureUploadFile(file, kind, policy);
@@ -97,7 +97,7 @@ export function useUpload() {
       mimeType: prepared.type || "application/octet-stream",
       size: prepared.size,
       kind,
-      docId
+      docUid
     };
     const presigned = await presignUploadApi(input);
     let put: Response;

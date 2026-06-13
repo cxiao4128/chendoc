@@ -11,20 +11,20 @@ interface DetailCacheEntry {
   expiresAt: number;
 }
 
-const detailCache = new Map<number, DetailCacheEntry>();
+const detailCache = new Map<string, DetailCacheEntry>();
 
 function setDetailCache(doc: DocDetail) {
-  detailCache.set(doc.id, {
+  detailCache.set(doc.docUid, {
     doc,
     expiresAt: Date.now() + DETAIL_CACHE_TTL_MS
   });
 }
 
-function getDetailCache(id: number) {
-  const cached = detailCache.get(id);
+function getDetailCache(docUid: string) {
+  const cached = detailCache.get(docUid);
   if (!cached) return null;
   if (cached.expiresAt <= Date.now()) {
-    detailCache.delete(id);
+    detailCache.delete(docUid);
     return null;
   }
   return cached.doc;
@@ -32,8 +32,8 @@ function getDetailCache(id: number) {
 
 function pruneDetailCache() {
   const now = Date.now();
-  for (const [id, cached] of detailCache) {
-    if (cached.expiresAt <= now) detailCache.delete(id);
+  for (const [docUid, cached] of detailCache) {
+    if (cached.expiresAt <= now) detailCache.delete(docUid);
   }
 }
 
@@ -89,10 +89,10 @@ export const useDocStore = defineStore("doc", () => {
     }
   }
 
-  async function loadDoc(id: number) {
-    const cached = getDetailCache(id);
+  async function loadDoc(docUid: string) {
+    const cached = getDetailCache(docUid);
     if (cached) current.value = cached;
-    else if (current.value?.id === id) current.value = null;
+    else if (current.value?.docUid === docUid) current.value = null;
 
     currentController?.abort();
     currentController = new AbortController();
@@ -100,7 +100,7 @@ export const useDocStore = defineStore("doc", () => {
     detailLoading.value = !cached;
     detailError.value = null;
     try {
-      const response = await getDocApi(id, currentController.signal);
+      const response = await getDocApi(docUid, currentController.signal);
       if (seq === requestSeq) {
         current.value = response.doc;
         setDetailCache(response.doc);
@@ -114,13 +114,13 @@ export const useDocStore = defineStore("doc", () => {
     }
   }
 
-  async function saveDoc(id: number, patch: Partial<DocDetail>) {
+  async function saveDoc(docUid: string, patch: Partial<DocDetail>) {
     detailError.value = null;
     try {
-      const response = await updateDocApi(id, patch);
+      const response = await updateDocApi(docUid, patch);
       current.value = response.doc;
       setDetailCache(response.doc);
-      const index = docs.value.findIndex((item) => item.id === id);
+      const index = docs.value.findIndex((item) => item.docUid === docUid);
       if (index >= 0) {
         docs.value[index] = {
           ...docs.value[index],
@@ -137,16 +137,16 @@ export const useDocStore = defineStore("doc", () => {
     }
   }
 
-  async function bulkDeleteDocs(ids: number[]) {
+  async function bulkDeleteDocs(docUids: string[]) {
     detailError.value = null;
-    const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0);
-    if (!uniqueIds.length) return [];
-    const response = await bulkDeleteDocsApi(uniqueIds);
-    const deletedIdSet = new Set(response.deletedIds);
-    docs.value = docs.value.filter((item) => !deletedIdSet.has(item.id));
-    for (const id of deletedIdSet) detailCache.delete(id);
-    if (current.value && deletedIdSet.has(current.value.id)) current.value = null;
-    return response.deletedIds;
+    const uniqueDocUids = Array.from(new Set(docUids)).filter((uid) => /^[A-Za-z0-9]{16,32}$/.test(uid));
+    if (!uniqueDocUids.length) return [];
+    const response = await bulkDeleteDocsApi(uniqueDocUids);
+    const deletedUidSet = new Set(response.deletedDocUids);
+    docs.value = docs.value.filter((item) => !deletedUidSet.has(item.docUid));
+    for (const uid of deletedUidSet) detailCache.delete(uid);
+    if (current.value && deletedUidSet.has(current.value.docUid)) current.value = null;
+    return response.deletedDocUids;
   }
 
   return {

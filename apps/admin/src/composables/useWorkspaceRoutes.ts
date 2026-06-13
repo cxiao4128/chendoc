@@ -12,6 +12,6 @@ export function useWorkspaceRoutes() {
     base,
     docsPath,
     trashPath,
-    docPath: (id: number) => buildDocPath(base.value, id)
+    docPath: (docUid: string) => buildDocPath(base.value, docUid)
   };
 }

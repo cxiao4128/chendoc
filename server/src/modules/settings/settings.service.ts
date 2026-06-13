@@ -2,7 +2,7 @@ import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { and, desc, eq, gte, inArray, isNotNull, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { authSessions, captchas, docs, docVersions, invites, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
+import { authSessions, captchas, docs, docVersions, invites, logs, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { createR2Client } from "../../config/r2.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
@@ -234,20 +234,20 @@ export async function listSettings(mask = true) {
 export async function listOperationLogs(limit = 80) {
   return await dbAll(db
     .select({
-      id: operationLogs.id,
-      userId: operationLogs.userId,
+      id: logs.id,
+      userId: logs.userId,
       username: users.username,
-      action: operationLogs.action,
-      targetType: operationLogs.targetType,
-      targetId: operationLogs.targetId,
-      ip: operationLogs.ip,
-      userAgent: operationLogs.userAgent,
-      createdAt: operationLogs.createdAt
+      action: logs.action,
+      targetType: logs.targetType,
+      targetId: logs.targetId,
+      ip: logs.ip,
+      userAgent: logs.userAgent,
+      createdAt: logs.createdAt
     })
-    .from(operationLogs)
-    .leftJoin(users, eq(operationLogs.userId, users.id))
-    .where(ne(operationLogs.action, "share.update"))
-    .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
+    .from(logs)
+    .leftJoin(users, eq(logs.userId, users.id))
+    .where(and(eq(logs.type, "operation_log"), ne(logs.action, "share.update")))
+    .orderBy(desc(logs.createdAt), desc(logs.id))
     .limit(limit));
 }
 
@@ -332,9 +332,9 @@ export async function getSystemOverview() {
       .select({ id: captchas.id, expireAt: captchas.expireAt, usedAt: captchas.usedAt })
       .from(captchas)),
     dbAll<{ id: number; createdAt: Date }>(db
-      .select({ id: operationLogs.id, createdAt: operationLogs.createdAt })
-      .from(operationLogs)
-      .where(gte(operationLogs.createdAt, yesterdayStart))),
+      .select({ id: logs.id, createdAt: logs.createdAt })
+      .from(logs)
+      .where(gte(logs.createdAt, yesterdayStart))),
     safeR2Config()
   ]);
 
@@ -470,12 +470,12 @@ export async function exportSystemConfig() {
 async function recentUserActivity(userId: number) {
   const rows = await dbAll<{ ip: string | null; createdAt: Date }>(db
     .select({
-      ip: operationLogs.ip,
-      createdAt: operationLogs.createdAt
+      ip: logs.ip,
+      createdAt: logs.createdAt
     })
-    .from(operationLogs)
-    .where(eq(operationLogs.userId, userId))
-    .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
+    .from(logs)
+    .where(eq(logs.userId, userId))
+    .orderBy(desc(logs.createdAt), desc(logs.id))
     .limit(80));
   const recentIps = Array.from(new Set(rows.map((row) => row.ip).filter((ip): ip is string => !!ip))).slice(0, 8);
   return {
@@ -489,7 +489,7 @@ async function userDocStats(userId: number) {
   const rows = await dbAll<{ deletedAt: Date | null }>(db
     .select({ deletedAt: docs.deletedAt })
     .from(docs)
-    .where(eq(docs.createdBy, userId)));
+    .where(eq(docs.ownerId, userId)));
   return {
     docCount: rows.length,
     deletedDocCount: rows.filter((row) => !!row.deletedAt).length
@@ -501,17 +501,17 @@ async function userDocStatsMap(userIds: number[]) {
   for (const userId of userIds) stats.set(userId, { docCount: 0, deletedDocCount: 0 });
   if (!userIds.length) return stats;
 
-  const rows = await dbAll<{ createdBy: number | null; deletedAt: Date | null }>(db
-    .select({ createdBy: docs.createdBy, deletedAt: docs.deletedAt })
+  const rows = await dbAll<{ ownerId: number | null; deletedAt: Date | null }>(db
+    .select({ ownerId: docs.ownerId, deletedAt: docs.deletedAt })
     .from(docs)
-    .where(inArray(docs.createdBy, userIds)));
+    .where(inArray(docs.ownerId, userIds)));
 
   for (const row of rows) {
-    if (!row.createdBy) continue;
-    const current = stats.get(row.createdBy) ?? { docCount: 0, deletedDocCount: 0 };
+    if (!row.ownerId) continue;
+    const current = stats.get(row.ownerId) ?? { docCount: 0, deletedDocCount: 0 };
     current.docCount += 1;
     if (row.deletedAt) current.deletedDocCount += 1;
-    stats.set(row.createdBy, current);
+    stats.set(row.ownerId, current);
   }
 
   return stats;
@@ -524,13 +524,13 @@ async function recentUserActivityMap(userIds: number[]) {
 
   const rows = await dbAll<{ userId: number | null; ip: string | null; createdAt: Date }>(db
     .select({
-      userId: operationLogs.userId,
-      ip: operationLogs.ip,
-      createdAt: operationLogs.createdAt
+      userId: logs.userId,
+      ip: logs.ip,
+      createdAt: logs.createdAt
     })
-    .from(operationLogs)
-    .where(inArray(operationLogs.userId, userIds))
-    .orderBy(desc(operationLogs.createdAt), desc(operationLogs.id))
+    .from(logs)
+    .where(inArray(logs.userId, userIds))
+    .orderBy(desc(logs.createdAt), desc(logs.id))
     .limit(1000));
 
   for (const row of rows) {
@@ -551,7 +551,7 @@ async function managedUserPayload(user: ManagedUser, includeDocs = false) {
   const userDocs = includeDocs
     ? await dbAll(db
       .select({
-        id: docs.id,
+        docUid: docs.docUid,
         title: docs.title,
         status: docs.status,
         deletedAt: docs.deletedAt,
@@ -559,7 +559,7 @@ async function managedUserPayload(user: ManagedUser, includeDocs = false) {
         createdAt: docs.createdAt
       })
       .from(docs)
-      .where(eq(docs.createdBy, user.id))
+      .where(eq(docs.ownerId, user.id))
       .orderBy(desc(docs.updatedAt), desc(docs.id))
       .limit(80))
     : undefined;
@@ -672,6 +672,14 @@ export async function deleteManagedUser(id: number, actor: UserActor) {
   await dbTransaction(async (tx) => {
     await dbRun(tx.delete(authSessions).where(eq(authSessions.userId, id)));
     await dbRun(tx.update(operationLogs).set({ userId: null }).where(eq(operationLogs.userId, id)));
+    await dbRun(tx.update(logs).set({ userId: null }).where(eq(logs.userId, id)));
+    await dbRun(tx.update(docs).set({
+      ownerId: null,
+      ownerRole: "super_admin",
+      scope: "system",
+      isSuperAdminDoc: true,
+      visibility: "private"
+    }).where(eq(docs.ownerId, id)));
     await dbRun(tx.update(docs).set({ createdBy: null }).where(eq(docs.createdBy, id)));
     await dbRun(tx.update(docs).set({ updatedBy: null }).where(eq(docs.updatedBy, id)));
     await dbRun(tx.update(invites).set({ createdBy: null }).where(eq(invites.createdBy, id)));

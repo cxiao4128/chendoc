@@ -57,7 +57,8 @@ export async function authRoutes(app: FastifyInstance) {
         action: "auth.login.success",
         targetType: "auth",
         targetId: "login",
-        ...auditMetaFromRequest(request)
+        ...auditMetaFromRequest(request),
+        role: result.user.role
       });
       return { token: result.token, user: result.user, expiresAt: result.expiresAt };
     } catch (error) {
@@ -66,6 +67,8 @@ export async function authRoutes(app: FastifyInstance) {
         action: "auth.login.failure",
         targetType: "auth",
         targetId: "login",
+        result: "failure",
+        statusCode: error instanceof AuthError ? error.statusCode : 401,
         ...auditMetaFromRequest(request)
       });
       if (error instanceof AuthError) {

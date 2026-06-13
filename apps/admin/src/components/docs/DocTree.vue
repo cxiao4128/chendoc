@@ -5,10 +5,10 @@ import "./doc-tree.css";
 
 defineProps<{
   docs: DocSummary[];
-  activeId?: number | null;
+  activeUid?: string | null;
   loading?: boolean;
 }>();
-defineEmits<{ create: []; select: [id: number] }>();
+defineEmits<{ create: []; select: [docUid: string] }>();
 
 function sharePath(doc: DocSummary) {
   return doc.shareCode ? `/r/${doc.shareCode}` : "";
@@ -31,11 +31,11 @@ function sharePath(doc: DocSummary) {
     <button
       v-for="doc in docs"
       v-else
-      :key="doc.id"
+      :key="doc.docUid"
       class="doc-tree__item"
-      :class="{ active: activeId === doc.id }"
+      :class="{ active: activeUid === doc.docUid }"
       type="button"
-      @click="$emit('select', doc.id)"
+      @click="$emit('select', doc.docUid)"
     >
       <FileText :size="16" />
       <span>{{ doc.title }}</span>

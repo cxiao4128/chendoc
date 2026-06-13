@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, defineAsyncComponent, onMounted, reactive, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-vue-next";
-import CaptchaInput from "../../components/auth/CaptchaInput.vue";
-import { getPublicSiteConfigApi } from "../../api/settings";
+import type { SiteConfigView } from "../../api/settings";
 import {
   bundledLogoUrl,
   bundledWallpaperUrl,
@@ -11,10 +10,9 @@ import {
   withBundledSiteAssets
 } from "../../config/site-assets";
 import { allowedPostLoginPath } from "../../router/access";
-import { nativeFormDialog } from "../../services/nativeDialog";
 import { useAuthStore } from "../../stores/auth";
 
-type PublicSiteConfig = Awaited<ReturnType<typeof getPublicSiteConfigApi>>["config"];
+type PublicSiteConfig = SiteConfigView;
 
 const loginNoticeKey = "chendoc_login_notice";
 const loginRedirectKey = "chendoc_login_redirect";
@@ -22,6 +20,7 @@ const redirectDelayMs = 720;
 
 const router = useRouter();
 const auth = useAuthStore();
+const CaptchaInput = defineAsyncComponent(() => import("../../components/auth/CaptchaInput.vue"));
 
 const username = ref("");
 const password = ref("");
@@ -34,7 +33,7 @@ const showPassword = ref(false);
 const loading = ref(false);
 const error = ref("");
 const successMessage = ref("");
-const assetsReady = ref(false);
+const assetsReady = ref(true);
 const wallpaperReady = ref(false);
 const site = reactive({
   brandName: "陈书",
@@ -105,6 +104,7 @@ function shouldRevealCaptcha(code: string) {
 }
 
 async function promptSecondFactor() {
+  const { nativeFormDialog } = await import("../../services/nativeDialog");
   const values = await nativeFormDialog({
     title: "管理员验证器",
     message: "请输入 Google Authenticator / Microsoft Authenticator 的 6 位验证码。没有设备时可填写一次性恢复码。",
@@ -169,26 +169,34 @@ async function prepareLoginPage() {
 
   let nextConfig: PublicSiteConfig | null = null;
   try {
+    const { getPublicSiteConfigApi } = await import("../../api/settings");
     nextConfig = withBundledSiteAssets((await getPublicSiteConfigApi()).config);
   } catch {
     nextConfig = null;
   }
 
-  const next = nextConfig ?? site;
+  if (!nextConfig) {
+    wallpaperReady.value = true;
+    return;
+  }
+
+  const next = nextConfig;
   const logoUrl = next.logoUrl || bundledLogoUrl;
   const wallpaperUrl = next.authWallpaperUrl || bundledWallpaperUrl;
-  const [readyLogoUrl, readyWallpaperUrl] = await Promise.all([
-    resolvePreloadedImage(logoUrl, bundledLogoUrl),
-    resolvePreloadedImage(wallpaperUrl, bundledWallpaperUrl)
-  ]);
 
   Object.assign(site, {
     ...next,
-    logoUrl: readyLogoUrl,
-    authWallpaperUrl: readyWallpaperUrl
+    logoUrl: site.logoUrl,
+    authWallpaperUrl: site.authWallpaperUrl
   });
-  wallpaperReady.value = true;
-  assetsReady.value = true;
+
+  void resolvePreloadedImage(logoUrl, bundledLogoUrl).then((readyLogoUrl) => {
+    site.logoUrl = readyLogoUrl;
+  });
+  void resolvePreloadedImage(wallpaperUrl, bundledWallpaperUrl).then((readyWallpaperUrl) => {
+    site.authWallpaperUrl = readyWallpaperUrl;
+    wallpaperReady.value = true;
+  });
 }
 
 async function submit() {
@@ -233,11 +241,7 @@ onMounted(() => {
 
 <template>
   <main class="login-page" :class="{ 'is-ready': assetsReady, 'is-wallpaper-ready': wallpaperReady, 'is-custom-wallpaper': isCustomWallpaper }">
-    <div v-if="!assetsReady" class="auth-preload" aria-label="正在载入 ChenDoc">
-      <img class="auth-preload__logo" :src="effectiveLogoUrl" alt="" referrerpolicy="no-referrer" />
-    </div>
-
-    <section v-else class="auth-shell" aria-label="ChenDoc 登录页">
+    <section class="auth-shell" aria-label="ChenDoc 登录页">
       <div class="auth-scene" aria-hidden="true">
         <img
           class="auth-scene__image"

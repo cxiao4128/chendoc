@@ -13,7 +13,8 @@ export const MYSQL_TABLE_NAMES = [
   "operation_logs",
   "login_failures",
   "danger_verifications",
-  "audit_logs"
+  "audit_logs",
+  "logs"
 ] as const;
 
 const tableOptions = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -95,6 +96,7 @@ export const MYSQL_CREATE_TABLES = [
 
   `CREATE TABLE IF NOT EXISTS docs (
     id INT NOT NULL AUTO_INCREMENT,
+    doc_uid VARCHAR(32) NOT NULL,
     space_id INT NULL,
     parent_id INT NULL,
     title VARCHAR(191) NOT NULL,
@@ -114,12 +116,19 @@ export const MYSQL_CREATE_TABLES = [
     pinned TINYINT(1) NOT NULL DEFAULT 0,
     status VARCHAR(16) NOT NULL DEFAULT 'draft',
     sort INT NOT NULL DEFAULT 0,
+    owner_id INT NULL,
+    owner_role VARCHAR(16) NOT NULL DEFAULT 'user',
     created_by INT NULL,
     updated_by INT NULL,
+    scope VARCHAR(16) NOT NULL DEFAULT 'user',
+    is_super_admin_doc TINYINT(1) NOT NULL DEFAULT 0,
+    visibility VARCHAR(16) NOT NULL DEFAULT 'private',
+    tenant_key VARCHAR(64) NOT NULL DEFAULT 'default',
     deleted_at DATETIME(3) NULL,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
+    UNIQUE KEY uk_documents_doc_uid (doc_uid),
     KEY docs_parent_idx (parent_id),
     KEY docs_deleted_idx (deleted_at),
     KEY docs_space_idx (space_id),
@@ -257,10 +266,41 @@ export const MYSQL_CREATE_TABLES = [
     KEY audit_logs_user_idx (user_id),
     KEY audit_logs_action_idx (action),
     KEY audit_logs_created_idx (created_at)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS logs (
+    id INT NOT NULL AUTO_INCREMENT,
+    log_uid VARCHAR(64) NOT NULL,
+    type VARCHAR(32) NOT NULL,
+    user_id INT NULL,
+    role VARCHAR(32) NULL,
+    action VARCHAR(96) NOT NULL,
+    target_type VARCHAR(64) NOT NULL,
+    target_id VARCHAR(191) NOT NULL,
+    doc_uid VARCHAR(32) NULL,
+    owner_id INT NULL,
+    ip VARCHAR(64) NULL,
+    user_agent TEXT NULL,
+    path VARCHAR(512) NULL,
+    method VARCHAR(16) NULL,
+    status_code INT NULL,
+    message TEXT NULL,
+    data MEDIUMTEXT NULL,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY logs_log_uid_unique (log_uid),
+    KEY logs_type_created_idx (type, created_at),
+    KEY logs_user_created_idx (user_id, created_at),
+    KEY logs_action_created_idx (action, created_at),
+    KEY logs_doc_uid_idx (doc_uid),
+    KEY logs_created_idx (created_at)
   ) ${tableOptions}`
 ] as const;
 
 export const MYSQL_INDEXES = [
+  { table: "docs", name: "idx_documents_owner_id", columns: "`owner_id`" },
+  { table: "docs", name: "idx_documents_super_admin_doc", columns: "`is_super_admin_doc`" },
+  { table: "docs", name: "idx_documents_tenant_owner_doc", columns: "`tenant_key`, `owner_id`, `doc_uid`" },
   { table: "docs", name: "docs_created_by_idx", columns: "`created_by`" },
   { table: "docs", name: "docs_status_idx", columns: "`status`" },
   { table: "docs", name: "docs_list_admin_idx", columns: "`deleted_at`, `pinned`, `updated_at`" },
@@ -274,5 +314,10 @@ export const MYSQL_INDEXES = [
   { table: "operation_logs", name: "operation_logs_user_created_idx", columns: "`user_id`, `created_at`" },
   { table: "shares", name: "shares_public_lookup_idx", columns: "`share_code`, `is_enabled`, `review_status`" },
   { table: "login_failures", name: "login_failures_cleanup_idx", columns: "`last_failed_at`, `locked_until`" },
-  { table: "danger_verifications", name: "danger_verifications_cleanup_idx", columns: "`expire_at`" }
+  { table: "danger_verifications", name: "danger_verifications_cleanup_idx", columns: "`expire_at`" },
+  { table: "logs", name: "logs_type_created_idx", columns: "`type`, `created_at`" },
+  { table: "logs", name: "logs_user_created_idx", columns: "`user_id`, `created_at`" },
+  { table: "logs", name: "logs_action_created_idx", columns: "`action`, `created_at`" },
+  { table: "logs", name: "logs_doc_uid_idx", columns: "`doc_uid`" },
+  { table: "logs", name: "logs_created_idx", columns: "`created_at`" }
 ] as const;

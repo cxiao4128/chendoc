@@ -35,7 +35,7 @@ export interface OperationLogView {
 }
 
 export interface ManagedUserDocView {
-  id: number;
+  docUid: string;
   title: string;
   status: "draft" | "published" | "archived";
   deletedAt?: string | null;
@@ -223,10 +223,10 @@ export function testR2Api(upload: boolean) {
   });
 }
 
-export function getDangerDocApi(id: number) {
-  return request<{ doc: { id: number; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } }>(`/api/admin/docs/by-id/${id}`);
+export function getDangerDocApi(docUid: string) {
+  return request<{ doc: { docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } }>(`/api/admin/docs/by-uid/${docUid}`);
 }
 
-export function dangerDeleteDocApi(id: number) {
-  return ensureDangerVerified().then(() => request<{ ok: true }>(`/api/admin/docs/by-id/${id}`, { method: "DELETE" }));
+export function dangerDeleteDocApi(docUid: string) {
+  return ensureDangerVerified().then(() => request<{ ok: true }>(`/api/admin/docs/by-uid/${docUid}`, { method: "DELETE" }));
 }

@@ -98,23 +98,23 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
         url: `${payload.mode === "search" ? "/api/docs/search" : "/api/docs"}${queryString(payload)}`
       };
     case "d2":
-      return { method: "GET", url: `/api/docs/${param(payload, "id")}` };
+      return { method: "GET", url: `/api/docs/${param(payload, "docUid")}` };
     case "d3":
-      return paramsOf(payload).id
-        ? { method: "PATCH", url: `/api/docs/${param(payload, "id")}`, body: bodyOf(payload) }
+      return paramsOf(payload).docUid
+        ? { method: "PATCH", url: `/api/docs/${param(payload, "docUid")}`, body: bodyOf(payload) }
         : { method: "POST", url: "/api/docs", body: bodyOf(payload) };
     case "d4":
-      return { method: "DELETE", url: `/api/docs/${param(payload, "id")}` };
+      return { method: "DELETE", url: `/api/docs/${param(payload, "docUid")}` };
     case "d5":
       return { method: "POST", url: "/api/docs/bulk-delete", body: bodyOf(payload) };
     case "d6":
-      return { method: "POST", url: `/api/docs/${param(payload, "id")}/publish`, body: {} };
+      return { method: "POST", url: `/api/docs/${param(payload, "docUid")}/publish`, body: {} };
     case "d7":
-      return { method: "GET", url: `/api/docs/${param(payload, "id")}/versions` };
+      return { method: "GET", url: `/api/docs/${param(payload, "docUid")}/versions` };
     case "d8":
       return {
         method: "POST",
-        url: `/api/docs/${param(payload, "id")}/versions/${param(payload, "versionId")}/restore`,
+        url: `/api/docs/${param(payload, "docUid")}/versions/${param(payload, "versionId")}/restore`,
         body: {}
       };
 
@@ -137,9 +137,9 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       };
 
     case "h1":
-      return { method: "POST", url: `/api/docs/${param(payload, "docId")}/share`, body: bodyOf(payload) };
+      return { method: "POST", url: `/api/docs/${param(payload, "docUid")}/share`, body: bodyOf(payload) };
     case "h2":
-      return { method: "GET", url: `/api/shares/doc/${param(payload, "docId")}` };
+      return { method: "GET", url: `/api/shares/doc/${param(payload, "docUid")}` };
     case "h3":
       return { method: "PATCH", url: `/api/shares/${param(payload, "id")}`, body: bodyOf(payload) };
     case "h4":
@@ -215,9 +215,9 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       return { method: "DELETE", url: `/api/admin/invites/${param(payload, "id")}` };
 
     case "x1":
-      return { method: "GET", url: `/api/admin/docs/by-id/${param(payload, "id")}` };
+      return { method: "GET", url: `/api/admin/docs/by-uid/${param(payload, "docUid")}` };
     case "x2":
-      return { method: "DELETE", url: `/api/admin/docs/by-id/${param(payload, "id")}` };
+      return { method: "DELETE", url: `/api/admin/docs/by-uid/${param(payload, "docUid")}` };
 
     case "y1":
       return { method: "GET", url: "/api/admin/security/totp/status" };

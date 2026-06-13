@@ -18,7 +18,7 @@ const drawerOpen = ref(false);
 
 const appTitle = "陈书";
 const routeMeta = computed(() => getAdminRouteMeta(route.path));
-const isEditorRoute = computed(() => /^\/(?:admin|users)\/docs\/\d+/.test(route.path));
+const isEditorRoute = computed(() => /^\/(?:admin|users)\/docs\/[A-Za-z0-9]{16,32}/.test(route.path));
 const visibleLinks = computed(() => getWorkspaceNavItems(base.value, auth.canAccessAdmin));
 const roleText = computed(() => {
   if (auth.user?.isSuperAdmin) return "超级管理员";
@@ -40,7 +40,7 @@ function activeNav(path: string) {
 async function createDoc() {
   const doc = await docs.createDoc("未命名文档");
   drawerOpen.value = false;
-  router.push(docPath(doc.id));
+  router.push(docPath(doc.docUid));
 }
 </script>
 

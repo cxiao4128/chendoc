@@ -6,7 +6,7 @@ import { useShare } from "../../composables/useShare";
 import "./share-dialog.css";
 
 const open = defineModel<boolean>({ default: false });
-const props = defineProps<{ docId: number; title: string }>();
+const props = defineProps<{ docUid: string; title: string }>();
 const share = ref<ShareItem | null>(null);
 const loading = ref(false);
 const saving = ref(false);
@@ -21,7 +21,7 @@ watch(open, async (value) => {
   loading.value = true;
   error.value = "";
   try {
-    share.value = await ensureShare(props.docId);
+    share.value = await ensureShare(props.docUid);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "生成分享失败";
   } finally {

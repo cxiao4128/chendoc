@@ -1,12 +1,13 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { docs, operationLogs, shares } from "../../db/schema.js";
+import { docs, shares } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
+import { enqueueLog } from "../../utils/asyncLogQueue.js";
 
-export async function findDocById(id: number) {
+export async function findDocByUid(docUid: string) {
   const doc = await dbGet(db
     .select({
-      id: docs.id,
+      docUid: docs.docUid,
       title: docs.title,
       createdAt: docs.createdAt,
       updatedAt: docs.updatedAt,
@@ -15,27 +16,29 @@ export async function findDocById(id: number) {
     })
     .from(docs)
     .leftJoin(shares, eq(docs.id, shares.docId))
-    .where(eq(docs.id, id))
+    .where(eq(docs.docUid, docUid))
     .limit(1));
   return doc ?? null;
 }
 
 export async function dangerDeleteDoc(input: {
-  id: number;
+  docUid: string;
   userId: number;
   ip?: string;
   userAgent?: string;
 }) {
   await dbTransaction(async (tx) => {
-    await dbRun(tx.update(docs).set({ deletedAt: now(), updatedAt: now() }).where(and(eq(docs.id, input.id), isNull(docs.deletedAt))));
-    await dbRun(tx.insert(operationLogs).values({
-      userId: input.userId,
-      action: "danger.doc.delete",
-      targetType: "doc",
-      targetId: String(input.id),
-      ip: input.ip,
-      userAgent: input.userAgent,
-      createdAt: now()
-    }));
+    await dbRun(tx.update(docs).set({ deletedAt: now(), updatedAt: now() }).where(and(eq(docs.docUid, input.docUid), isNull(docs.deletedAt))));
+  });
+  enqueueLog({
+    type: "operation_log",
+    userId: input.userId,
+    action: "danger.doc.delete",
+    targetType: "doc",
+    targetId: input.docUid,
+    ip: input.ip,
+    userAgent: input.userAgent,
+    statusCode: 200,
+    message: "success"
   });
 }

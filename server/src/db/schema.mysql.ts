@@ -71,6 +71,7 @@ export const spaces = mysqlTable("spaces", {
 
 export const docs = mysqlTable("docs", {
   id: id(),
+  docUid: varchar("doc_uid", { length: 32 }).notNull(),
   spaceId: int("space_id"),
   parentId: int("parent_id"),
   title: varchar("title", { length: 191 }).notNull(),
@@ -90,17 +91,27 @@ export const docs = mysqlTable("docs", {
   pinned: boolean("pinned").notNull().default(false),
   status: varchar("status", { length: 16 }).notNull().default("draft"),
   sort: int("sort").notNull().default(0),
+  ownerId: int("owner_id"),
+  ownerRole: varchar("owner_role", { length: 16 }).notNull().default("user"),
   createdBy: int("created_by"),
   updatedBy: int("updated_by"),
+  scope: varchar("scope", { length: 16 }).notNull().default("user"),
+  isSuperAdminDoc: boolean("is_super_admin_doc").notNull().default(false),
+  visibility: varchar("visibility", { length: 16 }).notNull().default("private"),
+  tenantKey: varchar("tenant_key", { length: 64 }).notNull().default("default"),
   deletedAt: ts("deleted_at"),
   createdAt: ts("created_at").notNull(),
   updatedAt: ts("updated_at").notNull()
 }, (table) => [
+  uniqueIndex("uk_documents_doc_uid").on(table.docUid),
   index("docs_parent_idx").on(table.parentId),
   index("docs_deleted_idx").on(table.deletedAt),
   index("docs_space_idx").on(table.spaceId),
   index("docs_pinned_idx").on(table.pinned),
   index("docs_status_idx").on(table.status),
+  index("idx_documents_owner_id").on(table.ownerId),
+  index("idx_documents_super_admin_doc").on(table.isSuperAdminDoc),
+  index("idx_documents_tenant_owner_doc").on(table.tenantKey, table.ownerId, table.docUid),
   index("docs_created_by_idx").on(table.createdBy),
   index("docs_created_by_deleted_at_idx").on(table.createdBy, table.deletedAt),
   index("docs_updated_idx").on(table.updatedAt)
@@ -207,6 +218,33 @@ export const auditLogs = mysqlTable("audit_logs", {
   index("audit_logs_user_idx").on(table.userId),
   index("audit_logs_action_idx").on(table.action),
   index("audit_logs_created_idx").on(table.createdAt)
+]);
+
+export const logs = mysqlTable("logs", {
+  id: id(),
+  logUid: varchar("log_uid", { length: 64 }).notNull().unique(),
+  type: varchar("type", { length: 32 }).notNull(),
+  userId: int("user_id"),
+  role: varchar("role", { length: 32 }),
+  action: varchar("action", { length: 96 }).notNull(),
+  targetType: varchar("target_type", { length: 64 }).notNull(),
+  targetId: varchar("target_id", { length: 191 }).notNull(),
+  docUid: varchar("doc_uid", { length: 32 }),
+  ownerId: int("owner_id"),
+  ip: varchar("ip", { length: 64 }),
+  userAgent: text("user_agent"),
+  path: varchar("path", { length: 512 }),
+  method: varchar("method", { length: 16 }),
+  statusCode: int("status_code"),
+  message: text("message"),
+  data: mediumtext("data"),
+  createdAt: ts("created_at").notNull()
+}, (table) => [
+  index("logs_type_created_idx").on(table.type, table.createdAt),
+  index("logs_user_created_idx").on(table.userId, table.createdAt),
+  index("logs_action_created_idx").on(table.action, table.createdAt),
+  index("logs_doc_uid_idx").on(table.docUid),
+  index("logs_created_idx").on(table.createdAt)
 ]);
 
 export const settings = mysqlTable("settings", {

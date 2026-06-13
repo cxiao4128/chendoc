@@ -3,8 +3,9 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { db, dbAll, dbGet, dbRun } from "../../db/client.js";
-import { docs, operationLogs, shares, users } from "../../db/schema.js";
+import { docs, shares, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
+import { enqueueSecurityLog } from "../../utils/asyncLogQueue.js";
 import { now } from "../../utils/date.js";
 import { decryptDocumentRecord } from "../../utils/documentCrypto.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
@@ -12,8 +13,9 @@ import { hashPassword, verifyPassword } from "../../utils/password.js";
 import { sanitizeDocumentHtml } from "../../utils/sanitize.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
+import { canAccessDocument } from "../docs/documentAccess.js";
 
-type Actor = { id: number; role: "admin" | "user" };
+type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
 
 const slugSchema = z
   .string()
@@ -137,6 +139,7 @@ async function randomUserShareCode() {
 async function docWithOwner(docId: number) {
   const row = await dbGet<{
     id: number;
+    docUid: string;
     title: string;
     contentJson: string;
     contentHtml: string;
@@ -149,12 +152,15 @@ async function docWithOwner(docId: number) {
     contentHtmlTag: string | null;
     contentHtmlKeyVersion: string | null;
     createdBy: number | null;
+    ownerId: number | null;
     deletedAt: Date | null;
-    ownerRole: "admin" | "user" | null;
+    ownerRole: "user" | "doc_admin" | "super_admin" | null;
+    isSuperAdminDoc: boolean;
     ownerName: string | null;
   }>(db
     .select({
       id: docs.id,
+      docUid: docs.docUid,
       title: docs.title,
       contentJson: docs.contentJson,
       contentHtml: docs.contentHtml,
@@ -167,16 +173,24 @@ async function docWithOwner(docId: number) {
       contentHtmlTag: docs.contentHtmlTag,
       contentHtmlKeyVersion: docs.contentHtmlKeyVersion,
       createdBy: docs.createdBy,
+      ownerId: docs.ownerId,
       deletedAt: docs.deletedAt,
-      ownerRole: users.role,
+      ownerRole: docs.ownerRole,
+      isSuperAdminDoc: docs.isSuperAdminDoc,
       ownerName: users.username
     })
     .from(docs)
-    .leftJoin(users, eq(docs.createdBy, users.id))
+    .leftJoin(users, eq(docs.ownerId, users.id))
     .where(and(eq(docs.id, docId), isNull(docs.deletedAt)))
     .limit(1));
   if (!row) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   return decryptDocumentRecord(row);
+}
+
+async function docWithOwnerByUid(docUid: string) {
+  const row = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.docUid, docUid)).limit(1));
+  if (!row) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  return await docWithOwner(row.id);
 }
 
 async function shareWithDoc(shareId: number) {
@@ -185,14 +199,18 @@ async function shareWithDoc(shareId: number) {
   return { share, doc: await docWithOwner(share.docId) };
 }
 
-function isUserOwnedDoc(doc: { ownerRole: "admin" | "user" | null }) {
+function isUserOwnedDoc(doc: { ownerRole: string | null }) {
   return doc.ownerRole === "user";
 }
 
-function assertCanManageDocShare(actor: Actor, doc: { createdBy: number | null }) {
-  if (actor.role === "admin") return;
-  if (doc.createdBy === actor.id) return;
-  throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+function assertCanManageDocShare(actor: Actor, doc: { ownerId: number | null; isSuperAdminDoc: boolean }) {
+  if (canAccessDocument(actor, doc, "share")) return;
+  throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
+}
+
+async function syncDocVisibilityForShare(docId: number, share: { isEnabled: boolean; reviewStatus: string }) {
+  const visibility = share.isEnabled && share.reviewStatus === "approved" ? "shared" : "private";
+  await dbRun(db.update(docs).set({ visibility }).where(eq(docs.id, docId)));
 }
 
 export async function createOrGetShare(docId: number, input: unknown, actor: Actor = { id: 1, role: "admin" }) {
@@ -236,7 +254,9 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
     updatedAt: createdAt
   }));
 
-  return await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.id, Number(result.lastInsertRowid))).limit(1));
+  const created = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.id, Number(result.lastInsertRowid))).limit(1));
+  if (created) await syncDocVisibilityForShare(docId, created);
+  return created;
 }
 
 export async function updateShare(id: number, input: unknown, actor: Actor = { id: 1, role: "admin" }) {
@@ -295,6 +315,8 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
   if (body.expireAt !== undefined) patch.expireAt = parseExpireAt(body.expireAt);
 
   await dbRun(db.update(shares).set(patch).where(eq(shares.id, id)));
+  await syncDocVisibilityForShare(current.docId, { ...current, ...patch });
+  return { docUid: doc.docUid, ownerId: doc.ownerId };
 }
 
 export async function getShareByDoc(docId: number, actor?: Actor) {
@@ -305,10 +327,21 @@ export async function getShareByDoc(docId: number, actor?: Actor) {
   return (await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, docId)).limit(1))) ?? null;
 }
 
+export async function createOrGetShareByDocUid(docUid: string, input: unknown, actor: Actor) {
+  const doc = await docWithOwnerByUid(docUid);
+  assertCanManageDocShare(actor, doc);
+  return await createOrGetShare(doc.id, input, actor);
+}
+
+export async function getShareByDocUid(docUid: string, actor: Actor) {
+  const doc = await docWithOwnerByUid(docUid);
+  assertCanManageDocShare(actor, doc);
+  return (await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, doc.id)).limit(1))) ?? null;
+}
+
 export function adminSharePayload(share: typeof shares.$inferSelect) {
   return {
     id: share.id,
-    docId: share.docId,
     shareCode: share.shareCode,
     customSlug: share.customSlug,
     isEnabled: share.isEnabled,
@@ -330,15 +363,17 @@ export async function deleteShare(id: number, actor: Actor) {
   const { doc } = await shareWithDoc(id);
   assertCanManageDocShare(actor, doc);
   await dbRun(db.delete(shares).where(eq(shares.id, id)));
+  await dbRun(db.update(docs).set({ visibility: "private" }).where(eq(docs.id, doc.id)));
+  return { docUid: doc.docUid, ownerId: doc.ownerId };
 }
 
 export async function listUserShareReviews() {
   return await dbAll(db
     .select({
       id: shares.id,
-      docId: shares.docId,
+      docUid: docs.docUid,
       docTitle: docs.title,
-      ownerId: docs.createdBy,
+      ownerId: docs.ownerId,
       ownerName: users.username,
       shareCode: shares.shareCode,
       customSlug: shares.customSlug,
@@ -356,8 +391,8 @@ export async function listUserShareReviews() {
     })
     .from(shares)
     .innerJoin(docs, eq(shares.docId, docs.id))
-    .leftJoin(users, eq(docs.createdBy, users.id))
-    .where(and(eq(users.role, "user"), isNull(docs.deletedAt)))
+    .leftJoin(users, eq(docs.ownerId, users.id))
+    .where(and(eq(docs.ownerRole, "user"), isNull(docs.deletedAt)))
     .orderBy(sql`case ${shares.reviewStatus} when 'pending' then 0 when 'rejected' then 1 else 2 end`, sql`${shares.updatedAt} desc`));
 }
 
@@ -393,6 +428,7 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
   }
 
   await dbRun(db.update(shares).set(patch).where(eq(shares.id, id)));
+  await syncDocVisibilityForShare(current.docId, { ...current, ...patch });
 }
 
 function shareWhere(key: string | number) {
@@ -405,6 +441,7 @@ function shareWhere(key: string | number) {
 
 type PublicDocRecord = {
   id: number;
+  docUid: string;
   title: string;
   summary: string | null;
   coverUrl: string | null;
@@ -421,7 +458,7 @@ type PublicDocRecord = {
   updatedAt: Date;
   status: "draft" | "published" | "archived";
   deletedAt: Date | null;
-  ownerRole: "admin" | "user" | null;
+  ownerRole: "user" | "doc_admin" | "super_admin" | null;
 };
 
 export type PublicShareResolution =
@@ -431,6 +468,7 @@ export type PublicShareResolution =
 function publicDocSelect() {
   return {
     id: docs.id,
+    docUid: docs.docUid,
     title: docs.title,
     summary: docs.summary,
     coverUrl: docs.coverUrl,
@@ -447,7 +485,7 @@ function publicDocSelect() {
     updatedAt: docs.updatedAt,
     status: docs.status,
     deletedAt: docs.deletedAt,
-    ownerRole: users.role
+    ownerRole: docs.ownerRole
   };
 }
 
@@ -488,7 +526,7 @@ export async function getPublicShare(shareKey: string | number, countView = fals
 
 export function publicDocPayload(data: NonNullable<Awaited<ReturnType<typeof getPublicShare>>>, includeContent: boolean) {
   return {
-    id: data.doc.id,
+    docUid: data.doc.docUid,
     title: data.doc.title,
     summary: data.doc.summary,
     coverUrl: data.doc.coverUrl,
@@ -553,16 +591,17 @@ function cleanupSharePasswordAttempts(nowMs = Date.now()) {
   }
 }
 
-async function writeSharePasswordAudit(action: string, shareKey: string | number, meta: { ip?: string; userAgent?: string | string[] }) {
-  await dbRun(db.insert(operationLogs).values({
+function writeSharePasswordAudit(action: string, shareKey: string | number, meta: { ip?: string; userAgent?: string | string[] }) {
+  enqueueSecurityLog({
     userId: null,
     action,
     targetType: "share",
     targetId: String(shareKey),
     ip: meta.ip,
     userAgent: Array.isArray(meta.userAgent) ? meta.userAgent.join(", ") : meta.userAgent,
-    createdAt: now()
-  }));
+    statusCode: action === "share.password.locked" ? 429 : 401,
+    message: action
+  });
 }
 
 async function assertSharePasswordAllowed(shareKey: string | number, meta: { ip?: string; userAgent?: string | string[] }) {

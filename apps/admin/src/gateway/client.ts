@@ -399,23 +399,23 @@ function resolveGatewayAction(url: string, method: string, body: unknown): Gatew
   if (method === "POST" && path === "/api/admin/docs/trash/bulk-restore") return actionPayload("r2", { body, scope: "admin" });
   if (method === "POST" && path === "/api/admin/docs/trash/bulk-hard-delete") return actionPayload("r3", { body, scope: "admin" });
 
-  const docVersionRestore = path.match(/^\/api\/docs\/(\d+)\/versions\/(\d+)\/restore$/);
+  const docVersionRestore = path.match(/^\/api\/docs\/([A-Za-z0-9]{16,32})\/versions\/(\d+)\/restore$/);
   if (method === "POST" && docVersionRestore) {
-    return actionPayload("d8", { params: { id: docVersionRestore[1], versionId: docVersionRestore[2] } });
+    return actionPayload("d8", { params: { docUid: docVersionRestore[1], versionId: docVersionRestore[2] } });
   }
-  const docVersions = path.match(/^\/api\/docs\/(\d+)\/versions$/);
-  if (method === "GET" && docVersions) return actionPayload("d7", { params: { id: docVersions[1] } });
-  const docPublish = path.match(/^\/api\/docs\/(\d+)\/publish$/);
-  if (method === "POST" && docPublish) return actionPayload("d6", { params: { id: docPublish[1] } });
-  const docShare = path.match(/^\/api\/docs\/(\d+)\/share$/);
-  if (method === "POST" && docShare) return actionPayload("h1", { params: { docId: docShare[1] }, body });
-  const docDetail = path.match(/^\/api\/docs\/(\d+)$/);
-  if (method === "GET" && docDetail) return actionPayload("d2", { params: { id: docDetail[1] } });
-  if (method === "PATCH" && docDetail) return actionPayload("d3", { params: { id: docDetail[1] }, body });
-  if (method === "DELETE" && docDetail) return actionPayload("d4", { params: { id: docDetail[1] } });
+  const docVersions = path.match(/^\/api\/docs\/([A-Za-z0-9]{16,32})\/versions$/);
+  if (method === "GET" && docVersions) return actionPayload("d7", { params: { docUid: docVersions[1] } });
+  const docPublish = path.match(/^\/api\/docs\/([A-Za-z0-9]{16,32})\/publish$/);
+  if (method === "POST" && docPublish) return actionPayload("d6", { params: { docUid: docPublish[1] } });
+  const docShare = path.match(/^\/api\/docs\/([A-Za-z0-9]{16,32})\/share$/);
+  if (method === "POST" && docShare) return actionPayload("h1", { params: { docUid: docShare[1] }, body });
+  const docDetail = path.match(/^\/api\/docs\/([A-Za-z0-9]{16,32})$/);
+  if (method === "GET" && docDetail) return actionPayload("d2", { params: { docUid: docDetail[1] } });
+  if (method === "PATCH" && docDetail) return actionPayload("d3", { params: { docUid: docDetail[1] }, body });
+  if (method === "DELETE" && docDetail) return actionPayload("d4", { params: { docUid: docDetail[1] } });
 
-  const shareByDoc = path.match(/^\/api\/shares\/doc\/(\d+)$/);
-  if (method === "GET" && shareByDoc) return actionPayload("h2", { params: { docId: shareByDoc[1] } });
+  const shareByDoc = path.match(/^\/api\/shares\/doc\/([A-Za-z0-9]{16,32})$/);
+  if (method === "GET" && shareByDoc) return actionPayload("h2", { params: { docUid: shareByDoc[1] } });
   const shareReview = path.match(/^\/api\/admin\/share-reviews\/(\d+)\/review$/);
   if (method === "POST" && shareReview) return actionPayload("h6", { params: { id: shareReview[1] }, body });
   if (method === "GET" && path === "/api/admin/share-reviews") return actionPayload("h5");
@@ -472,9 +472,9 @@ function resolveGatewayAction(url: string, method: string, body: unknown): Gatew
   const invite = path.match(/^\/api\/admin\/invites\/(\d+)$/);
   if (method === "DELETE" && invite) return actionPayload("i5", { params: { id: invite[1] } });
 
-  const dangerDoc = path.match(/^\/api\/admin\/docs\/by-id\/(\d+)$/);
-  if (method === "GET" && dangerDoc) return actionPayload("x1", { params: { id: dangerDoc[1] } });
-  if (method === "DELETE" && dangerDoc) return actionPayload("x2", { params: { id: dangerDoc[1] } });
+  const dangerDoc = path.match(/^\/api\/admin\/docs\/by-uid\/([A-Za-z0-9]{16,32})$/);
+  if (method === "GET" && dangerDoc) return actionPayload("x1", { params: { docUid: dangerDoc[1] } });
+  if (method === "DELETE" && dangerDoc) return actionPayload("x2", { params: { docUid: dangerDoc[1] } });
 
   if (method === "GET" && path === "/api/admin/security/totp/status") return actionPayload("y1");
   if (method === "POST" && path === "/api/admin/security/totp/setup") return actionPayload("y2");

@@ -68,6 +68,7 @@ export const spaces = sqliteTable("spaces", {
 
 export const docs = sqliteTable("docs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  docUid: text("doc_uid").notNull(),
   spaceId: integer("space_id").references(() => spaces.id),
   parentId: integer("parent_id"),
   title: text("title").notNull(),
@@ -87,17 +88,27 @@ export const docs = sqliteTable("docs", {
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   sort: integer("sort").notNull().default(0),
+  ownerId: integer("owner_id").references(() => users.id),
+  ownerRole: text("owner_role", { enum: ["user", "doc_admin", "super_admin"] }).notNull().default("user"),
   createdBy: integer("created_by").references(() => users.id),
   updatedBy: integer("updated_by").references(() => users.id),
+  scope: text("scope", { enum: ["user", "admin", "system"] }).notNull().default("user"),
+  isSuperAdminDoc: integer("is_super_admin_doc", { mode: "boolean" }).notNull().default(false),
+  visibility: text("visibility", { enum: ["private", "shared", "public"] }).notNull().default("private"),
+  tenantKey: text("tenant_key").notNull().default("default"),
   deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
+  docUidUnique: uniqueIndex("uk_documents_doc_uid").on(table.docUid),
   docParentIdx: index("docs_parent_idx").on(table.parentId),
   docDeletedIdx: index("docs_deleted_idx").on(table.deletedAt),
   docSpaceIdx: index("docs_space_idx").on(table.spaceId),
   docPinnedIdx: index("docs_pinned_idx").on(table.pinned),
   docStatusIdx: index("docs_status_idx").on(table.status),
+  docOwnerIdx: index("idx_documents_owner_id").on(table.ownerId),
+  docSuperAdminIdx: index("idx_documents_super_admin_doc").on(table.isSuperAdminDoc),
+  docTenantOwnerDocIdx: index("idx_documents_tenant_owner_doc").on(table.tenantKey, table.ownerId, table.docUid),
   docCreatedByIdx: index("docs_created_by_idx").on(table.createdBy),
   docCreatedByDeletedAtIdx: index("docs_created_by_deleted_at_idx").on(table.createdBy, table.deletedAt),
   docUpdatedIdx: index("docs_updated_idx").on(table.updatedAt)
@@ -204,6 +215,33 @@ export const auditLogs = sqliteTable("audit_logs", {
   auditLogsUserIdx: index("audit_logs_user_idx").on(table.userId),
   auditLogsActionIdx: index("audit_logs_action_idx").on(table.action),
   auditLogsCreatedIdx: index("audit_logs_created_idx").on(table.createdAt)
+}));
+
+export const logs = sqliteTable("logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  logUid: text("log_uid").notNull().unique(),
+  type: text("type", { enum: ["login_log", "operation_log", "security_log", "error_log", "document_log"] }).notNull(),
+  userId: integer("user_id").references(() => users.id),
+  role: text("role"),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  docUid: text("doc_uid"),
+  ownerId: integer("owner_id"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  path: text("path"),
+  method: text("method"),
+  statusCode: integer("status_code"),
+  message: text("message"),
+  data: text("data"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  logsTypeCreatedIdx: index("logs_type_created_idx").on(table.type, table.createdAt),
+  logsUserCreatedIdx: index("logs_user_created_idx").on(table.userId, table.createdAt),
+  logsActionCreatedIdx: index("logs_action_created_idx").on(table.action, table.createdAt),
+  logsDocUidIdx: index("logs_doc_uid_idx").on(table.docUid),
+  logsCreatedIdx: index("logs_created_idx").on(table.createdAt)
 }));
 
 export const settings = sqliteTable("settings", {

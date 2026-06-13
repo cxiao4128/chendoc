@@ -4,21 +4,24 @@ import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
+import { enqueueDocumentLog } from "../../utils/asyncLogQueue.js";
 import {
   createDoc,
-  bulkHardDeleteTrashDocs,
-  bulkRestoreDocs,
-  bulkSoftDeleteDocs,
-  getDoc,
-  hardDeleteDoc,
+  bulkHardDeleteTrashDocsByUid,
+  bulkRestoreDocsByUid,
+  bulkSoftDeleteDocsByUid,
+  getDocByUid,
+  hardDeleteDocByUid,
   listDocsPage,
-  listDocVersions,
+  listDocVersionsByUid,
   listTrashDocsPage,
-  publishDoc,
-  restoreDoc,
-  restoreDocVersion,
-  softDeleteDoc,
-  updateDoc
+  publishDocByUid,
+  restoreDocByUid,
+  restoreDocVersionByUid,
+  safeDocListPayload,
+  safeDocPayload,
+  softDeleteDocByUid,
+  updateDocByUid
 } from "./docs.service.js";
 
 export async function docsRoutes(app: FastifyInstance) {
@@ -29,182 +32,243 @@ export async function docsRoutes(app: FastifyInstance) {
     page: z.coerce.number().int().positive().default(1),
     pageSize: z.coerce.number().int().positive().max(50).default(30)
   });
+  const docUidSchema = z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/);
+  const docUidParamSchema = z.object({ docUid: docUidSchema });
   const trashBulkSchema = z.object({
-    ids: z.array(z.number().int().positive()).min(1).max(200)
+    docUids: z.array(docUidSchema).min(1).max(200)
   });
 
   app.get("/api/docs", { preHandler: authenticate }, async (request) => {
     const query = listQuerySchema.parse(request.query);
-    return await listDocsPage(request.user!, query.q, query);
+    const result = await listDocsPage(request.user!, query.q, query);
+    return { ...result, docs: safeDocListPayload(result.docs) };
   });
   app.get("/api/docs/search", { preHandler: authenticate }, async (request) => {
     const query = listQuerySchema.parse(request.query);
-    return await listDocsPage(request.user!, query.q, query);
+    const result = await listDocsPage(request.user!, query.q, query);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      ownerId: request.user!.id,
+      action: "search",
+      request
+    });
+    return { ...result, docs: safeDocListPayload(result.docs) };
   });
   app.post("/api/docs", { preHandler: authenticate }, async (request) => {
-    const doc = await createDoc(request.user!.id, request.body);
+    const doc = await createDoc(request.user!.id, request.body, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: doc.docUid,
+      ownerId: doc.ownerId,
+      action: "create",
+      request
+    });
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.create",
       targetType: "doc",
-      targetId: doc.id,
+      targetId: doc.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc };
+    return { doc: safeDocPayload(doc) };
   });
   app.post("/api/docs/bulk-delete", { preHandler: authenticate }, async (request) => {
-    const body = z.object({
-      ids: z.array(z.number().int().positive()).min(1).max(200)
-    }).parse(request.body);
-    const deletedIds = await bulkSoftDeleteDocs(body.ids, request.user!.id, request.user!);
-    if (deletedIds.length) {
+    const body = trashBulkSchema.parse(request.body);
+    const deletedDocUids = await bulkSoftDeleteDocsByUid(body.docUids, request.user!.id, request.user!);
+    if (deletedDocUids.length) {
       await writeAuditLog({
         userId: request.user!.id,
         action: "doc.bulk_soft_delete",
         targetType: "doc",
-        targetId: `count:${deletedIds.length}`,
+        targetId: `count:${deletedDocUids.length}`,
         ...auditMetaFromRequest(request)
       });
     }
-    return { ok: true, deletedIds };
+    return { ok: true, deletedDocUids };
   });
   app.get("/api/docs/trash", { preHandler: authenticate }, async (request) => {
     const query = listQuerySchema.parse(request.query);
-    return await listTrashDocsPage(request.user!, query);
+    const result = await listTrashDocsPage(request.user!, query);
+    return { ...result, docs: safeDocListPayload(result.docs) };
   });
   app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async (request) => {
     const query = listQuerySchema.parse(request.query);
-    return await listTrashDocsPage(request.user!, query);
+    const result = await listTrashDocsPage(request.user!, query);
+    return { ...result, docs: safeDocListPayload(result.docs) };
   });
   app.post("/api/docs/trash/batch-restore", { preHandler: authenticate }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
-    const restoredIds = await bulkRestoreDocs(body.ids, request.user!.id, request.user!);
-    if (restoredIds.length) {
+    const restoredDocUids = await bulkRestoreDocsByUid(body.docUids, request.user!.id, request.user!);
+    if (restoredDocUids.length) {
       await writeAuditLog({
         userId: request.user!.id,
         action: "doc.bulk_restore",
         targetType: "doc",
-        targetId: `count:${restoredIds.length}`,
+        targetId: `count:${restoredDocUids.length}`,
         ...auditMetaFromRequest(request)
       });
     }
-    return { success: true, restored: restoredIds.length, restoredIds };
+    return { success: true, restored: restoredDocUids.length, restoredDocUids };
   });
   app.post("/api/docs/trash/batch-delete", { preHandler: authenticate }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
-    const deletedIds = await bulkHardDeleteTrashDocs(body.ids, request.user!);
-    if (deletedIds.length) {
+    const deletedDocUids = await bulkHardDeleteTrashDocsByUid(body.docUids, request.user!);
+    if (deletedDocUids.length) {
       await writeAuditLog({
         userId: request.user!.id,
         action: "doc.bulk_hard_delete",
         targetType: "doc",
-        targetId: `count:${deletedIds.length}`,
+        targetId: `count:${deletedDocUids.length}`,
         ...auditMetaFromRequest(request)
       });
     }
-    return { success: true, deleted: deletedIds.length, deletedIds };
+    return { success: true, deleted: deletedDocUids.length, deletedDocUids };
   });
   app.post("/api/admin/docs/trash/bulk-restore", { preHandler: adminOnly }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
-    const restoredIds = await bulkRestoreDocs(body.ids, request.user!.id, request.user!);
-    if (restoredIds.length) {
+    const restoredDocUids = await bulkRestoreDocsByUid(body.docUids, request.user!.id, request.user!);
+    if (restoredDocUids.length) {
       await writeAuditLog({
         userId: request.user!.id,
         action: "doc.bulk_restore",
         targetType: "doc",
-        targetId: `count:${restoredIds.length}`,
+        targetId: `count:${restoredDocUids.length}`,
         ...auditMetaFromRequest(request)
       });
     }
-    return { ok: true, restoredIds };
+    return { ok: true, restoredDocUids };
   });
   app.post("/api/admin/docs/trash/bulk-hard-delete", { preHandler: dangerousAdmin }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
-    const deletedIds = await bulkHardDeleteTrashDocs(body.ids, request.user!);
-    if (deletedIds.length) {
+    const deletedDocUids = await bulkHardDeleteTrashDocsByUid(body.docUids, request.user!);
+    if (deletedDocUids.length) {
       await writeAuditLog({
         userId: request.user!.id,
         action: "doc.bulk_hard_delete",
         targetType: "doc",
-        targetId: `count:${deletedIds.length}`,
+        targetId: `count:${deletedDocUids.length}`,
         ...auditMetaFromRequest(request)
       });
     }
-    return { ok: true, deletedIds };
+    return { ok: true, deletedDocUids };
   });
-  app.get("/api/docs/:id", { preHandler: authenticate }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { doc: await getDoc(params.id, request.user!) };
+  app.get("/api/docs/:docUid", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const doc = await getDocByUid(params.docUid, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: doc.docUid,
+      ownerId: doc.ownerId,
+      action: "read",
+      request
+    });
+    return { doc: safeDocPayload(doc) };
   });
-  app.patch("/api/docs/:id", { preHandler: authenticate }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { doc: await updateDoc(params.id, request.user!.id, request.body, request.user!) };
+  app.patch("/api/docs/:docUid", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const doc = await updateDocByUid(params.docUid, request.user!.id, request.body, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: doc.docUid,
+      ownerId: doc.ownerId,
+      action: "update",
+      request
+    });
+    return { doc: safeDocPayload(doc) };
   });
-  app.delete("/api/docs/:id", { preHandler: authenticate }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    await softDeleteDoc(params.id, request.user!.id, request.user!);
+  app.delete("/api/docs/:docUid", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const docLog = await softDeleteDocByUid(params.docUid, request.user!.id, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: docLog.docUid,
+      ownerId: docLog.ownerId,
+      action: "delete",
+      request
+    });
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.soft_delete",
       targetType: "doc",
-      targetId: params.id,
+      targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
     return { ok: true };
   });
-  app.post("/api/admin/docs/:id/restore", { preHandler: adminOnly }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const doc = await restoreDoc(params.id, request.user!.id, request.user!);
+  app.post("/api/admin/docs/:docUid/restore", { preHandler: adminOnly }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const doc = await restoreDocByUid(params.docUid, request.user!.id, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: doc.docUid,
+      ownerId: doc.ownerId,
+      action: "restore",
+      request
+    });
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.restore",
       targetType: "doc",
-      targetId: params.id,
+      targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc };
+    return { doc: safeDocPayload(doc) };
   });
-  app.delete("/api/admin/docs/:id/hard", { preHandler: dangerousAdmin }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    await hardDeleteDoc(params.id, request.user!);
+  app.delete("/api/admin/docs/:docUid/hard", { preHandler: dangerousAdmin }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    await hardDeleteDocByUid(params.docUid, request.user!);
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.hard_delete",
       targetType: "doc",
-      targetId: params.id,
+      targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
     return { ok: true };
   });
-  app.post("/api/docs/:id/publish", { preHandler: adminOnly }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const doc = await publishDoc(params.id, request.user!.id);
+  app.post("/api/docs/:docUid/publish", { preHandler: adminOnly }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const doc = await publishDocByUid(params.docUid, request.user!.id, request.user!);
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.publish",
       targetType: "doc",
-      targetId: params.id,
+      targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc };
+    return { doc: safeDocPayload(doc) };
   });
-  app.get("/api/docs/:id/versions", { preHandler: authenticate }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    return { versions: await listDocVersions(params.id, request.user!) };
+  app.get("/api/docs/:docUid/versions", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    return { versions: await listDocVersionsByUid(params.docUid, request.user!) };
   });
-  app.post("/api/docs/:id/versions/:versionId/restore", { preHandler: authenticate }, async (request) => {
+  app.post("/api/docs/:docUid/versions/:versionId/restore", { preHandler: authenticate }, async (request) => {
     const params = z.object({
-      id: z.coerce.number().int().positive(),
+      docUid: docUidSchema,
       versionId: z.coerce.number().int().positive()
     }).parse(request.params);
-    const doc = await restoreDocVersion(params.id, params.versionId, request.user!.id, request.user!);
+    const doc = await restoreDocVersionByUid(params.docUid, params.versionId, request.user!.id, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: doc.docUid,
+      ownerId: doc.ownerId,
+      action: "restore",
+      request
+    });
     await writeAuditLog({
       userId: request.user!.id,
       action: "doc.version.restore",
       targetType: "doc",
-      targetId: params.id,
+      targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc };
+    return { doc: safeDocPayload(doc) };
   });
 }
