@@ -15,7 +15,7 @@ export const useAuthStore = defineStore("auth", () => {
   const isLoggedIn = computed(() => !!user.value);
   const isSuperAdmin = computed(() => !!user.value?.isSuperAdmin);
   const isAdmin = computed(() => user.value?.role === "admin" || isSuperAdmin.value);
-  const canAccessAdmin = computed(() => isAdmin.value);
+  const canAccessAdmin = computed(() => isSuperAdmin.value);
 
   function setSession(nextUser: UserProfile, tokenValue: string, expiresAt?: string | number | Date) {
     user.value = nextUser;

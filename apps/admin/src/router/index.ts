@@ -26,7 +26,7 @@ const router = createRouter({
       children: [
         { path: "", redirect: "/admin/docs" },
         { path: "docs", component: () => import("../pages/docs/DocListPage.vue") },
-        { path: "docs/:id", component: () => import("../pages/docs/DocEditorPage.vue") },
+        { path: "docs/:docUid", component: () => import("../pages/docs/DocEditorPage.vue") },
         { path: "trash", component: () => import("../pages/docs/TrashPage.vue"), meta: { admin: true } },
         { path: "templates", component: () => import("../pages/docs/TemplateCenterPage.vue") },
         { path: "knowledge", component: () => import("../pages/docs/KnowledgeBasePage.vue") },
@@ -46,7 +46,7 @@ const router = createRouter({
       children: [
         { path: "", redirect: "/users/docs" },
         { path: "docs", component: () => import("../pages/docs/DocListPage.vue") },
-        { path: "docs/:id", component: () => import("../pages/docs/DocEditorPage.vue") },
+        { path: "docs/:docUid", component: () => import("../pages/docs/DocEditorPage.vue") },
         { path: "trash", component: () => import("../pages/docs/TrashPage.vue") },
         { path: "templates", component: () => import("../pages/docs/TemplateCenterPage.vue") },
         { path: "knowledge", component: () => import("../pages/docs/KnowledgeBasePage.vue") }
@@ -56,13 +56,12 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
-  const { useAuthStore } = await import("../stores/auth");
-  const auth = useAuthStore();
-  if (!auth.ready) await auth.fetchMe();
-
   if (to.path === "/login" && (Object.keys(to.query).length > 0 || to.hash)) {
     return { path: "/login", replace: true };
   }
+
+  const { useAuthStore } = await import("../stores/auth");
+  const auth = useAuthStore();
 
   if (to.path === "/") {
     return auth.user ? homeForUser(auth.user) : "/login";
@@ -72,7 +71,10 @@ router.beforeEach(async (to) => {
     return homeForUser(auth.user);
   }
 
-  if ((to.meta.auth || isAdminPath(to.path) || isUsersPath(to.path)) && !auth.user) {
+  const needsAuth = to.meta.auth || isAdminPath(to.path) || isUsersPath(to.path);
+  if (needsAuth && !auth.ready) await auth.fetchMe();
+
+  if (needsAuth && !auth.user) {
     rememberLoginRedirect(to.fullPath);
     return "/login";
   }

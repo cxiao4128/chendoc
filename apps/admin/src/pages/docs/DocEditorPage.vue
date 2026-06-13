@@ -78,9 +78,9 @@ let syncingShare = false;
 
 const AUTO_SAVE_DELAY_MS = 900;
 
-const docId = computed(() => Number(route.params.id));
-const current = computed(() => docs.current?.id === docId.value ? docs.current : null);
-const editorKey = computed(() => `${current.value?.id || 0}-${editorRefresh.value}`);
+const docUid = computed(() => String(route.params.docUid || ""));
+const current = computed(() => docs.current?.docUid === docUid.value ? docs.current : null);
+const editorKey = computed(() => `${current.value?.docUid || "none"}-${editorRefresh.value}`);
 const detailErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).detailError) || localDetailError.value);
 const saveErrorText = computed(() => saveError.value || "保存失败，当前编辑内容仍保留在本地。");
 const shareUrl = computed(() => {
@@ -167,8 +167,8 @@ function scheduleSave() {
   }, AUTO_SAVE_DELAY_MS);
 }
 
-async function loadShare(docIdValue: number) {
-  const response = await getShareByDocApi(docIdValue);
+async function loadShare(docUidValue: string) {
+  const response = await getShareByDocApi(docUidValue);
   share.value = response.share;
   syncingShare = true;
   shareEnabled.value = !!share.value?.isEnabled || (!auth.isAdmin && share.value?.reviewStatus === "pending");
@@ -179,8 +179,8 @@ async function loadShare(docIdValue: number) {
   syncingShare = false;
 }
 
-async function loadVersions(docIdValue: number) {
-  const response = await listDocVersionsApi(docIdValue);
+async function loadVersions(docUidValue: string) {
+  const response = await listDocVersionsApi(docUidValue);
   versions.value = response.versions;
 }
 
@@ -192,8 +192,8 @@ async function loadEditorList() {
   }
 }
 
-async function loadRelatedDocData(docIdValue: number) {
-  const [shareResult, versionsResult] = await Promise.allSettled([loadShare(docIdValue), loadVersions(docIdValue)]);
+async function loadRelatedDocData(docUidValue: string) {
+  const [shareResult, versionsResult] = await Promise.allSettled([loadShare(docUidValue), loadVersions(docUidValue)]);
   if (shareResult.status === "rejected") {
     share.value = null;
     shareStatus.value = "分享信息加载失败，可稍后重试。";
@@ -204,7 +204,7 @@ async function loadRelatedDocData(docIdValue: number) {
 }
 
 async function load() {
-  const requestedDocId = docId.value;
+  const requestedDocUid = docUid.value;
   share.value = null;
   sharePanelOpen.value = false;
   copied.value = false;
@@ -216,19 +216,19 @@ async function load() {
   hydrating.value = true;
   void loadEditorList();
   try {
-    const doc = await docs.loadDoc(requestedDocId);
-    if (requestedDocId !== docId.value) return;
+    const doc = await docs.loadDoc(requestedDocUid);
+    if (requestedDocUid !== docUid.value) return;
     title.value = doc.title;
     draft.value = null;
     dirty.value = false;
     saveState.value = "idle";
-    await loadRelatedDocData(doc.id);
+    await loadRelatedDocData(doc.docUid);
   } catch (error) {
-    if (!isAbortError(error) && requestedDocId === docId.value) {
+    if (!isAbortError(error) && requestedDocUid === docUid.value) {
       localDetailError.value = normalizeError(error) || "文档详情加载失败，请稍后重试。";
     }
   } finally {
-    if (requestedDocId === docId.value) hydrating.value = false;
+    if (requestedDocUid === docUid.value) hydrating.value = false;
   }
 }
 
@@ -238,16 +238,16 @@ function retryLoadDetail() {
 
 async function createDoc() {
   const doc = await docs.createDoc("未命名文档");
-  router.push(docPath(doc.id));
+  router.push(docPath(doc.docUid));
 }
 
-function selectDoc(id: number) {
-  router.push(docPath(id));
+function selectDoc(uid: string) {
+  router.push(docPath(uid));
 }
 
-function selectDocFromSheet(id: number) {
+function selectDocFromSheet(uid: string) {
   mobileSheet.value = null;
-  selectDoc(id);
+  selectDoc(uid);
 }
 
 function onEditorChange(payload: { contentJson: string; contentHtml: string }) {
@@ -257,27 +257,27 @@ function onEditorChange(payload: { contentJson: string; contentHtml: string }) {
 
 async function save() {
   if (!current.value || saving || !dirty.value) return;
-  const targetDocId = current.value.id;
+  const targetDocUid = current.value.docUid;
   const titleSnapshot = title.value;
   const draftSnapshot = draft.value;
   saving = true;
   saveState.value = "saving";
   saveError.value = "";
   try {
-    await docs.saveDoc(targetDocId, {
+    await docs.saveDoc(targetDocUid, {
       title: titleSnapshot.trim() || "未命名文档",
       ...(draftSnapshot ?? {})
     });
     savedAt.value = new Date().toLocaleTimeString();
-    if (current.value?.id === targetDocId && title.value === titleSnapshot && draft.value === draftSnapshot) {
+    if (current.value?.docUid === targetDocUid && title.value === titleSnapshot && draft.value === draftSnapshot) {
       draft.value = null;
       dirty.value = false;
       saveState.value = "saved";
-    } else if (current.value?.id === targetDocId) {
+    } else if (current.value?.docUid === targetDocUid) {
       dirty.value = true;
       saveState.value = "pending";
     }
-    void loadVersions(targetDocId);
+    void loadVersions(targetDocUid);
   } catch (error) {
     saveError.value = normalizeError(error) || "保存失败，请检查网络后重试。";
     dirty.value = true;
@@ -319,7 +319,7 @@ async function flushPendingSave() {
 async function ensureShare() {
   if (!current.value) return null;
   if (share.value) return share.value;
-  const created = await createShareApi(current.value.id);
+  const created = await createShareApi(current.value.docUid);
   share.value = created.share;
   return created.share;
 }
@@ -341,7 +341,7 @@ async function saveShare(passwordConfirmed = false, clearPassword = false) {
       patch.shareCode = Number.isInteger(shareCode) && shareCode > 0 ? shareCode : null;
     }
     await updateShareApi(target.id, patch);
-    const response = await getShareByDocApi(current.value.id);
+    const response = await getShareByDocApi(current.value.docUid);
     share.value = response.share;
     syncingShare = true;
     shareEnabled.value = !!share.value?.isEnabled || (!auth.isAdmin && share.value?.reviewStatus === "pending");
@@ -419,15 +419,15 @@ async function restoreVersion(version: DocVersion) {
       return;
     }
   }
-  await restoreDocVersionApi(current.value.id, version.id);
-  await docs.loadDoc(current.value.id);
+  await restoreDocVersionApi(current.value.docUid, version.id);
+  await docs.loadDoc(current.value.docUid);
   const doc = docs.current;
   if (doc) title.value = doc.title;
   draft.value = null;
   dirty.value = false;
   saveState.value = "saved";
   editorRefresh.value += 1;
-  await loadVersions(current.value.id);
+  await loadVersions(current.value.docUid);
 }
 
 async function restoreVersionFromSheet(version: DocVersion) {
@@ -437,7 +437,7 @@ async function restoreVersionFromSheet(version: DocVersion) {
 
 async function remove() {
   if (!current.value) return;
-  await deleteDocApi(current.value.id);
+  await deleteDocApi(current.value.docUid);
   await docs.loadList();
   router.push(docsPath.value);
 }
@@ -448,7 +448,7 @@ function beforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = "";
 }
 
-watch(() => route.params.id, load);
+watch(() => route.params.docUid, load);
 watch(() => route.fullPath, () => {
   mobileSheet.value = null;
 });
@@ -559,7 +559,7 @@ onBeforeUnmount(() => {
         <main class="doc-editor-page__mobile-canvas">
           <ChendocEditor
             :key="editorKey"
-            :doc-id="current.id"
+            :doc-uid="current.docUid"
             :content-json="current.contentJson"
             @change="onEditorChange"
             @toc="toc = $event"
@@ -587,11 +587,11 @@ onBeforeUnmount(() => {
             </button>
             <button
               v-for="doc in docs.docs"
-              :key="doc.id"
+              :key="doc.docUid"
               class="doc-editor-page__mobile-doc-item"
-              :class="{ 'is-active': doc.id === docId }"
+              :class="{ 'is-active': doc.docUid === docUid }"
               type="button"
-              @click="selectDocFromSheet(doc.id)"
+              @click="selectDocFromSheet(doc.docUid)"
             >
               <strong>{{ doc.title }}</strong>
               <small>{{ new Date(doc.updatedAt).toLocaleString() }}</small>
@@ -673,7 +673,7 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <div class="doc-editor-page__left">
-        <DocTree :docs="docs.docs" :active-id="docId" :loading="docs.loadingList" @create="createDoc" @select="selectDoc" />
+        <DocTree :docs="docs.docs" :active-uid="docUid" :loading="docs.loadingList" @create="createDoc" @select="selectDoc" />
         <section class="doc-editor-page__left-toc">
           <h2>目录</h2>
           <div v-if="toc.length" class="doc-editor-page__toc">
@@ -724,7 +724,7 @@ onBeforeUnmount(() => {
             <div class="doc-editor-page__canvas">
               <ChendocEditor
                 :key="editorKey"
-                :doc-id="current.id"
+                :doc-uid="current.docUid"
                 :content-json="current.contentJson"
                 @change="onEditorChange"
                 @toc="toc = $event"

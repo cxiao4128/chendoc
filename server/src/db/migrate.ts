@@ -1,8 +1,78 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { env } from "../config/env.js";
 import { closeDatabase, databaseProvider, mysqlPool, sqlite } from "./client.js";
 import { MYSQL_QUERY_INDEXES, SQLITE_QUERY_INDEX_STATEMENTS } from "./migrations/20260613_add_query_indexes.js";
 import { MYSQL_CREATE_TABLES, MYSQL_INDEXES } from "./mysql-ddl.js";
+import { generateDocUid } from "../utils/docUid.js";
+
+type DocIdentityMigrationStats = {
+  total: number;
+  generatedDocUid: number;
+  existingDocUid: number;
+  orphanDocs: number;
+  retryCount: number;
+};
+
+function emptyDocIdentityStats(): DocIdentityMigrationStats {
+  return {
+    total: 0,
+    generatedDocUid: 0,
+    existingDocUid: 0,
+    orphanDocs: 0,
+    retryCount: 0
+  };
+}
+
+function docIdentityForOwner(row: { createdBy: number | null; username: string | null; role: string | null }) {
+  if (!row.createdBy || !row.role) {
+    return {
+      ownerId: null,
+      ownerRole: "super_admin",
+      scope: "system",
+      isSuperAdminDoc: true,
+      visibility: "private",
+      orphan: true
+    };
+  }
+
+  if (row.role === "user") {
+    return {
+      ownerId: row.createdBy,
+      ownerRole: "user",
+      scope: "user",
+      isSuperAdminDoc: false,
+      visibility: "private",
+      orphan: false
+    };
+  }
+
+  const isDefaultSuperAdmin = row.username?.toLowerCase() === env.defaultAdminUsername.toLowerCase();
+  return {
+    ownerId: row.createdBy,
+    ownerRole: isDefaultSuperAdmin ? "super_admin" : "doc_admin",
+    scope: "admin",
+    isSuperAdminDoc: isDefaultSuperAdmin,
+    visibility: "private",
+    orphan: false
+  };
+}
+
+function generateUniqueDocUid(used: Set<string>, stats: DocIdentityMigrationStats) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const docUid = generateDocUid();
+    if (!used.has(docUid)) {
+      used.add(docUid);
+      stats.retryCount += attempt;
+      return docUid;
+    }
+  }
+  throw new Error("doc_uid generation failed after 5 retries.");
+}
+
+function logDocIdentityStats(stats: DocIdentityMigrationStats) {
+  console.log(`Document identity migration: total=${stats.total}, generated_doc_uid=${stats.generatedDocUid}, existing_doc_uid=${stats.existingDocUid}, orphan_docs=${stats.orphanDocs}, retry_count=${stats.retryCount}`);
+}
 
 function migrateSqlite() {
   if (!sqlite) throw new Error("SQLite connection is not available.");
@@ -69,6 +139,7 @@ function migrateSqlite() {
 
     CREATE TABLE IF NOT EXISTS docs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_uid TEXT NOT NULL,
       space_id INTEGER REFERENCES spaces(id),
       parent_id INTEGER,
       title TEXT NOT NULL,
@@ -77,8 +148,14 @@ function migrateSqlite() {
       cover_url TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       sort INTEGER NOT NULL DEFAULT 0,
+      owner_id INTEGER REFERENCES users(id),
+      owner_role TEXT NOT NULL DEFAULT 'user',
       created_by INTEGER REFERENCES users(id),
       updated_by INTEGER REFERENCES users(id),
+      scope TEXT NOT NULL DEFAULT 'user',
+      is_super_admin_doc INTEGER NOT NULL DEFAULT 0,
+      visibility TEXT NOT NULL DEFAULT 'private',
+      tenant_key TEXT NOT NULL DEFAULT 'default',
       deleted_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -181,6 +258,27 @@ function migrateSqlite() {
       created_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      log_uid TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id),
+      role TEXT,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      doc_uid TEXT,
+      owner_id INTEGER,
+      ip TEXT,
+      user_agent TEXT,
+      path TEXT,
+      method TEXT,
+      status_code INTEGER,
+      message TEXT,
+      data TEXT,
+      created_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS docs_parent_idx ON docs(parent_id);
     CREATE INDEX IF NOT EXISTS docs_deleted_idx ON docs(deleted_at);
     CREATE INDEX IF NOT EXISTS docs_space_idx ON docs(space_id);
@@ -201,6 +299,11 @@ function migrateSqlite() {
     CREATE INDEX IF NOT EXISTS audit_logs_user_idx ON audit_logs(user_id);
     CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON audit_logs(action);
     CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs(created_at);
+    CREATE INDEX IF NOT EXISTS logs_type_created_idx ON logs(type, created_at);
+    CREATE INDEX IF NOT EXISTS logs_user_created_idx ON logs(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS logs_action_created_idx ON logs(action, created_at);
+    CREATE INDEX IF NOT EXISTS logs_doc_uid_idx ON logs(doc_uid);
+    CREATE INDEX IF NOT EXISTS logs_created_idx ON logs(created_at);
   `);
   for (const statement of SQLITE_QUERY_INDEX_STATEMENTS) {
     sqlite.exec(statement);
@@ -226,6 +329,33 @@ function migrateSqlite() {
   if (!hasColumn("content_html_iv")) sqlite.exec("ALTER TABLE docs ADD COLUMN content_html_iv TEXT");
   if (!hasColumn("content_html_tag")) sqlite.exec("ALTER TABLE docs ADD COLUMN content_html_tag TEXT");
   if (!hasColumn("content_html_key_version")) sqlite.exec("ALTER TABLE docs ADD COLUMN content_html_key_version TEXT");
+  if (!hasColumn("doc_uid")) sqlite.exec("ALTER TABLE docs ADD COLUMN doc_uid TEXT");
+  if (!hasColumn("owner_id")) sqlite.exec("ALTER TABLE docs ADD COLUMN owner_id INTEGER REFERENCES users(id)");
+  if (!hasColumn("owner_role")) sqlite.exec("ALTER TABLE docs ADD COLUMN owner_role TEXT NOT NULL DEFAULT 'user'");
+  if (!hasColumn("scope")) sqlite.exec("ALTER TABLE docs ADD COLUMN scope TEXT NOT NULL DEFAULT 'user'");
+  if (!hasColumn("is_super_admin_doc")) sqlite.exec("ALTER TABLE docs ADD COLUMN is_super_admin_doc INTEGER NOT NULL DEFAULT 0");
+  if (!hasColumn("visibility")) sqlite.exec("ALTER TABLE docs ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'");
+  if (!hasColumn("tenant_key")) sqlite.exec("ALTER TABLE docs ADD COLUMN tenant_key TEXT NOT NULL DEFAULT 'default'");
+  const sqliteDocIdentityStats = backfillSqliteDocumentIdentity();
+  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uk_documents_doc_uid ON docs(doc_uid)");
+  sqlite.exec(`
+    CREATE TRIGGER IF NOT EXISTS docs_doc_uid_required_insert
+    BEFORE INSERT ON docs
+    WHEN NEW.doc_uid IS NULL OR NEW.doc_uid = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'docs.doc_uid is required');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS docs_doc_uid_required_update
+    BEFORE UPDATE OF doc_uid ON docs
+    WHEN NEW.doc_uid IS NULL OR NEW.doc_uid = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'docs.doc_uid is required');
+    END;
+  `);
+  sqlite.exec("CREATE INDEX IF NOT EXISTS idx_documents_owner_id ON docs(owner_id)");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS idx_documents_super_admin_doc ON docs(is_super_admin_doc)");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS idx_documents_tenant_owner_doc ON docs(tenant_key, owner_id, doc_uid)");
   sqlite.exec("CREATE INDEX IF NOT EXISTS docs_pinned_idx ON docs(pinned)");
 
   const docVersionColumns = sqlite.prepare("PRAGMA table_info(doc_versions)").all() as Array<{ name: string }>;
@@ -262,6 +392,7 @@ function migrateSqlite() {
   if (!hasShareColumn("reviewed_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_by INTEGER REFERENCES users(id)");
   if (!hasShareColumn("reviewed_at")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_at INTEGER");
   sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS shares_custom_slug_unique ON shares(custom_slug)");
+  logDocIdentityStats(sqliteDocIdentityStats);
 }
 
 async function migrateMysql() {
@@ -278,6 +409,16 @@ async function migrateMysql() {
   await addMysqlColumnIfMissing(databaseName, "users", "totp_secret_encrypted", "TEXT NULL");
   await addMysqlColumnIfMissing(databaseName, "users", "totp_recovery_codes_encrypted", "MEDIUMTEXT NULL");
   await addMysqlColumnIfMissing(databaseName, "users", "totp_updated_at", "DATETIME(3) NULL");
+  await addMysqlColumnIfMissing(databaseName, "docs", "doc_uid", "VARCHAR(32) NULL");
+  await addMysqlColumnIfMissing(databaseName, "docs", "owner_id", "INT NULL");
+  await addMysqlColumnIfMissing(databaseName, "docs", "owner_role", "VARCHAR(16) NOT NULL DEFAULT 'user'");
+  await addMysqlColumnIfMissing(databaseName, "docs", "scope", "VARCHAR(16) NOT NULL DEFAULT 'user'");
+  await addMysqlColumnIfMissing(databaseName, "docs", "is_super_admin_doc", "TINYINT(1) NOT NULL DEFAULT 0");
+  await addMysqlColumnIfMissing(databaseName, "docs", "visibility", "VARCHAR(16) NOT NULL DEFAULT 'private'");
+  await addMysqlColumnIfMissing(databaseName, "docs", "tenant_key", "VARCHAR(64) NOT NULL DEFAULT 'default'");
+  const mysqlDocIdentityStats = await backfillMysqlDocumentIdentity();
+  await mysqlPool.query("ALTER TABLE docs MODIFY COLUMN doc_uid VARCHAR(32) NOT NULL");
+  await addMysqlUniqueIndexIfMissing(databaseName, "docs", "uk_documents_doc_uid", "`doc_uid`");
   for (const tableName of ["docs", "doc_versions"]) {
     await addMysqlColumnIfMissing(databaseName, tableName, "content_json_ciphertext", "MEDIUMTEXT NULL");
     await addMysqlColumnIfMissing(databaseName, tableName, "content_json_iv", "VARCHAR(64) NULL");
@@ -298,6 +439,110 @@ async function migrateMysql() {
 
   await addMysqlIndexesIfMissing(databaseName, MYSQL_INDEXES);
   await addMysqlIndexesIfMissing(databaseName, MYSQL_QUERY_INDEXES);
+  logDocIdentityStats(mysqlDocIdentityStats);
+}
+
+function backfillSqliteDocumentIdentity() {
+  if (!sqlite) throw new Error("SQLite connection is not available.");
+  const stats = emptyDocIdentityStats();
+  const rows = sqlite.prepare(`
+    SELECT d.id, d.doc_uid AS docUid, d.created_by AS createdBy, d.owner_id AS ownerId,
+           u.username AS username, u.role AS role
+    FROM docs d
+    LEFT JOIN users u ON u.id = d.created_by
+    ORDER BY d.id ASC
+  `).all() as Array<{
+    id: number;
+    docUid: string | null;
+    createdBy: number | null;
+    ownerId: number | null;
+    username: string | null;
+    role: string | null;
+  }>;
+
+  stats.total = rows.length;
+  const usedDocUids = new Set(rows.map((row) => row.docUid).filter((value): value is string => !!value));
+  const update = sqlite.prepare(`
+    UPDATE docs
+    SET doc_uid = COALESCE(NULLIF(doc_uid, ''), @docUid),
+        owner_id = COALESCE(owner_id, @ownerId),
+        owner_role = @ownerRole,
+        scope = @scope,
+        is_super_admin_doc = @isSuperAdminDoc,
+        visibility = COALESCE(visibility, @visibility),
+        tenant_key = COALESCE(tenant_key, 'default')
+    WHERE id = @id
+  `);
+
+  for (const row of rows) {
+    const hasDocUid = !!row.docUid;
+    if (hasDocUid) stats.existingDocUid += 1;
+    const identity = docIdentityForOwner(row);
+    if (identity.orphan) stats.orphanDocs += 1;
+    update.run({
+      id: row.id,
+      docUid: hasDocUid ? row.docUid : generateUniqueDocUid(usedDocUids, stats),
+      ownerId: identity.ownerId,
+      ownerRole: identity.ownerRole,
+      scope: identity.scope,
+      isSuperAdminDoc: identity.isSuperAdminDoc ? 1 : 0,
+      visibility: identity.visibility
+    });
+    if (!hasDocUid) stats.generatedDocUid += 1;
+  }
+
+  return stats;
+}
+
+async function backfillMysqlDocumentIdentity() {
+  if (!mysqlPool) throw new Error("MySQL connection is not available.");
+  const stats = emptyDocIdentityStats();
+  const [rawRows] = await mysqlPool.query(`
+    SELECT d.id, d.doc_uid AS docUid, d.created_by AS createdBy, d.owner_id AS ownerId,
+           u.username AS username, u.role AS role
+    FROM docs d
+    LEFT JOIN users u ON u.id = d.created_by
+    ORDER BY d.id ASC
+  `);
+  const rows = rawRows as Array<{
+    id: number;
+    docUid: string | null;
+    createdBy: number | null;
+    ownerId: number | null;
+    username: string | null;
+    role: string | null;
+  }>;
+  stats.total = rows.length;
+  const usedDocUids = new Set(rows.map((row) => row.docUid).filter((value): value is string => !!value));
+
+  for (const row of rows) {
+    const hasDocUid = !!row.docUid;
+    if (hasDocUid) stats.existingDocUid += 1;
+    const identity = docIdentityForOwner(row);
+    if (identity.orphan) stats.orphanDocs += 1;
+    await mysqlPool.query(`
+      UPDATE docs
+      SET doc_uid = IF(NULLIF(doc_uid, '') IS NULL, ?, doc_uid),
+          owner_id = COALESCE(owner_id, ?),
+          owner_role = ?,
+          scope = ?,
+          is_super_admin_doc = ?,
+          visibility = COALESCE(visibility, ?),
+          tenant_key = COALESCE(tenant_key, 'default')
+      WHERE id = ?
+    `, [
+      hasDocUid ? row.docUid : generateUniqueDocUid(usedDocUids, stats),
+      identity.ownerId,
+      identity.ownerRole,
+      identity.scope,
+      identity.isSuperAdminDoc ? 1 : 0,
+      identity.visibility,
+      row.id
+    ]);
+    if (!hasDocUid) stats.generatedDocUid += 1;
+  }
+
+  return stats;
 }
 
 async function addMysqlIndexesIfMissing(

@@ -4,12 +4,13 @@ import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
+import { enqueueDocumentLog } from "../../utils/asyncLogQueue.js";
 import {
   adminSharePayload,
-  createOrGetShare,
+  createOrGetShareByDocUid,
   deleteShare,
   getPublicShare,
-  getShareByDoc,
+  getShareByDocUid,
   listUserShareReviews,
   publicDocPayload,
   reviewUserShare,
@@ -21,12 +22,21 @@ import {
 
 export async function sharesRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
+  const docUidSchema = z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/);
 
-  app.post("/api/docs/:id/share", { preHandler: authenticate }, async (request) => {
-    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const existingShare = await getShareByDoc(params.id, request.user!);
-    const share = await createOrGetShare(params.id, request.body, request.user!);
+  app.post("/api/docs/:docUid/share", { preHandler: authenticate }, async (request) => {
+    const params = z.object({ docUid: docUidSchema }).parse(request.params);
+    const existingShare = await getShareByDocUid(params.docUid, request.user!);
+    const share = await createOrGetShareByDocUid(params.docUid, request.body, request.user!);
     if (!share) throw new Error("分享创建失败");
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: params.docUid,
+      ownerId: request.user!.id,
+      action: "share",
+      request
+    });
     if (!existingShare) {
       await writeAuditLog({
         userId: request.user!.id,
@@ -41,19 +51,35 @@ export async function sharesRoutes(app: FastifyInstance) {
 
   app.patch("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    await updateShare(params.id, request.body, request.user!);
+    const docLog = await updateShare(params.id, request.body, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: docLog.docUid,
+      ownerId: docLog.ownerId,
+      action: "share",
+      request
+    });
     return { ok: true };
   });
 
-  app.get("/api/shares/doc/:docId", { preHandler: authenticate }, async (request) => {
-    const params = z.object({ docId: z.coerce.number().int().positive() }).parse(request.params);
-    const share = await getShareByDoc(params.docId, request.user!);
+  app.get("/api/shares/doc/:docUid", { preHandler: authenticate }, async (request) => {
+    const params = z.object({ docUid: docUidSchema }).parse(request.params);
+    const share = await getShareByDocUid(params.docUid, request.user!);
     return { share: share ? adminSharePayload(share) : null };
   });
 
   app.delete("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    await deleteShare(params.id, request.user!);
+    const docLog = await deleteShare(params.id, request.user!);
+    enqueueDocumentLog({
+      userId: request.user!.id,
+      role: request.user!.role,
+      docUid: docLog.docUid,
+      ownerId: docLog.ownerId,
+      action: "share",
+      request
+    });
     await writeAuditLog({
       userId: request.user!.id,
       action: "share.delete",

@@ -41,14 +41,14 @@ onMounted(() => {
     <div class="utility-page__columns">
       <section>
         <strong>公开知识</strong>
-        <RouterLink v-for="doc in sharedDocs" :key="doc.id" :to="docPath(doc.id)">
+        <RouterLink v-for="doc in sharedDocs" :key="doc.docUid" :to="docPath(doc.docUid)">
           {{ doc.title }}<span>/r/{{ doc.shareCode }}</span>
         </RouterLink>
         <p v-if="!sharedDocs.length">暂无公开知识。</p>
       </section>
       <section>
         <strong>已发布文档</strong>
-        <RouterLink v-for="doc in privateDocs" :key="doc.id" :to="docPath(doc.id)">
+        <RouterLink v-for="doc in privateDocs" :key="doc.docUid" :to="docPath(doc.docUid)">
           {{ doc.title }}<span>{{ new Date(doc.updatedAt).toLocaleDateString() }}</span>
         </RouterLink>
         <p v-if="!privateDocs.length">暂无已发布文档。</p>

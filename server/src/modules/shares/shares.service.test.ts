@@ -372,7 +372,7 @@ describe("user document share review flow", () => {
 
     expect((await listDocs({ id: userId, role: "user" })).map((doc) => doc.id)).toEqual([ownDoc.id]);
     expect((await listDocs({ id: adminId, role: "admin" })).map((doc) => doc.id).sort((a, b) => a - b)).toEqual([adminDoc.id, ownDoc.id].sort((a, b) => a - b));
-    await expect(getDoc(adminDoc.id, { id: userId, role: "user" })).rejects.toThrow("文档不存在");
+    await expect(getDoc(adminDoc.id, { id: userId, role: "user" })).rejects.toThrow("无权访问该文档");
   });
 
   test("ordinary users cannot manage another user's share", async () => {
@@ -380,6 +380,6 @@ describe("user document share review flow", () => {
     const share = await createOrGetShare(doc.id, { isEnabled: true }, { id: userId, role: "user" });
 
     await expect(updateShare(share!.id, { isEnabled: true }, { id: otherUserId, role: "user" }))
-      .rejects.toThrow("文档不存在");
+      .rejects.toThrow("无权访问该文档");
   });
 });

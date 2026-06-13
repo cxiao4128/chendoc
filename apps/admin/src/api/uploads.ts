@@ -5,7 +5,7 @@ export interface PresignInput {
   mimeType: string;
   size: number;
   kind: "image" | "video" | "file";
-  docId?: number | null;
+  docUid?: string | null;
 }
 
 export interface UploadPolicyItem {

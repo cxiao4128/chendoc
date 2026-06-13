@@ -5,7 +5,7 @@ export type WorkspaceBase = "/admin" | "/users";
 type RoleUser = Pick<UserProfile, "role" | "isSuperAdmin"> | null | undefined;
 
 export function isAdminUser(user: RoleUser) {
-  return user?.role === "admin" || user?.isSuperAdmin === true;
+  return user?.isSuperAdmin === true;
 }
 
 export function homeForUser(user: RoleUser) {
@@ -32,8 +32,8 @@ export function trashPath(base: WorkspaceBase) {
   return `${base}/trash`;
 }
 
-export function docPath(base: WorkspaceBase, id: number) {
-  return `${base}/docs/${id}`;
+export function docPath(base: WorkspaceBase, docUid: string) {
+  return `${base}/docs/${docUid}`;
 }
 
 export function allowedPostLoginPath(user: RoleUser, redirect: unknown) {

@@ -79,7 +79,7 @@ const visibleDocs = computed(() => {
 const searchKeyword = ref(query.value);
 const localListError = ref("");
 const bulkMode = ref(false);
-const selectedDocIds = ref<Set<number>>(new Set());
+const selectedDocUids = ref<Set<string>>(new Set());
 const bulkDeleteOpen = ref(false);
 const bulkDeleting = ref(false);
 const sortMode = ref<SortMode>("updatedDesc");
@@ -90,8 +90,8 @@ const uploadInput = ref<HTMLInputElement | null>(null);
 const systemStatus = ref<SystemStatusView | null>(null);
 let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
 const listErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).listError) || localListError.value);
-const selectedCount = computed(() => selectedDocIds.value.size);
-const allVisibleSelected = computed(() => !!visibleDocs.value.length && visibleDocs.value.every((doc) => selectedDocIds.value.has(doc.id)));
+const selectedCount = computed(() => selectedDocUids.value.size);
+const allVisibleSelected = computed(() => !!visibleDocs.value.length && visibleDocs.value.every((doc) => selectedDocUids.value.has(doc.docUid)));
 const totalCount = computed(() => allDocs.value.length);
 const publishedCount = computed(() => allDocs.value.filter((doc) => doc.status === "published").length);
 const sharedCount = computed(() => allDocs.value.filter((doc) => doc.shareCode && doc.shareEnabled).length);
@@ -115,16 +115,16 @@ function cycleSortMode() {
 
 async function createDoc() {
   const doc = await docs.createDoc("未命名文档");
-  router.push(docPath(doc.id));
+  router.push(docPath(doc.docUid));
 }
 
 async function createTemplateDoc() {
   const doc = await docs.createDoc("新建模板文档");
-  await docs.saveDoc(doc.id, {
+  await docs.saveDoc(doc.docUid, {
     contentHtml: "<h2>模板标题</h2><p>在这里写正文。可改成常用方案、说明书、周报或知识卡片。</p>",
     summary: "模板中心创建"
   });
-  router.push(docPath(doc.id));
+  router.push(docPath(doc.docUid));
 }
 
 async function createFolder() {
@@ -166,25 +166,25 @@ async function handleUpload(event: Event) {
   try {
     const url = await uploader.uploadFile(file);
     const doc = await docs.createDoc(file.name.replace(/\.[^.]+$/, "") || "导入文档");
-    await docs.saveDoc(doc.id, {
+    await docs.saveDoc(doc.docUid, {
       summary: `上传文件：${file.name}`,
       contentHtml: `<p><a href="${url}" target="_blank" rel="noopener noreferrer">${file.name}</a></p>`
     });
     await loadSystemStatus();
-    router.push(docPath(doc.id));
+    router.push(docPath(doc.docUid));
   } finally {
     uploading.value = false;
   }
 }
 
-async function togglePinned(doc: { id: number; pinned?: boolean }) {
-  await docs.saveDoc(doc.id, { pinned: !doc.pinned });
+async function togglePinned(doc: { docUid: string; pinned?: boolean }) {
+  await docs.saveDoc(doc.docUid, { pinned: !doc.pinned });
   await load();
 }
 
-async function openShare(doc: { id: number; shareCode?: number | null; customSlug?: string | null }) {
+async function openShare(doc: { docUid: string; shareCode?: number | null; customSlug?: string | null }) {
   if (!doc.shareCode) {
-    await createShareApi(doc.id);
+    await createShareApi(doc.docUid);
     await load();
     return;
   }
@@ -275,8 +275,8 @@ function retryLoad() {
   void load();
 }
 
-function setSelectedDocIds(nextIds: Iterable<number>) {
-  selectedDocIds.value = new Set(nextIds);
+function setSelectedDocUids(nextUids: Iterable<string>) {
+  selectedDocUids.value = new Set(nextUids);
 }
 
 function enterBulkMode() {
@@ -285,38 +285,38 @@ function enterBulkMode() {
 
 function cancelBulkMode() {
   bulkMode.value = false;
-  setSelectedDocIds([]);
+  setSelectedDocUids([]);
   bulkDeleteOpen.value = false;
 }
 
-function toggleDocSelection(id: number) {
-  const next = new Set(selectedDocIds.value);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  selectedDocIds.value = next;
+function toggleDocSelection(docUid: string) {
+  const next = new Set(selectedDocUids.value);
+  if (next.has(docUid)) next.delete(docUid);
+  else next.add(docUid);
+  selectedDocUids.value = next;
 }
 
 function toggleAllVisibleDocs() {
   if (allVisibleSelected.value) {
-    setSelectedDocIds([]);
+    setSelectedDocUids([]);
     return;
   }
-  setSelectedDocIds(visibleDocs.value.map((doc) => doc.id));
+  setSelectedDocUids(visibleDocs.value.map((doc) => doc.docUid));
 }
 
-function openOrToggleDoc(id: number) {
+function openOrToggleDoc(docUid: string) {
   if (bulkMode.value) {
-    toggleDocSelection(id);
+    toggleDocSelection(docUid);
     return;
   }
-  router.push(docPath(id));
+  router.push(docPath(docUid));
 }
 
-function handleRowKeydown(event: Event, id: number) {
+function handleRowKeydown(event: Event, docUid: string) {
   const keyboardEvent = event as KeyboardEvent;
   if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") return;
   keyboardEvent.preventDefault();
-  openOrToggleDoc(id);
+  openOrToggleDoc(docUid);
 }
 
 function onBulkDeleteClick() {
@@ -329,14 +329,14 @@ function onBulkDeleteClick() {
 }
 
 async function confirmBulkDelete() {
-  const ids = Array.from(selectedDocIds.value);
-  if (!ids.length) return;
+  const docUids = Array.from(selectedDocUids.value);
+  if (!docUids.length) return;
   bulkDeleting.value = true;
   try {
-    const deletedIds = await docs.bulkDeleteDocs(ids);
-    const deletedIdSet = new Set(deletedIds);
-    setSelectedDocIds(ids.filter((id) => !deletedIdSet.has(id)));
-    if (!selectedDocIds.value.size) cancelBulkMode();
+    const deletedDocUids = await docs.bulkDeleteDocs(docUids);
+    const deletedUidSet = new Set(deletedDocUids);
+    setSelectedDocUids(docUids.filter((uid) => !deletedUidSet.has(uid)));
+    if (!selectedDocUids.value.size) cancelBulkMode();
   } finally {
     bulkDeleting.value = false;
   }
@@ -389,8 +389,8 @@ watch(query, (value) => {
 });
 watch(searchKeyword, queueSearch);
 watch(visibleDocs, (items) => {
-  const visibleIdSet = new Set(items.map((doc) => doc.id));
-  setSelectedDocIds(Array.from(selectedDocIds.value).filter((id) => visibleIdSet.has(id)));
+  const visibleUidSet = new Set(items.map((doc) => doc.docUid));
+  setSelectedDocUids(Array.from(selectedDocUids.value).filter((uid) => visibleUidSet.has(uid)));
 });
 </script>
 
@@ -440,16 +440,16 @@ watch(visibleDocs, (items) => {
       <div v-else class="doc-list-page__mobile-list">
         <article
           v-for="doc in visibleDocs"
-          :key="doc.id"
+          :key="doc.docUid"
           class="doc-list-page__mobile-card"
-          :class="{ 'is-bulk': bulkMode, 'is-selected': selectedDocIds.has(doc.id) }"
+          :class="{ 'is-bulk': bulkMode, 'is-selected': selectedDocUids.has(doc.docUid) }"
           role="button"
           tabindex="0"
-          @click="openOrToggleDoc(doc.id)"
-          @keydown="handleRowKeydown($event, doc.id)"
+          @click="openOrToggleDoc(doc.docUid)"
+          @keydown="handleRowKeydown($event, doc.docUid)"
         >
           <label v-if="bulkMode" class="doc-list-page__select" @click.stop>
-            <input :checked="selectedDocIds.has(doc.id)" type="checkbox" @change="toggleDocSelection(doc.id)" />
+            <input :checked="selectedDocUids.has(doc.docUid)" type="checkbox" @change="toggleDocSelection(doc.docUid)" />
             <span></span>
           </label>
           <div class="doc-list-page__mobile-row">
@@ -531,23 +531,23 @@ watch(visibleDocs, (items) => {
             </div>
             <article
               v-for="doc in visibleDocs"
-              :key="doc.id"
+              :key="doc.docUid"
               class="doc-list-page__row"
-              :class="{ 'is-selected': selectedDocIds.has(doc.id) }"
+              :class="{ 'is-selected': selectedDocUids.has(doc.docUid) }"
               role="button"
               tabindex="0"
-              @click="openOrToggleDoc(doc.id)"
-              @keydown="handleRowKeydown($event, doc.id)"
+              @click="openOrToggleDoc(doc.docUid)"
+              @keydown="handleRowKeydown($event, doc.docUid)"
             >
               <label class="doc-list-page__select" @click.stop>
-                <input :checked="selectedDocIds.has(doc.id)" type="checkbox" @change="toggleDocSelection(doc.id)" />
+                <input :checked="selectedDocUids.has(doc.docUid)" type="checkbox" @change="toggleDocSelection(doc.docUid)" />
                 <span></span>
               </label>
               <span class="doc-list-page__row-title">
                 <i><FileText :size="17" /></i>
                 <strong>{{ doc.title }}</strong>
                 <small v-if="query && docPreviewText(doc)">{{ docPreviewText(doc) }}</small>
-                <small v-else>/ {{ doc.id }}</small>
+                <small v-else>/ {{ doc.docUid }}</small>
               </span>
               <span>{{ statusText(doc.status) }}</span>
               <span class="doc-list-page__owner"><img :src="logoUrl" alt="" />{{ ownerName }}</span>
@@ -584,7 +584,7 @@ watch(visibleDocs, (items) => {
 
           <section>
             <strong>最近动态 <RouterLink :to="docsPath">查看全部</RouterLink></strong>
-            <article v-for="doc in recentDocs" :key="doc.id">
+            <article v-for="doc in recentDocs" :key="doc.docUid">
               <FileText :size="16" />
               <span><b>{{ doc.title }}</b><small>已更新 · {{ formatDate(doc.updatedAt) }}</small></span>
             </article>

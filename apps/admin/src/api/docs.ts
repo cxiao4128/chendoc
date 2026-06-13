@@ -1,7 +1,7 @@
 import { request } from "./request";
 
 export interface DocSummary {
-  id: number;
+  docUid: string;
   spaceId: number | null;
   parentId: number | null;
   title: string;
@@ -10,6 +10,13 @@ export interface DocSummary {
   pinned?: boolean;
   sort: number;
   createdBy?: number | null;
+  updatedBy?: number | null;
+  ownerId?: number | null;
+  ownerRole?: "user" | "doc_admin" | "super_admin";
+  scope?: "user" | "admin" | "system";
+  isSuperAdminDoc?: boolean;
+  visibility?: "private" | "shared" | "public";
+  tenantKey?: string;
   ownerUsername?: string | null;
   updatedAt: string;
   createdAt: string;
@@ -29,9 +36,10 @@ export interface DocDetail extends DocSummary {
   share?: Record<string, unknown> | null;
 }
 
+export type DocUpdateInput = Partial<Pick<DocDetail, "title" | "contentJson" | "contentHtml" | "coverUrl" | "summary" | "tags" | "pinned" | "status" | "sort">>;
+
 export interface DocVersion {
   id: number;
-  docId: number;
   title: string;
   createdBy?: number | null;
   createdAt: string;
@@ -68,61 +76,61 @@ export function createDocApi(title: string) {
   return request<{ doc: DocDetail }>("/api/docs", { method: "POST", body: JSON.stringify({ title }) });
 }
 
-export function getDocApi(id: number, signal?: AbortSignal) {
-  return request<{ doc: DocDetail }>(`/api/docs/${id}`, { signal });
+export function getDocApi(docUid: string, signal?: AbortSignal) {
+  return request<{ doc: DocDetail }>(`/api/docs/${docUid}`, { signal });
 }
 
-export function updateDocApi(id: number, body: Partial<DocDetail>) {
-  return request<{ doc: DocDetail }>(`/api/docs/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export function updateDocApi(docUid: string, body: DocUpdateInput) {
+  return request<{ doc: DocDetail }>(`/api/docs/${docUid}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
-export function deleteDocApi(id: number) {
-  return request<{ ok: true }>(`/api/docs/${id}`, { method: "DELETE" });
+export function deleteDocApi(docUid: string) {
+  return request<{ ok: true }>(`/api/docs/${docUid}`, { method: "DELETE" });
 }
 
-export function bulkDeleteDocsApi(ids: number[]) {
-  return request<{ ok: true; deletedIds: number[] }>("/api/docs/bulk-delete", {
+export function bulkDeleteDocsApi(docUids: string[]) {
+  return request<{ ok: true; deletedDocUids: string[] }>("/api/docs/bulk-delete", {
     method: "POST",
-    body: JSON.stringify({ ids })
+    body: JSON.stringify({ docUids })
   });
 }
 
-export function restoreDocApi(id: number) {
-  return request<{ success: true; restored: number; restoredIds: number[] }>("/api/docs/trash/batch-restore", {
+export function restoreDocApi(docUid: string) {
+  return request<{ success: true; restored: number; restoredDocUids: string[] }>("/api/docs/trash/batch-restore", {
     method: "POST",
-    body: JSON.stringify({ ids: [id] })
+    body: JSON.stringify({ docUids: [docUid] })
   });
 }
 
-export function bulkRestoreTrashDocsApi(ids: number[]) {
-  return request<{ success: true; restored: number; restoredIds: number[] }>("/api/docs/trash/batch-restore", {
+export function bulkRestoreTrashDocsApi(docUids: string[]) {
+  return request<{ success: true; restored: number; restoredDocUids: string[] }>("/api/docs/trash/batch-restore", {
     method: "POST",
-    body: JSON.stringify({ ids })
+    body: JSON.stringify({ docUids })
   });
 }
 
-export function hardDeleteDocApi(id: number) {
-  return request<{ success: true; deleted: number; deletedIds: number[] }>("/api/docs/trash/batch-delete", {
+export function hardDeleteDocApi(docUid: string) {
+  return request<{ success: true; deleted: number; deletedDocUids: string[] }>("/api/docs/trash/batch-delete", {
     method: "POST",
-    body: JSON.stringify({ ids: [id] })
+    body: JSON.stringify({ docUids: [docUid] })
   });
 }
 
-export function bulkHardDeleteTrashDocsApi(ids: number[]) {
-  return request<{ success: true; deleted: number; deletedIds: number[] }>("/api/docs/trash/batch-delete", {
+export function bulkHardDeleteTrashDocsApi(docUids: string[]) {
+  return request<{ success: true; deleted: number; deletedDocUids: string[] }>("/api/docs/trash/batch-delete", {
     method: "POST",
-    body: JSON.stringify({ ids })
+    body: JSON.stringify({ docUids })
   });
 }
 
-export function publishDocApi(id: number) {
-  return request<{ doc: DocDetail }>(`/api/docs/${id}/publish`, { method: "POST" });
+export function publishDocApi(docUid: string) {
+  return request<{ doc: DocDetail }>(`/api/docs/${docUid}/publish`, { method: "POST" });
 }
 
-export function listDocVersionsApi(id: number) {
-  return request<{ versions: DocVersion[] }>(`/api/docs/${id}/versions`);
+export function listDocVersionsApi(docUid: string) {
+  return request<{ versions: DocVersion[] }>(`/api/docs/${docUid}/versions`);
 }
 
-export function restoreDocVersionApi(id: number, versionId: number) {
-  return request<{ doc: DocDetail }>(`/api/docs/${id}/versions/${versionId}/restore`, { method: "POST" });
+export function restoreDocVersionApi(docUid: string, versionId: number) {
+  return request<{ doc: DocDetail }>(`/api/docs/${docUid}/versions/${versionId}/restore`, { method: "POST" });
 }

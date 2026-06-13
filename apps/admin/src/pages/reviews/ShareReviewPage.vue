@@ -153,7 +153,7 @@ function openMore(item: ShareReviewItem) {
     window.open(`/r/${item.shareCode}`, "_blank", "noopener,noreferrer");
     return;
   }
-  router.push(`/admin/docs/${item.docId}`);
+  router.push(`/admin/docs/${item.docUid}`);
 }
 
 onMounted(load);
@@ -225,7 +225,7 @@ onMounted(load);
             <span class="share-review-page__status" :class="riskClass(item)">{{ riskText(item) }}</span>
             <span>{{ item.reviewNote || "待审核说明" }}</span>
             <div class="share-review-page__actions">
-              <RouterLink class="cd-button" :to="`/admin/docs/${item.docId}`"><ExternalLink :size="14" />查看文档</RouterLink>
+              <RouterLink class="cd-button" :to="`/admin/docs/${item.docUid}`"><ExternalLink :size="14" />查看文档</RouterLink>
               <button v-if="item.reviewStatus === 'pending'" class="cd-button" type="button" :disabled="savingId === item.id" @click="review(item, 'approve')"><Check :size="14" />通过</button>
               <button v-if="item.reviewStatus === 'pending'" class="cd-button" type="button" :disabled="savingId === item.id" @click="review(item, 'reject')"><X :size="14" />驳回</button>
               <button type="button" aria-label="更多" @click="openMore(item)"><MoreHorizontal :size="16" /></button>

@@ -4,7 +4,7 @@ import { ImageUp } from "lucide-vue-next";
 import { useUpload } from "../../composables/useUpload";
 import "./image-uploader.css";
 
-const props = defineProps<{ docId?: number | null }>();
+const props = defineProps<{ docUid?: string | null }>();
 const emit = defineEmits<{ uploaded: [url: string] }>();
 const input = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
@@ -17,7 +17,7 @@ async function onFile(event: Event) {
   uploading.value = true;
   error.value = "";
   try {
-    const url = await uploadFile(file, props.docId);
+    const url = await uploadFile(file, props.docUid);
     emit("uploaded", url);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "上传失败";

@@ -5,11 +5,21 @@ import { docs, shares, spaces, users } from "../db/schema.js";
 import { env } from "../config/env.js";
 import { now } from "../utils/date.js";
 import { encryptDocumentContent } from "../utils/documentCrypto.js";
+import { generateDocUid } from "../utils/docUid.js";
 import { hashPassword } from "../utils/password.js";
 
 function flagEnabled(name: string): boolean {
   const value = process.env[name]?.trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes";
+}
+
+async function createUniqueDocUid() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const docUid = generateDocUid();
+    const existing = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.docUid, docUid)).limit(1));
+    if (!existing) return docUid;
+  }
+  throw new Error("doc_uid generation failed.");
 }
 
 async function main() {
@@ -81,17 +91,25 @@ async function main() {
       ]
     });
     const welcomeContentHtml = "<h2>ChenDoc 已准备好</h2><p>这是系统初始化创建的第一篇示例文档，你可以在后台编辑、发布或删除它。</p>";
+    const createdAt = now();
     const docId = Number((await dbRun(db.insert(docs).values({
+      docUid: await createUniqueDocUid(),
       spaceId,
       parentId: null,
       title: "欢迎使用 ChenDoc",
       ...encryptDocumentContent(welcomeContentJson, welcomeContentHtml),
       status: "published",
       sort: 0,
+      ownerId: adminId,
+      ownerRole: "super_admin",
       createdBy: adminId,
       updatedBy: adminId,
-      createdAt: now(),
-      updatedAt: now()
+      scope: "admin",
+      isSuperAdminDoc: true,
+      visibility: "private",
+      tenantKey: "default",
+      createdAt,
+      updatedAt: createdAt
     }))).lastInsertRowid);
 
     await dbRun(db.insert(shares).values({

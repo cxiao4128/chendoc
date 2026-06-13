@@ -18,12 +18,12 @@ const operating = ref(false);
 const removing = ref<DocSummary | null>(null);
 const bulkRestoring = ref(false);
 const bulkRemoving = ref(false);
-const selectedIds = ref<number[]>([]);
+const selectedDocUids = ref<string[]>([]);
 const page = ref(1);
 const hasMore = ref(false);
 
-const selectedCount = computed(() => selectedIds.value.length);
-const allSelected = computed(() => docs.value.length > 0 && selectedIds.value.length === docs.value.length);
+const selectedCount = computed(() => selectedDocUids.value.length);
+const allSelected = computed(() => docs.value.length > 0 && selectedDocUids.value.length === docs.value.length);
 const recoverableCount = computed(() => docs.value.length);
 const releaseSize = computed(() => Math.max(0.42, docs.value.length * 0.047).toFixed(2));
 
@@ -35,7 +35,7 @@ async function load(options: { append?: boolean } = {}) {
     docs.value = options.append ? [...docs.value, ...response.docs] : response.docs;
     page.value = response.pagination?.page ?? nextPage;
     hasMore.value = response.pagination?.hasMore ?? false;
-    selectedIds.value = selectedIds.value.filter((id) => docs.value.some((doc) => doc.id === id));
+    selectedDocUids.value = selectedDocUids.value.filter((uid) => docs.value.some((doc) => doc.docUid === uid));
   } finally {
     loading.value = false;
   }
@@ -46,38 +46,38 @@ function loadMore() {
   void load({ append: true });
 }
 
-function removeDocs(ids: number[]) {
-  const idSet = new Set(ids);
-  docs.value = docs.value.filter((doc) => !idSet.has(doc.id));
-  selectedIds.value = selectedIds.value.filter((id) => !idSet.has(id));
+function removeDocs(docUids: string[]) {
+  const uidSet = new Set(docUids);
+  docs.value = docs.value.filter((doc) => !uidSet.has(doc.docUid));
+  selectedDocUids.value = selectedDocUids.value.filter((uid) => !uidSet.has(uid));
 }
 
-function toggleSelection(id: number, checked: boolean) {
-  selectedIds.value = checked
-    ? Array.from(new Set([...selectedIds.value, id]))
-    : selectedIds.value.filter((selectedId) => selectedId !== id);
+function toggleSelection(docUid: string, checked: boolean) {
+  selectedDocUids.value = checked
+    ? Array.from(new Set([...selectedDocUids.value, docUid]))
+    : selectedDocUids.value.filter((selectedUid) => selectedUid !== docUid);
 }
 
 function toggleAll(checked: boolean) {
-  selectedIds.value = checked ? docs.value.map((doc) => doc.id) : [];
+  selectedDocUids.value = checked ? docs.value.map((doc) => doc.docUid) : [];
 }
 
-async function restore(id: number) {
+async function restore(docUid: string) {
   operating.value = true;
   try {
-  await restoreDocApi(id);
-    removeDocs([id]);
+  await restoreDocApi(docUid);
+    removeDocs([docUid]);
   } finally {
     operating.value = false;
   }
 }
 
 async function bulkRestore() {
-  if (!selectedIds.value.length) return;
+  if (!selectedDocUids.value.length) return;
   operating.value = true;
   try {
-    const response = await bulkRestoreTrashDocsApi(selectedIds.value);
-    removeDocs(response.restoredIds);
+    const response = await bulkRestoreTrashDocsApi(selectedDocUids.value);
+    removeDocs(response.restoredDocUids);
   } finally {
     bulkRestoring.value = false;
     operating.value = false;
@@ -87,10 +87,10 @@ async function bulkRestore() {
 async function hardDelete() {
   if (!removing.value) return;
   operating.value = true;
-  const id = removing.value.id;
+  const docUid = removing.value.docUid;
   try {
-    await hardDeleteDocApi(id);
-    removeDocs([id]);
+    await hardDeleteDocApi(docUid);
+    removeDocs([docUid]);
   } finally {
     removing.value = null;
     operating.value = false;
@@ -98,11 +98,11 @@ async function hardDelete() {
 }
 
 async function bulkHardDelete() {
-  if (!selectedIds.value.length) return;
+  if (!selectedDocUids.value.length) return;
   operating.value = true;
   try {
-    const response = await bulkHardDeleteTrashDocsApi(selectedIds.value);
-    removeDocs(response.deletedIds);
+    const response = await bulkHardDeleteTrashDocsApi(selectedDocUids.value);
+    removeDocs(response.deletedDocUids);
   } finally {
     bulkRemoving.value = false;
     operating.value = false;
@@ -179,25 +179,25 @@ function formatDate(value?: string | null) {
             <span>大小</span>
             <span>操作</span>
           </div>
-          <div v-for="doc in docs" :key="doc.id" class="trash-page__row">
+          <div v-for="doc in docs" :key="doc.docUid" class="trash-page__row">
             <label class="trash-page__select" :aria-label="`选择 ${doc.title}`">
               <input
                 type="checkbox"
-                :checked="selectedIds.includes(doc.id)"
+                :checked="selectedDocUids.includes(doc.docUid)"
                 :disabled="operating"
-                @change="toggleSelection(doc.id, ($event.target as HTMLInputElement).checked)"
+                @change="toggleSelection(doc.docUid, ($event.target as HTMLInputElement).checked)"
               />
             </label>
             <div>
               <strong>{{ doc.title }}</strong>
-              <span>/ 文档 / {{ doc.id }}</span>
+              <span>/ 文档 / {{ doc.docUid }}</span>
             </div>
             <span>/个人/临时文件</span>
             <span>{{ formatDate(doc.deletedAt) }}</span>
             <span class="trash-page__pill">7天后清除</span>
             <span>0.95 MB</span>
             <div class="trash-page__actions">
-              <button class="cd-button" type="button" :disabled="operating" @click="restore(doc.id)">
+              <button class="cd-button" type="button" :disabled="operating" @click="restore(doc.docUid)">
                 <RotateCcw :size="16" />恢复
               </button>
               <button class="cd-button danger" type="button" :disabled="operating" @click="removing = doc">
@@ -227,7 +227,7 @@ function formatDate(value?: string | null) {
         </section>
         <section>
           <strong>最近删除</strong>
-          <article v-for="doc in docs.slice(0, 3)" :key="doc.id">
+          <article v-for="doc in docs.slice(0, 3)" :key="doc.docUid">
             <b>{{ doc.title }}</b>
             <small>{{ formatDate(doc.deletedAt) }}</small>
           </article>

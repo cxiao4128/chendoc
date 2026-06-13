@@ -6,7 +6,7 @@ import { dangerDeleteDocApi, getDangerDocApi } from "../../api/settings";
 import "./danger.css";
 
 const id = ref("");
-const doc = ref<{ id: number; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } | null>(null);
+const doc = ref<{ docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } | null>(null);
 const error = ref("");
 const confirmOpen = ref(false);
 
@@ -14,7 +14,7 @@ async function query() {
   error.value = "";
   doc.value = null;
   try {
-    doc.value = (await getDangerDocApi(Number(id.value))).doc;
+    doc.value = (await getDangerDocApi(id.value.trim())).doc;
   } catch (err) {
     error.value = err instanceof Error ? err.message : "查询失败";
   }
@@ -22,7 +22,7 @@ async function query() {
 
 async function remove() {
   if (!doc.value) return;
-  await dangerDeleteDocApi(doc.value.id);
+  await dangerDeleteDocApi(doc.value.docUid);
   await query();
 }
 </script>
@@ -31,12 +31,12 @@ async function remove() {
   <section class="danger-page">
     <div class="danger-page__head">
       <h1>文档删除</h1>
-      <p>输入文档 ID 查询并软删除文档。操作会写入日志，不会自动删除 R2 对象。</p>
+      <p>输入 doc_uid 查询并软删除文档。操作会写入日志，不会自动删除 R2 对象。</p>
     </div>
     <form class="danger-page__search cd-card" @submit.prevent="query">
       <label class="cd-label">
-        文档 ID
-        <input v-model="id" class="cd-input" type="number" min="1" required />
+        doc_uid
+        <input v-model.trim="id" class="cd-input" required minlength="16" maxlength="32" />
       </label>
       <button class="cd-button" type="submit"><Search :size="16" />查询</button>
     </form>

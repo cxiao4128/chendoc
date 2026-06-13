@@ -10,6 +10,7 @@ import { env } from "./config/env.js";
 import { packGatewayReply, unpackGatewayRequest } from "./gateway/middleware.js";
 import { gatewayRoutes } from "./gateway/routes.js";
 import { registerErrorHandler } from "./plugins/error-handler.js";
+import { shutdownAsyncLogQueue } from "./utils/asyncLogQueue.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { captchaRoutes } from "./modules/captcha/captcha.routes.js";
 import { cryptoRoutes } from "./modules/crypto/crypto.routes.js";
@@ -59,6 +60,9 @@ export async function buildApp() {
   });
 
   registerErrorHandler(app);
+  app.addHook("onClose", async () => {
+    await shutdownAsyncLogQueue();
+  });
   app.addHook("preValidation", unpackGatewayRequest);
   app.addHook("onSend", packGatewayReply);
 

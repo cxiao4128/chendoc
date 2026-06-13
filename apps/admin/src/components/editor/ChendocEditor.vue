@@ -39,7 +39,7 @@ type InsertCommand =
   | "size20";
 
 const props = defineProps<{
-  docId: number;
+  docUid: string;
   contentJson: string;
 }>();
 
@@ -82,9 +82,9 @@ const editorContentComponent = shallowRef<Component | null>(null);
 const editor = shallowRef<Editor | null>(null);
 let editorLoadToken = 0;
 
-async function uploadFile(file: File, docId?: number | null) {
+async function uploadFile(file: File, docUid?: string | null) {
   const { useUpload } = await import("../../composables/useUpload");
-  return useUpload().uploadFile(file, docId);
+  return useUpload().uploadFile(file, docUid);
 }
 
 function parseContent(value: string) {
@@ -147,7 +147,7 @@ function collectToc(next = editor.value) {
     const text = element.textContent?.trim() || "";
     if (!text) return;
     const level = Number(element.tagName.slice(1)) as 1 | 2 | 3;
-    const id = element.id || `cd-heading-${props.docId}-${index}`;
+    const id = element.id || `cd-heading-${props.docUid}-${index}`;
     element.id = id;
     headings.push({ id, text, level });
   });
@@ -202,7 +202,7 @@ async function uploadAndInsertImage(file: File) {
   pasteUploading.value = true;
   uploadError.value = "";
   try {
-    const url = await uploadFile(file, props.docId);
+    const url = await uploadFile(file, props.docUid);
     insertImage(url);
   } catch (err) {
     uploadError.value = err instanceof Error ? err.message : "图片上传失败";
@@ -215,7 +215,7 @@ async function uploadAndInsertVideo(file: File) {
   pasteUploading.value = true;
   uploadError.value = "";
   try {
-    const url = await uploadFile(file, props.docId);
+    const url = await uploadFile(file, props.docUid);
     (editor.value?.chain().focus() as any)?.setVideo({ src: url, title: file.name }).run();
   } catch (err) {
     uploadError.value = err instanceof Error ? err.message : "视频上传失败";
@@ -237,7 +237,7 @@ async function uploadAndInsertFile(file: File) {
   pasteUploading.value = true;
   uploadError.value = "";
   try {
-    const url = await uploadFile(file, props.docId);
+    const url = await uploadFile(file, props.docUid);
     editor.value?.chain().focus().insertContent({
       type: "paragraph",
       content: [{
@@ -374,16 +374,16 @@ async function loadEditorRuntime() {
   }
 }
 
-watch(() => [props.docId, props.contentJson] as const, ([nextDocId, nextContentJson], previous) => {
+watch(() => [props.docUid, props.contentJson] as const, ([nextDocUid, nextContentJson], previous) => {
   const next = editor.value;
   if (!next) return;
 
   const incomingContent = parseContent(nextContentJson);
   const incomingJson = stringifyContent(incomingContent);
   const editorJson = currentEditorContent();
-  const previousDocId = previous?.[0];
+  const previousDocUid = previous?.[0];
   const previousJson = previous ? stringifyContent(parseContent(previous[1])) : "";
-  const isSameDoc = previousDocId === nextDocId;
+  const isSameDoc = previousDocUid === nextDocUid;
 
   if (isSameDoc && (editorJson === incomingJson || editorJson !== previousJson)) {
     window.setTimeout(() => {

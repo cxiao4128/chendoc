@@ -1,6 +1,7 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import { env } from "../config/env.js";
+import { enqueueErrorLog, enqueueSecurityLog, logMetaFromRequest } from "../utils/asyncLogQueue.js";
 import { AppError } from "../utils/errors.js";
 
 type ErrorPayload = {
@@ -58,6 +59,37 @@ function zodPayload(error: ZodError): ErrorPayload {
 export function registerErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
     const payload = error instanceof ZodError ? zodPayload(error) : payloadFor(error);
+    const meta = logMetaFromRequest(request);
+    if (payload.statusCode === 403) {
+      enqueueSecurityLog({
+        ...meta,
+        userId: request.user?.id ?? null,
+        role: request.user?.role ?? meta.role ?? null,
+        action: "request.forbidden",
+        targetType: "request",
+        targetId: request.url,
+        statusCode: payload.statusCode,
+        message: payload.code,
+        data: { code: payload.code, actionCode: request.packet?.actionCode }
+      });
+    } else if (payload.statusCode >= 500) {
+      enqueueErrorLog({
+        ...meta,
+        userId: request.user?.id ?? null,
+        role: request.user?.role ?? meta.role ?? null,
+        action: "request.error",
+        targetType: "request",
+        targetId: request.url,
+        statusCode: payload.statusCode,
+        message: error.message,
+        data: {
+          code: payload.code,
+          name: error.name,
+          stack: env.nodeEnv !== "production" ? error.stack : undefined,
+          actionCode: request.packet?.actionCode
+        }
+      });
+    }
     request.log.error({
       err: error,
       requestId: request.id,
