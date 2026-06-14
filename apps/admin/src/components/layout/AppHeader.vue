@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Bell, ChevronDown, CircleHelp, Menu, Search, Sparkles } from "lucide-vue-next";
+import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Network, Search, Sparkles, UserRound } from "lucide-vue-next";
 import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { getSystemStatusApi } from "../../api/settings";
@@ -11,11 +11,13 @@ import "./app-header.css";
 defineEmits<{ menu: [] }>();
 const router = useRouter();
 const { base, docsPath } = useWorkspaceRoutes();
-const { auth } = useAuth();
+const { auth, logout } = useAuth();
 const keyword = ref("");
 const notificationOpen = ref(false);
 const notificationLoading = ref(false);
+const userMenuOpen = ref(false);
 const pendingReviewCount = ref<number | null>(null);
+const currentIp = computed(() => auth.user?.currentIp || "暂无 IP");
 
 function search() {
   const value = keyword.value.trim();
@@ -36,6 +38,7 @@ function openTemplates() {
 }
 
 async function openNotifications() {
+  userMenuOpen.value = false;
   notificationOpen.value = true;
   notificationLoading.value = true;
   try {
@@ -59,7 +62,18 @@ function openHelp() {
 }
 
 function openProfile() {
+  userMenuOpen.value = false;
   router.push(auth.canAccessAdmin ? "/admin/settings" : docsPath.value);
+}
+
+function toggleUserMenu() {
+  notificationOpen.value = false;
+  userMenuOpen.value = !userMenuOpen.value;
+}
+
+async function quickLogout() {
+  userMenuOpen.value = false;
+  await logout();
 }
 </script>
 
@@ -94,11 +108,28 @@ function openProfile() {
       <button class="app-header__icon" type="button" aria-label="帮助" @click="openHelp">
         <CircleHelp :size="17" />
       </button>
-      <button class="app-header__user" type="button" aria-label="当前用户" @click="openProfile">
-        <span><img :src="logoUrl" alt="" /></span>
-        <strong>{{ auth.user?.username || "xchen" }}</strong>
-        <ChevronDown :size="15" />
-      </button>
+      <div class="app-header__user-menu">
+        <button class="app-header__user" type="button" aria-label="当前用户" :aria-expanded="userMenuOpen" @click="toggleUserMenu">
+          <span><img :src="logoUrl" alt="" /></span>
+          <strong>{{ auth.user?.username || "xchen" }}</strong>
+          <ChevronDown :size="15" />
+        </button>
+        <div v-if="userMenuOpen" class="app-header__user-popover" role="menu" aria-label="用户菜单">
+          <div class="app-header__user-card">
+            <span><img :src="logoUrl" alt="" /></span>
+            <div>
+              <strong>{{ auth.user?.username || "xchen" }}</strong>
+              <small><Network :size="13" />{{ currentIp }}</small>
+            </div>
+          </div>
+          <button type="button" role="menuitem" @click="openProfile">
+            <UserRound :size="16" />账号设置
+          </button>
+          <button class="is-danger" type="button" role="menuitem" @click="quickLogout">
+            <LogOut :size="16" />退出登录
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 </template>

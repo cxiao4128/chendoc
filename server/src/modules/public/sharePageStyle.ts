@@ -135,6 +135,39 @@ export const sharePageStyle = `
   .content pre { overflow-x: auto; background: #111827; color: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
   .content code { font-family: var(--font-mono); }
   .empty { border: 1px solid var(--border); background: var(--paper-soft); border-radius: 8px; padding: 22px; color: var(--muted); }
+  .share-native-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 18px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--paper-soft);
+    padding: 14px 16px;
+    font-family: var(--font-sans);
+  }
+  .share-native-info__label {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--success-soft);
+    color: var(--success);
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+  .share-native-info p {
+    min-width: 0;
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.6;
+    text-align: right;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
   .share-card {
     display: grid;
     gap: 16px;
@@ -183,5 +216,7 @@ export const sharePageStyle = `
     header, .content, .share-card { border-radius: 8px; }
     h1 { font-size: 32px; }
     .share-row { grid-template-columns: 1fr; }
+    .share-native-info { align-items: flex-start; flex-direction: column; }
+    .share-native-info p { text-align: left; }
   }
 `;

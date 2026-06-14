@@ -501,6 +501,43 @@
   font-size: 13px;
 }
 
+.settings-page__share-info-input {
+  min-height: 82px;
+  line-height: 1.6;
+}
+
+.settings-page__share-info-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 12px 14px;
+}
+
+.settings-page__share-info-preview span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--cd-success-soft);
+  color: var(--cd-success);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.settings-page__share-info-preview strong {
+  min-width: 0;
+  color: var(--cd-text);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.6;
+  text-align: right;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .settings-page__toggle {
   display: flex;
   gap: 10px;
@@ -2022,6 +2059,15 @@
   .settings-page__profile-actions {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .settings-page__share-info-preview {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-page__share-info-preview strong {
+    text-align: left;
   }
 
   .settings-page__side-list div {

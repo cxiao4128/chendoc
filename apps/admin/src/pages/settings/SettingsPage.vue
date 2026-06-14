@@ -55,7 +55,7 @@ type ActivePanel = "overview" | "logs" | "appearance" | "recovery" | "users" | "
 type UserDetailTab = "info" | "roles" | "login" | "actions";
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v2.5.1";
+const APP_VERSION = "v2.5.2";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -132,7 +132,8 @@ const site = reactive({
   preferRemoteLogo: false,
   preferRemoteWallpaper: false,
   copyright: "2026 陈书",
-  recoveryContact: "请联系管理员"
+  recoveryContact: "请联系管理员",
+  shareFooterText: ""
 });
 const saving = ref(false);
 const message = ref("");
@@ -833,6 +834,20 @@ onBeforeUnmount(() => {
         <span>登录页使用远程壁纸</span>
       </label>
       <label class="cd-label">版权信息<input v-model.trim="site.copyright" class="cd-input" /></label>
+      <label class="cd-label settings-page__wide">
+        分享页专属信息
+        <textarea
+          v-model.trim="site.shareFooterText"
+          class="cd-textarea settings-page__share-info-input"
+          maxlength="180"
+          placeholder="更多活动咨询v：cjy90201"
+        ></textarea>
+      </label>
+      <div v-if="site.shareFooterText" class="settings-page__share-info-preview settings-page__wide" aria-label="分享页专属信息预览">
+        <span>专属信息</span>
+        <strong>{{ site.shareFooterText }}</strong>
+      </div>
+      <p class="settings-page__hint">为空则不展示，会显示在公开分享页正文下方。</p>
       <p v-if="message" class="settings-page__save-message">{{ message }}</p>
     </form>
 

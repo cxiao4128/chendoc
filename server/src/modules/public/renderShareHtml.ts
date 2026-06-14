@@ -50,6 +50,15 @@ function renderShareLayout(input: {
 </html>`;
 }
 
+function renderShareFooter(text?: string) {
+  const footerText = text?.trim();
+  if (!footerText) return "";
+  return `<aside class="share-native-info" aria-label="分享页专属信息">
+      <span class="share-native-info__label">专属信息</span>
+      <p>${escapeHtml(footerText)}</p>
+    </aside>`;
+}
+
 export function renderShareHtml(input: {
   title: string;
   summary: string;
@@ -59,9 +68,9 @@ export function renderShareHtml(input: {
   siteName: string;
   logoUrl: string;
   updatedAt: Date;
+  shareFooterText?: string;
 }) {
   const title = escapeHtml(input.title);
-  const summary = escapeHtml(input.summary || input.title);
   const coverUrl = input.coverUrl ? escapeHtml(input.coverUrl) : "";
   const contentHtml = input.contentHtml ? sanitizeDocumentHtml(input.contentHtml) : "";
   const imageMeta = coverUrl
@@ -79,9 +88,9 @@ export function renderShareHtml(input: {
     body: `<header>
       <p class="share-kicker">ChenDoc</p>
       <h1>${title}</h1>
-      <p class="lead">${escapeHtml(input.siteName)} · ${escapeHtml(input.updatedAt.toLocaleString("zh-CN"))}</p>
     </header>
-    <article class="content">${contentHtml || '<div class="empty">这篇文档还没有内容。</div>'}</article>`
+    <article class="content">${contentHtml || '<div class="empty">这篇文档还没有内容。</div>'}</article>
+    ${renderShareFooter(input.shareFooterText)}`
   });
 }
 
@@ -91,6 +100,7 @@ export function renderSharePasswordHtml(input: {
   shareUrl: string;
   siteName: string;
   logoUrl: string;
+  shareFooterText?: string;
   scriptNonce?: string;
   errorMessage?: string;
 }) {
@@ -129,6 +139,7 @@ export function renderSharePasswordHtml(input: {
       </form>
     </section>
     <article class="content" data-share-content hidden></article>
+    ${renderShareFooter(input.shareFooterText)}
     <script${scriptNonceAttr}>
       const form = document.querySelector("[data-share-form]");
       const passwordInput = document.querySelector("[data-share-password]");

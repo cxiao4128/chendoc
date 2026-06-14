@@ -44,6 +44,10 @@ export function validateUserRegistration(username: string, password: string) {
   if (!USERNAME_RE.test(username)) {
     return "账号至少 6 位，只能包含字母、数字、下划线";
   }
+  return validatePassword(password);
+}
+
+export function validatePassword(password: string) {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `密码至少 ${MIN_PASSWORD_LENGTH} 位`;
   }

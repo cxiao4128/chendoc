@@ -20,6 +20,7 @@ export interface SiteConfigView {
   preferRemoteWallpaper: boolean;
   copyright: string;
   recoveryContact: string;
+  shareFooterText: string;
 }
 
 export interface OperationLogView {

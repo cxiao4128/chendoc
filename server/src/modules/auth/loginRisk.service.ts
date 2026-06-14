@@ -179,3 +179,8 @@ export async function recordLoginSuccess(input: LoginRiskInput) {
     )));
   }
 }
+
+export async function clearLoginFailuresForUsername(username: string) {
+  await pruneExpiredLoginFailures();
+  await dbRun(db.delete(loginFailures).where(eq(loginFailures.username, normalizedUsername(username))));
+}

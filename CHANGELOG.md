@@ -4,6 +4,20 @@
 
 ## 中文
 
+### 2.5.2
+
+版本号：`2.5.2`
+
+展示版本：`v2.5.2`
+
+本次更新内容：
+- 移除公开分享页标题下方的站点名和更新时间。
+- 新增分享页专属信息设置，可在正文下方展示类似原生展示广告的自定义联系文案。
+
+更新时间：2026-06-14 12:49:50 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
 ### 2.5.1
 
 版本号：`2.5.1`
@@ -14,7 +28,7 @@
 
 - 优化登录页首屏加载，表单先渲染，不再等待站点配置、远程 Logo 或壁纸预加载完成。
 - 登录路由守卫跳过无会话访问 `/login` 时的 `fetchMe()`，避免首屏前触发 `/api/auth/me` 和网关 challenge。
-- 登录默认壁纸改用 `desktop-bg.webp`，保留 `desktop-bg-small.webp` 首屏占位，并移除 1.3MB Logo preload。
+- 登录默认壁纸改用 `login-wallpaper.webp`，用 `login-wallpaper-small.webp` 做首屏占位，移除旧登录壁纸资产。
 
 更新时间：2026-06-13 15:16:16 +08:00
 
@@ -52,7 +66,7 @@
 本次更新内容：
 
 - 优化登录页首屏加载，关键样式随 HTML 提前加载，减少裸样式闪烁。
-- 优化登录页壁纸与 Logo 预加载，先显示 small 图，再无感切换高清图。
+- 优化登录页壁纸加载，统一使用定版 PNG。
 - 修复公开分享页品牌 Logo 显示，未配置时使用本地默认 Logo。
 - 移除公开分享页多余的“公开分享”标识，头部只保留 Logo 和站点名。
 - 优化禁用、注销用户的登录反馈，失败状态会明确提示。
@@ -91,7 +105,7 @@
 
 本次更新内容：
 
-- 登录页壁纸改为 small WebP 首屏占位，高清 WebP 提前 preload，避免慢半拍。
+- 登录页壁纸改为定版 PNG，首屏直接使用同一背景。
 - MySQL 作为生产唯一运行数据库，SQLite 仅保留历史迁移和测试说明。
 - 文档列表和回收站列表改为分页轻量查询，不再返回正文内容。
 - 优化 MySQL 连接池、站点设置读取、用户列表加载和常用索引，降低 2H4G 服务器压力。
@@ -166,6 +180,20 @@
 
 ## English
 
+### 2.5.2
+
+Version: `2.5.2`
+
+Display version: `v2.5.2`
+
+Changes:
+- Removed the site name and update time from public share page headers.
+- Added configurable share-page exclusive info, rendered below content as a native-style display note.
+
+Updated at: 2026-06-14 12:49:50 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
 ### 2.5.1
 
 Version: `2.5.1`
@@ -176,7 +204,7 @@ Changes:
 
 - Optimized login first paint: the form renders immediately without waiting for site config, remote Logo, or wallpaper preloading.
 - Skipped `fetchMe()` for no-session `/login` visits, avoiding `/api/auth/me` and gateway challenge work before first paint.
-- Switched the bundled login wallpaper to `desktop-bg.webp`, kept `desktop-bg-small.webp` as the first-paint placeholder, and removed the 1.3MB Logo preload.
+- Switched the bundled login wallpaper to `login-wallpaper.webp`, used `login-wallpaper-small.webp` as the first-paint placeholder, and removed the old login wallpaper assets.
 
 Updated at: 2026-06-13 15:16:16 +08:00
 
@@ -214,7 +242,7 @@ Display version: `v1.3.0`
 Changes in this release:
 
 - Optimized the login first paint by loading critical login styles from the HTML entry.
-- Optimized wallpaper and Logo preloading with a small placeholder image before the full wallpaper swap.
+- Optimized login wallpaper loading with the finalized PNG asset.
 - Fixed the public share header to use the site Logo with a bundled fallback.
 - Removed the extra “公开分享” marker from the public share page header.
 - Improved login feedback for disabled and deleted users.
@@ -253,7 +281,7 @@ Display version: `v1.2.3`
 
 Changes in this release:
 
-- Switched the login wallpaper to a small WebP first-paint placeholder and preloaded full WebP image.
+- Switched the login wallpaper to the finalized PNG asset.
 - Made MySQL the only production runtime database; SQLite remains only for historical migration and tests.
 - Paginated document and trash list queries and stopped returning body content from list APIs.
 - Tuned the MySQL pool, site settings reads, user list loading, and common indexes for 2C4G servers.

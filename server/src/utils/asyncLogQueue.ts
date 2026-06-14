@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 import { db, dbRun } from "../db/client.js";
 import { logs } from "../db/schema.js";
 import { now } from "./date.js";
+import { clientIpFromRequest } from "./requestIp.js";
 
 export type AsyncLogType =
   | "login_log"
@@ -293,7 +294,7 @@ export function enqueueLog(log: AsyncLogInput) {
 
 export function logMetaFromRequest(request: FastifyRequest) {
   return {
-    ip: request.ip,
+    ip: clientIpFromRequest(request),
     userAgent: request.headers["user-agent"],
     path: request.url,
     method: request.method,
