@@ -3,11 +3,11 @@ import { z } from "zod";
 import { db, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { invites, users } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
-import { hashPassword, validateUserRegistration, verifyPassword } from "../../utils/password.js";
+import { hashPassword, validatePassword, validateUserRegistration, verifyPassword } from "../../utils/password.js";
 import { verifyCaptcha } from "../captcha/captcha.service.js";
 import { cleanupExpiredAuthSessions, createAuthSession, revokeUserAuthSessions } from "./session.service.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
-import { assessLoginRisk, recordLoginFailure, recordLoginSuccess, type LoginRiskDecision } from "./loginRisk.service.js";
+import { assessLoginRisk, clearLoginFailuresForUsername, recordLoginFailure, recordLoginSuccess, type LoginRiskDecision } from "./loginRisk.service.js";
 import { verifyAdminSecondFactor } from "./totp.service.js";
 import { AppError, BadRequestError } from "../../utils/errors.js";
 
@@ -49,8 +49,8 @@ const ADMIN_TOTP_AFTER_FAILURES = 5;
 
 export const registerSchema = registerPayloadSchema;
 
-function publicUser(user: { id: number; username: string; role: "admin" | "user"; status: string }) {
-  return { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) };
+function publicUser(user: { id: number; username: string; role: "admin" | "user"; status: string }, currentIp?: string) {
+  return { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user), currentIp };
 }
 
 function invalidCredentials() {
@@ -118,7 +118,8 @@ export async function login(input: unknown, meta: {
 
   await recordLoginSuccess(riskInput);
   await cleanupExpiredAuthSessions();
-  return { ...await createAuthSession(publicUser(user)), user: publicUser(user) };
+  const sessionUser = publicUser(user);
+  return { ...await createAuthSession(sessionUser), user: publicUser(user, meta.ip) };
 }
 
 export async function register(input: unknown) {
@@ -190,10 +191,11 @@ export async function changePassword(userId: number, input: unknown) {
     throw new BadRequestError("当前密码不正确", "CURRENT_PASSWORD_INVALID");
   }
 
-  const validationMessage = validateUserRegistration(user.username, newPassword);
+  const validationMessage = validatePassword(newPassword);
   if (validationMessage) throw new BadRequestError(validationMessage, "INVALID_PASSWORD");
 
   const passwordHash = await hashPassword(newPassword);
   await dbRun(db.update(users).set({ passwordHash, updatedAt: now() }).where(eq(users.id, userId)));
+  await clearLoginFailuresForUsername(user.username);
   await revokeUserAuthSessions(userId);
 }

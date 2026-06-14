@@ -108,6 +108,11 @@
   display: inline-flex;
 }
 
+.app-header__user-menu {
+  position: relative;
+  display: inline-flex;
+}
+
 .app-header__notification {
   position: absolute;
   top: 52px;
@@ -173,6 +178,101 @@
   color: var(--cd-text);
   font-size: 14px;
   font-weight: 800;
+}
+
+.app-header__user-popover {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  z-index: 22;
+  display: grid;
+  gap: 8px;
+  width: 236px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--cd-shadow);
+  padding: 10px;
+}
+
+.app-header__user-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--cd-border);
+  padding: 4px 4px 10px;
+}
+
+.app-header__user-card > span {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #ece8ff;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.app-header__user-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 42%;
+}
+
+.app-header__user-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-header__user-card strong {
+  color: var(--cd-text);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.app-header__user-card small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.app-header__user-popover > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cd-text);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-header__user-popover > button:hover {
+  background: #fbfaff;
+  color: var(--cd-primary-hover);
+}
+
+.app-header__user-popover > button.is-danger {
+  color: var(--cd-danger);
+}
+
+.app-header__user-popover > button.is-danger:hover {
+  background: var(--cd-danger-soft);
 }
 
 @media (max-width: 900px) {

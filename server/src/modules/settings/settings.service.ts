@@ -9,7 +9,8 @@ import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { maskSecret } from "../../utils/maskSecret.js";
 import { now } from "../../utils/date.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
-import { hashPassword, validateUserRegistration } from "../../utils/password.js";
+import { clearLoginFailuresForUsername } from "../auth/loginRisk.service.js";
+import { hashPassword, validatePassword } from "../../utils/password.js";
 
 const sensitiveKeys = new Set(["r2.access_key_id", "r2.secret_access_key"]);
 
@@ -32,6 +33,7 @@ export interface SiteConfig {
   preferRemoteWallpaper: boolean;
   copyright: string;
   recoveryContact: string;
+  shareFooterText: string;
 }
 
 type ManagedUser = {
@@ -59,7 +61,7 @@ type SystemAction =
 
 const defaultRemoteLogoUrl = "";
 const defaultRemoteWallpaperUrl = "";
-const APP_VERSION = "2.5.0";
+const APP_VERSION = "2.5.2";
 const REMOTE_ASSET_TIMEOUT_MS = 5000;
 const REMOTE_LOGO_MAX_BYTES = 1024 * 1024;
 const REMOTE_WALLPAPER_MAX_BYTES = 5 * 1024 * 1024;
@@ -83,7 +85,8 @@ const siteConfigSchema = z.object({
   preferRemoteLogo: z.boolean().default(false),
   preferRemoteWallpaper: z.boolean().default(false),
   copyright: z.string().trim().max(120).default("Copyright © 2026 陈书. All rights reserved"),
-  recoveryContact: z.string().trim().max(120).default("请联系管理员")
+  recoveryContact: z.string().trim().max(120).default("请联系管理员"),
+  shareFooterText: z.string().trim().max(180).default("")
 });
 
 function safeRemoteAssetUrl(value: string) {
@@ -705,10 +708,11 @@ export async function getManagedUserPasswordView(id: number, actor: UserActor) {
 export async function resetManagedUserPassword(id: number, password: string, actor: UserActor) {
   const user = await getManagedUserRecord(id);
   assertCanManageAdminUser(user, actor);
-  const validationMessage = validateUserRegistration(user.username, password);
+  const validationMessage = validatePassword(password);
   if (validationMessage) throw new Error(validationMessage);
   const passwordHash = await hashPassword(password);
   await dbRun(db.update(users).set({ passwordHash, updatedAt: now() }).where(eq(users.id, id)));
+  await clearLoginFailuresForUsername(user.username);
   await dbRun(db.delete(authSessions).where(eq(authSessions.userId, id)));
   return await getManagedUser(id);
 }
@@ -722,7 +726,8 @@ export async function getSiteConfig(): Promise<SiteConfig> {
     "site.prefer_remote_logo",
     "site.prefer_remote_wallpaper",
     "site.copyright",
-    "site.recovery_contact"
+    "site.recovery_contact",
+    "site.share_footer_text"
   ]);
 
   return {
@@ -733,7 +738,8 @@ export async function getSiteConfig(): Promise<SiteConfig> {
     preferRemoteLogo: booleanFromSettings(values, "site.prefer_remote_logo", false) && !!publicRemoteAssetUrl(valueFromSettings(values, "site.logo_url", defaultRemoteLogoUrl)),
     preferRemoteWallpaper: booleanFromSettings(values, "site.prefer_remote_wallpaper", false) && !!publicRemoteAssetUrl(valueFromSettings(values, "site.auth_wallpaper_url", defaultRemoteWallpaperUrl)),
     copyright: valueFromSettings(values, "site.copyright", "Copyright © 2026 陈书. All rights reserved"),
-    recoveryContact: valueFromSettings(values, "site.recovery_contact", "请联系管理员")
+    recoveryContact: valueFromSettings(values, "site.recovery_contact", "请联系管理员"),
+    shareFooterText: valueFromSettings(values, "site.share_footer_text", "")
   };
 }
 
@@ -749,6 +755,7 @@ export async function saveSiteConfig(input: unknown) {
   await setSetting("site.prefer_remote_wallpaper", String(body.preferRemoteWallpaper && !!wallpaperUrl), "boolean");
   await setSetting("site.copyright", body.copyright);
   await setSetting("site.recovery_contact", body.recoveryContact);
+  await setSetting("site.share_footer_text", body.shareFooterText);
   return await getSiteConfig();
 }
 

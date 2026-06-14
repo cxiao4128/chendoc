@@ -7,6 +7,7 @@ export interface UserProfile {
   role: "admin" | "user";
   status: string;
   isSuperAdmin?: boolean;
+  currentIp?: string | null;
 }
 
 async function submitSignIn(body: Record<string, unknown>) {

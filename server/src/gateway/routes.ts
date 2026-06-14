@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { BadRequestError } from "../utils/errors.js";
+import { clientIpFromRequest } from "../utils/requestIp.js";
 
 type GatewayMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -246,12 +247,14 @@ function headerValue(request: FastifyRequest, name: string) {
 }
 
 function internalHeaders(request: FastifyRequest) {
+  const clientIp = clientIpFromRequest(request);
   const headers: Record<string, string> = {
     "x-gateway-internal": "1",
-    "x-forwarded-for": request.ip
+    "x-forwarded-for": clientIp || request.ip,
+    "x-real-ip": clientIp || request.ip
   };
 
-  for (const name of ["authorization", "user-agent", "x-client-risk"]) {
+  for (const name of ["authorization", "user-agent", "x-client-risk", "forwarded", "cf-connecting-ip"]) {
     const value = headerValue(request, name);
     if (value) headers[name] = value;
   }

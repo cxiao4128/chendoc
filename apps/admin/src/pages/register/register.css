@@ -3,7 +3,7 @@
   min-height: 100dvh;
   overflow: hidden;
   background: var(--cd-bg);
-  background-image: var(--auth-bg-url, url("/site-assets/desktop-bg.png"));
+  background-image: var(--auth-bg-url, url("/site-assets/login-wallpaper-small.webp"));
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -11,11 +11,11 @@
 }
 
 .register-page.is-wallpaper-ready {
-  background-image: var(--auth-bg-url, url("/site-assets/desktop-bg.png"));
+  background-image: var(--auth-bg-url, url("/site-assets/login-wallpaper.webp"));
 }
 
 .register-page.is-custom-wallpaper {
-  background-image: var(--auth-bg-url), url("/site-assets/desktop-bg.png");
+  background-image: var(--auth-bg-url), url("/site-assets/login-wallpaper-small.webp");
 }
 
 .register-page::before {

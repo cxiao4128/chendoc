@@ -33,7 +33,7 @@
   inset: 0;
   z-index: -3;
   overflow: hidden;
-  background: #fff url("/site-assets/desktop-bg-small.webp") center center / cover no-repeat;
+  background: #fff url("/site-assets/login-wallpaper-small.webp") center center / cover no-repeat;
 }
 
 .login-page .auth-scene__image {

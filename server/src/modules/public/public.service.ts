@@ -53,7 +53,8 @@ async function sharePageBrand() {
   const configuredLogo = config.logoUrl?.trim();
   return {
     siteName,
-    logoUrl: config.preferRemoteLogo && configuredLogo ? configuredLogo : bundledLogoUrl
+    logoUrl: config.preferRemoteLogo && configuredLogo ? configuredLogo : bundledLogoUrl,
+    shareFooterText: config.shareFooterText
   };
 }
 

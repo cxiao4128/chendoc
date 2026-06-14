@@ -7,6 +7,7 @@ import { loginRateLimit, registerRateLimit } from "../../middleware/rateLimit.js
 import { users } from "../../db/schema.js";
 import { db, dbGet } from "../../db/client.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
+import { clientIpFromRequest } from "../../utils/requestIp.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { AuthError, changePassword, login, register } from "./auth.service.js";
 import { requireDangerVerification, verifyDangerOperation } from "./dangerVerification.service.js";
@@ -28,13 +29,22 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) {
       return { code: "USER_NOT_FOUND", message: "账号不存在或已被注销", user: null };
     }
-    return { user: { id: user.id, username: user.username, role: user.role, status: user.status, isSuperAdmin: isSuperAdminUser(user) } };
+    return {
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        status: user.status,
+        isSuperAdmin: isSuperAdminUser(user),
+        currentIp: clientIpFromRequest(request)
+      }
+    };
   }
 
   app.post("/api/auth/login", { config: { rateLimit: loginRateLimit } }, async (request, reply) => {
     try {
       const result = await login(request.body, {
-        ip: request.ip,
+        ip: clientIpFromRequest(request),
         userAgent: request.headers["user-agent"],
         clientRisk: Array.isArray(request.headers["x-client-risk"])
           ? request.headers["x-client-risk"][0]
@@ -108,7 +118,8 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/api/auth/refresh", { preHandler: authenticate }, async (request, reply) => {
     const current = await currentUser(request);
     if (!current.user) return current;
-    const session = await renewAuthSession(request.user!.sessionId!, current.user);
+    const { currentIp: _currentIp, ...sessionUser } = current.user;
+    const session = await renewAuthSession(request.user!.sessionId!, sessionUser);
     return { token: session.token, user: current.user, expiresAt: session.expiresAt };
   });
 
