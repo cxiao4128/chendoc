@@ -2,6 +2,7 @@ import type { FastifyRequest } from "fastify";
 import { enqueueLog, logMetaFromRequest, type AsyncLogType } from "./asyncLogQueue.js";
 
 export interface AuditMeta {
+  requestId?: string;
   userId?: number | null;
   username?: string | null;
   role?: string | null;
@@ -51,6 +52,10 @@ export function writeAuditLog(input: AuditMeta) {
     method: input.method,
     statusCode: statusCodeForAudit(input),
     message: input.result ?? (input.action.includes(".failure") ? "failure" : "success"),
-    data: input.detail === undefined ? undefined : { detail: input.detail, riskLevel: input.riskLevel ?? "low" }
+    data: {
+      requestId: input.requestId,
+      ...(input.detail === undefined ? {} : { detail: input.detail }),
+      riskLevel: input.riskLevel ?? "low"
+    }
   });
 }

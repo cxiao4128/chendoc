@@ -90,7 +90,7 @@ const uploadPolicy: UploadPolicy = {
 function createUploadCorsRule(): CORSRule {
   return {
     ID: "chendoc-browser-upload",
-    AllowedHeaders: ["*"],
+    AllowedHeaders: ["content-type", "content-length", "x-amz-*"],
     AllowedMethods: ["GET", "HEAD", "PUT"],
     AllowedOrigins: getR2CorsAllowedOrigins(),
     ExposeHeaders: ["ETag"],
@@ -243,6 +243,19 @@ function verifyUploadToken(token: string) {
   return uploadTokenSchema.parse(decoded);
 }
 
+async function scanCompletedUpload(input: { publicUrl: string; objectKey: string; mimeType: string; size: number }) {
+  if (!env.uploadScanWebhook) return;
+  const response = await fetch(env.uploadScanWebhook, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(30_000)
+  });
+  if (!response.ok) throw new BadRequestError("文件安全扫描暂不可用", "UPLOAD_SCAN_UNAVAILABLE");
+  const result = await response.json() as { clean?: boolean };
+  if (!result.clean) throw new BadRequestError("文件未通过安全扫描", "UPLOAD_SCAN_REJECTED");
+}
+
 async function uploadDocId(docUid: string | null | undefined, actor: Actor) {
   if (!docUid) return null;
   const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
@@ -321,6 +334,12 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
   }));
   validateCompletedObject(tokenPayload, uploadedObject);
   const publicUrl = publicUrlFromKey(config, tokenPayload.objectKey);
+  try {
+    await scanCompletedUpload({ publicUrl, objectKey: tokenPayload.objectKey, mimeType: tokenPayload.mimeType, size: tokenPayload.size });
+  } catch (error) {
+    await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
+    throw error;
+  }
   const result = await dbRun(db.insert(uploads).values({
     userId,
     docId,
@@ -335,9 +354,19 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
   return { id: Number(result.lastInsertRowid), publicUrl };
 }
 
-export async function deleteUpload(id: number) {
+export async function deleteUpload(id: number, actor: Actor) {
   const upload = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.id, id)).limit(1));
   if (!upload) return { deleted: false };
+  if (actor.role !== "admin" && upload.userId !== actor.id) {
+    throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
+  }
+  if (upload.docId) {
+    const doc = await dbGet<{ ownerId: number | null; isSuperAdminDoc: boolean }>(db
+      .select({ ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
+      .from(docs).where(eq(docs.id, upload.docId)).limit(1));
+    if (doc && !actor.isSuperAdmin && doc.isSuperAdminDoc) throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
+    if (actor.role !== "admin" && doc?.ownerId !== actor.id) throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
+  }
 
   const config = await assertR2Ready();
   const client = createR2Client(config);
@@ -346,5 +375,5 @@ export async function deleteUpload(id: number) {
     Key: upload.objectKey
   }));
   await dbRun(db.delete(uploads).where(eq(uploads.id, id)));
-  return { deleted: true };
+  return { deleted: true, ownerId: upload.userId, docId: upload.docId };
 }

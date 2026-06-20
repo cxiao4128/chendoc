@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readdir, rename, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { FastifyRequest } from "fastify";
 import { env } from "../config/env.js";
@@ -277,8 +277,21 @@ export class AsyncLogQueue {
       log
     })).join("\n") + "\n";
     try {
-      await mkdir(join(env.paths.projectRoot, "logs"), { recursive: true });
+      const logDir = join(env.paths.projectRoot, "logs");
+      await mkdir(logDir, { recursive: true });
+      const maxBytes = env.failedLogMaxMb * 1024 * 1024;
+      const currentSize = await stat(target).then((value) => value.size).catch(() => 0);
+      if (currentSize + Buffer.byteLength(lines, "utf8") > maxBytes) {
+        await rename(target, `${target}.${Date.now()}`).catch(() => undefined);
+      }
       await appendFile(target, lines, "utf8");
+      const cutoff = Date.now() - env.logRetentionDays * 86_400_000;
+      for (const name of await readdir(logDir)) {
+        if (!name.startsWith("failed-log-")) continue;
+        const path = join(logDir, name);
+        const modified = await stat(path).then((value) => value.mtimeMs).catch(() => Date.now());
+        if (modified < cutoff) await unlink(path).catch(() => undefined);
+      }
     } catch (fileError) {
       console.error("async log fallback write failed", fileError);
     }
@@ -294,6 +307,7 @@ export function enqueueLog(log: AsyncLogInput) {
 
 export function logMetaFromRequest(request: FastifyRequest) {
   return {
+    requestId: request.id,
     ip: clientIpFromRequest(request),
     userAgent: request.headers["user-agent"],
     path: request.url,

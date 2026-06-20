@@ -53,9 +53,11 @@ const editorLoading = ref(true);
 const editorLoadError = ref("");
 const pasteUploading = ref(false);
 const uploadError = ref("");
+const failedUpload = ref<{ file: File; kind: "image" | "video" | "file"; message: string } | null>(null);
 const previewImage = ref("");
 const imageInput = ref<HTMLInputElement | null>(null);
 const videoInput = ref<HTMLInputElement | null>(null);
+const replacementInput = ref<HTMLInputElement | null>(null);
 const selectedImage = ref(false);
 const imageWidth = ref("");
 const imageCaption = ref("");
@@ -137,7 +139,20 @@ function emitContent(next: Editor) {
     contentJson: JSON.stringify(next.getJSON()),
     contentHtml: next.getHTML()
   });
-  collectToc(next);
+  // ===== 编辑器性能优化：防抖 TOC 生成 =====
+  debouncedCollectToc(next);
+}
+
+// 防抖 TOC 生成：避免大文档时频繁重算
+let tocTimer: ReturnType<typeof setTimeout> | null = null;
+const TOC_DEBOUNCE_MS = 150;
+
+function debouncedCollectToc(next: Editor | null = editor.value) {
+  if (tocTimer) clearTimeout(tocTimer);
+  tocTimer = setTimeout(() => {
+    tocTimer = null;
+    collectToc(next);
+  }, TOC_DEBOUNCE_MS);
 }
 
 function collectToc(next = editor.value) {
@@ -201,11 +216,13 @@ function openCommandMenu() {
 async function uploadAndInsertImage(file: File) {
   pasteUploading.value = true;
   uploadError.value = "";
+  failedUpload.value = null;
   try {
     const url = await uploadFile(file, props.docUid);
     insertImage(url);
   } catch (err) {
     uploadError.value = err instanceof Error ? err.message : "图片上传失败";
+    failedUpload.value = { file, kind: "image", message: uploadError.value };
   } finally {
     pasteUploading.value = false;
   }
@@ -214,11 +231,13 @@ async function uploadAndInsertImage(file: File) {
 async function uploadAndInsertVideo(file: File) {
   pasteUploading.value = true;
   uploadError.value = "";
+  failedUpload.value = null;
   try {
     const url = await uploadFile(file, props.docUid);
     (editor.value?.chain().focus() as any)?.setVideo({ src: url, title: file.name }).run();
   } catch (err) {
     uploadError.value = err instanceof Error ? err.message : "视频上传失败";
+    failedUpload.value = { file, kind: "video", message: uploadError.value };
   } finally {
     pasteUploading.value = false;
     if (videoInput.value) videoInput.value.value = "";
@@ -236,6 +255,7 @@ async function uploadAndInsertFile(file: File) {
   }
   pasteUploading.value = true;
   uploadError.value = "";
+  failedUpload.value = null;
   try {
     const url = await uploadFile(file, props.docUid);
     editor.value?.chain().focus().insertContent({
@@ -248,6 +268,7 @@ async function uploadAndInsertFile(file: File) {
     }).run();
   } catch (err) {
     uploadError.value = err instanceof Error ? err.message : "文件上传失败";
+    failedUpload.value = { file, kind: "file", message: uploadError.value };
   } finally {
     pasteUploading.value = false;
   }
@@ -427,6 +448,30 @@ function onVideoFile(event: Event) {
   if (file) void uploadAndInsertVideo(file);
 }
 
+function retryFailedUpload() {
+  const failed = failedUpload.value;
+  if (!failed) return;
+  if (failed.kind === "image") void uploadAndInsertImage(failed.file);
+  else if (failed.kind === "video") void uploadAndInsertVideo(failed.file);
+  else void uploadAndInsertFile(failed.file);
+}
+
+function replaceFailedUpload() {
+  replacementInput.value?.click();
+}
+
+function onReplacementFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) void uploadAndInsertFile(file);
+  input.value = "";
+}
+
+function removeFailedUpload() {
+  failedUpload.value = null;
+  uploadError.value = "";
+}
+
 function normalizeUrl(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -510,6 +555,10 @@ function startBlockDrag(event: DragEvent) {
 onBeforeUnmount(() => {
   editorLoadToken += 1;
   editor.value?.destroy();
+  if (tocTimer) {
+    clearTimeout(tocTimer);
+    tocTimer = null;
+  }
 });
 </script>
 
@@ -534,10 +583,18 @@ onBeforeUnmount(() => {
     />
     <input ref="imageInput" hidden type="file" accept="image/*" @change="onImageFile" />
     <input ref="videoInput" hidden type="file" accept="video/mp4,video/webm,video/quicktime,video/*" @change="onVideoFile" />
+    <input ref="replacementInput" hidden type="file" @change="onReplacementFile" />
 
     <div v-if="pasteUploading || uploadError || selectedImage" class="chendoc-editor__upload">
       <span v-if="pasteUploading" class="chendoc-editor__hint">正在上传文件...</span>
-      <span v-if="uploadError" class="chendoc-editor__error">{{ uploadError }}</span>
+      <div v-if="failedUpload" class="chendoc-editor__upload-failed" role="alert">
+        <span class="chendoc-editor__error">{{ failedUpload.file.name }}：{{ failedUpload.message }}</span>
+        <div>
+          <button type="button" :disabled="pasteUploading" @click="retryFailedUpload">重试</button>
+          <button type="button" :disabled="pasteUploading" @click="replaceFailedUpload">替换</button>
+          <button type="button" :disabled="pasteUploading" @click="removeFailedUpload">删除</button>
+        </div>
+      </div>
       <div v-if="selectedImage" class="chendoc-editor__image-tools">
         <button type="button" @click="updateImageAttrs({ width: '50%' })">50%</button>
         <button type="button" @click="updateImageAttrs({ width: '75%' })">75%</button>

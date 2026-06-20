@@ -1,0 +1,8 @@
+/* 收集表列表显式复用文档列表契约，避免依赖访问过的其他路由。 */
+@import "../../docs/css/doc-list.css";
+
+.doc-list-page__row-title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

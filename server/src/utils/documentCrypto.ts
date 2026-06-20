@@ -24,8 +24,31 @@ export interface EncryptedDocumentContent {
   contentHtmlKeyVersion: string | null;
 }
 
-function documentKey() {
-  return createHash("sha256").update(env.documentEncryptionKey).digest();
+export class DocumentDecryptionError extends Error {
+  constructor(readonly keyVersion: string | null) {
+    super(`Document decryption failed for key version ${keyVersion ?? "unknown"}.`);
+    this.name = "DocumentDecryptionError";
+  }
+}
+
+function configuredKeyring() {
+  let previous: Record<string, string> = {};
+  if (env.documentKeyring) {
+    try {
+      previous = JSON.parse(env.documentKeyring) as Record<string, string>;
+    } catch {
+      throw new Error("CHENDOC_DOCUMENT_KEYRING must be a JSON object.");
+    }
+  }
+  return { ...previous, [env.documentKeyVersion]: env.documentEncryptionKey };
+}
+
+function documentKey(version = env.documentKeyVersion) {
+  const secret = configuredKeyring()[version];
+  if (!secret || Buffer.byteLength(secret, "utf8") < 32) {
+    throw new DocumentDecryptionError(version);
+  }
+  return createHash("sha256").update(secret).digest();
 }
 
 function encryptField(value: string): EncryptedField {
@@ -41,16 +64,26 @@ function encryptField(value: string): EncryptedField {
 }
 
 function decryptField(field: EncryptedField, fallback: string) {
-  if (!field.ciphertext || !field.iv || !field.tag) return fallback;
+  const present = [field.ciphertext, field.iv, field.tag].filter(Boolean).length;
+  if (present === 0) return fallback;
+  if (present !== 3) {
+    console.error("SECURITY document_encryption_metadata_incomplete", { keyVersion: field.keyVersion ?? null });
+    throw new DocumentDecryptionError(field.keyVersion);
+  }
+  const ciphertext = field.ciphertext!;
+  const iv = field.iv!;
+  const tag = field.tag!;
   try {
-    const decipher = createDecipheriv("aes-256-gcm", documentKey(), Buffer.from(field.iv, "base64"));
-    decipher.setAuthTag(Buffer.from(field.tag, "base64"));
+    const decipher = createDecipheriv("aes-256-gcm", documentKey(field.keyVersion ?? env.documentKeyVersion), Buffer.from(iv, "base64"));
+    decipher.setAuthTag(Buffer.from(tag, "base64"));
     return Buffer.concat([
-      decipher.update(Buffer.from(field.ciphertext, "base64")),
+      decipher.update(Buffer.from(ciphertext, "base64")),
       decipher.final()
     ]).toString("utf8");
-  } catch {
-    return fallback;
+  } catch (error) {
+    console.error("SECURITY document_decryption_failed", { keyVersion: field.keyVersion ?? null });
+    if (error instanceof DocumentDecryptionError) throw error;
+    throw new DocumentDecryptionError(field.keyVersion);
   }
 }
 

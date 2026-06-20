@@ -11,7 +11,7 @@ import {
 } from "../../api/invites";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
-import "./invite.css";
+import "./css/invite.css";
 
 const invites = ref<InviteItem[]>([]);
 const loading = ref(false);

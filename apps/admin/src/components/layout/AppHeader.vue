@@ -5,7 +5,7 @@ import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Network, Search, Sparkles,
 import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { getSystemStatusApi } from "../../api/settings";
-import logoUrl from "../../assets/chendoc-logo.png";
+import { bundledLogoUrl as logoUrl } from "../../config/site-assets";
 import "./app-header.css";
 
 defineEmits<{ menu: [] }>();

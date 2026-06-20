@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
-import { ArrowLeft, BookOpen, Copy, ExternalLink, Link2, PanelRightOpen, RefreshCw, RotateCcw, Trash2, X } from "lucide-vue-next";
+import { ArrowLeft, BookOpen, Copy, ExternalLink, Eye, Link2, MoreHorizontal, PanelRightOpen, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-vue-next";
 import DocTree from "../../components/docs/DocTree.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
+import { useDocAutosave } from "../../composables/useDocAutosave";
+import { useDocShareState } from "../../composables/useDocShare";
+import { useDocVersionState } from "../../composables/useDocVersions";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { nativeConfirm } from "../../services/nativeDialog";
-import { deleteDocApi, listDocVersionsApi, restoreDocVersionApi, type DocVersion } from "../../api/docs";
-import { createShareApi, getShareByDocApi, updateShareApi, type ShareItem, type SharePatch } from "../../api/shares";
+import { deleteDocApi, getDocVersionPreviewApi, listDocVersionsApi, restoreDocVersionApi, restoreDocVersionAsCopyApi, type DocVersion } from "../../api/docs";
+import { createShareApi, getShareByDocApi, updateShareApi, type SharePatch } from "../../api/shares";
 import { useAuthStore } from "../../stores/auth";
 import { useDocStore } from "../../stores/doc";
-import "./doc-editor.css";
+import { normalizeError } from "../../utils/error";
+import "./css/doc-editor.css";
 
 interface TocItem {
   id: string;
@@ -52,25 +56,19 @@ const title = ref("");
 const draft = ref<{ contentJson: string; contentHtml: string } | null>(null);
 const saveState = ref<"idle" | "pending" | "saving" | "saved" | "error">("idle");
 const savedAt = ref("");
-const share = ref<ShareItem | null>(null);
-const shareLoading = ref(false);
+const { share, shareLoading, shareEnabled, sharePassword, shareCodeInput, shareStatus, shareHasPassword, sharePanelOpen } = useDocShareState();
 const copied = ref(false);
 const deleteOpen = ref(false);
 const hydrating = ref(false);
 const dirty = ref(false);
 const toc = ref<TocItem[]>([]);
-const versions = ref<DocVersion[]>([]);
+const { versions, selectedVersion, versionPreview, versionPreviewLoading } = useDocVersionState();
 const editorRefresh = ref(0);
-const shareEnabled = ref(false);
-const sharePassword = ref("");
-const shareCodeInput = ref("");
-const shareStatus = ref("");
-const shareHasPassword = ref(false);
-const sharePanelOpen = ref(false);
-const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions">(null);
+const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions" | "more">(null);
 const localDetailError = ref("");
 const saveError = ref("");
-let saveTimer: number | undefined;
+const lastServerConfirmedAt = ref("");
+const lastSaveDurationMs = ref<number | null>(null);
 let shareSaveTimer: number | undefined;
 let saving = false;
 let queuedWhileSaving = false;
@@ -81,7 +79,7 @@ const AUTO_SAVE_DELAY_MS = 900;
 const docUid = computed(() => String(route.params.docUid || ""));
 const current = computed(() => docs.current?.docUid === docUid.value ? docs.current : null);
 const editorKey = computed(() => `${current.value?.docUid || "none"}-${editorRefresh.value}`);
-const detailErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).detailError) || localDetailError.value);
+const detailErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).detailError, "文档详情加载失败，请稍后重试。") || localDetailError.value);
 const saveErrorText = computed(() => saveError.value || "保存失败，当前编辑内容仍保留在本地。");
 const shareUrl = computed(() => {
   if (!share.value?.isEnabled) return "";
@@ -99,11 +97,16 @@ const saveText = computed(() => {
   if (savedAt.value) return `已保存 ${savedAt.value}`;
   return "自动保存";
 });
+const documentWordCount = computed(() => {
+  const html = draft.value?.contentHtml || current.value?.contentHtml || "";
+  return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, "").length;
+});
 const mobileSheetTitle = computed(() => {
   if (mobileSheet.value === "docs") return "切换文档";
   if (mobileSheet.value === "toc") return "目录导航";
   if (mobileSheet.value === "share") return "发布设置";
   if (mobileSheet.value === "versions") return "历史版本";
+  if (mobileSheet.value === "more") return "更多操作";
   return "";
 });
 const shareCanOpenPublicly = computed(() => !!shareUrl.value);
@@ -119,17 +122,15 @@ const mobileDocBadge = computed(() => {
   return "当前仅内部可见";
 });
 const currentStatusText = computed(() => current.value?.status === "published" ? "已发布" : "草稿");
-
-function normalizeError(error: unknown) {
-  if (!error) return "";
-  if (typeof error === "string") return error;
-  if (typeof error === "object" && "value" in error) return normalizeError((error as { value: unknown }).value);
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string") {
-    return String((error as { message: string }).message);
-  }
-  return "操作失败，请稍后重试。";
-}
+const shareStateText = computed(() => {
+  if (!share.value) return current.value?.status === "published" ? "已发布 · 未公开" : "草稿";
+  if (share.value.reviewStatus === "pending") return "已发布 → 待审核";
+  if (share.value.reviewStatus === "rejected") return "已发布 → 已拒绝";
+  if (share.value.isEnabled) return "已发布 → 已公开";
+  return "已发布 → 已关闭";
+});
+const shareExpiryText = computed(() => share.value?.expireAt ? formatDate(share.value.expireAt) : "长期有效");
+const shareAccessText = computed(() => share.value?.isEnabled ? (shareHasPassword.value ? "持有链接和密码的人" : "持有链接的人") : "当前无人可访问");
 
 function isAbortError(error: unknown) {
   return error instanceof DOMException
@@ -149,23 +150,12 @@ function markDirty() {
   scheduleSave();
 }
 
-function clearSaveTimer() {
-  if (!saveTimer) return;
-  window.clearTimeout(saveTimer);
-  saveTimer = undefined;
-}
-
-function scheduleSave() {
-  clearSaveTimer();
-  saveTimer = window.setTimeout(() => {
-    saveTimer = undefined;
-    if (saving) {
-      queuedWhileSaving = true;
-      return;
-    }
-    void save();
-  }, AUTO_SAVE_DELAY_MS);
-}
+const { clear: clearSaveTimer, schedule: scheduleSave } = useDocAutosave({
+  delayMs: AUTO_SAVE_DELAY_MS,
+  isSaving: () => saving,
+  onQueued: () => { queuedWhileSaving = true; },
+  save: () => save()
+});
 
 async function loadShare(docUidValue: string) {
   const response = await getShareByDocApi(docUidValue);
@@ -260,6 +250,7 @@ async function save() {
   const targetDocUid = current.value.docUid;
   const titleSnapshot = title.value;
   const draftSnapshot = draft.value;
+  const startedAt = performance.now();
   saving = true;
   saveState.value = "saving";
   saveError.value = "";
@@ -269,6 +260,8 @@ async function save() {
       ...(draftSnapshot ?? {})
     });
     savedAt.value = new Date().toLocaleTimeString();
+    lastServerConfirmedAt.value = savedAt.value;
+    lastSaveDurationMs.value = Math.max(1, Math.round(performance.now() - startedAt));
     if (current.value?.docUid === targetDocUid && title.value === titleSnapshot && draft.value === draftSnapshot) {
       draft.value = null;
       dirty.value = false;
@@ -403,10 +396,41 @@ async function copyShare() {
     return;
   }
   await navigator.clipboard.writeText(shareUrl.value);
+  shareStatus.value = `已复制 ${shareUrl.value} · ${shareAccessText.value} · ${shareExpiryText.value}`;
   copied.value = true;
   window.setTimeout(() => {
     copied.value = false;
   }, 1600);
+}
+
+async function openVersionPreview(version: DocVersion) {
+  if (!current.value) return;
+  selectedVersion.value = version;
+  versionPreviewLoading.value = true;
+  try {
+    versionPreview.value = (await getDocVersionPreviewApi(current.value.docUid, version.id)).version;
+  } finally {
+    versionPreviewLoading.value = false;
+  }
+}
+
+async function restorePreviewedVersion() {
+  if (!selectedVersion.value) return;
+  await restoreVersion(selectedVersion.value);
+  selectedVersion.value = null;
+  versionPreview.value = null;
+}
+
+async function restorePreviewedVersionAsCopy() {
+  if (!current.value || !selectedVersion.value) return;
+  const restored = await restoreDocVersionAsCopyApi(current.value.docUid, selectedVersion.value.id);
+  mobileSheet.value = null;
+  router.push(docPath(restored.doc.docUid));
+}
+
+function resubmitRejectedShare() {
+  shareEnabled.value = true;
+  void saveShare();
 }
 
 async function restoreVersion(version: DocVersion) {
@@ -431,8 +455,7 @@ async function restoreVersion(version: DocVersion) {
 }
 
 async function restoreVersionFromSheet(version: DocVersion) {
-  await restoreVersion(version);
-  mobileSheet.value = null;
+  await openVersionPreview(version);
 }
 
 async function remove() {
@@ -519,6 +542,7 @@ onBeforeUnmount(() => {
           <div class="doc-editor-page__mobile-meta">
             <span>{{ mobileDocBadge }}</span>
             <span>{{ currentStatusText }}</span>
+            <span>{{ documentWordCount }} 字</span>
           </div>
         </section>
 
@@ -530,29 +554,17 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="doc-editor-page__mobile-actions">
-          <button type="button" @click="mobileSheet = 'docs'">
-            <BookOpen :size="18" />
-            <span>文档</span>
-          </button>
-          <button type="button" @click="mobileSheet = 'toc'">
-            <Link2 :size="18" />
-            <span>目录</span>
+          <button type="button" :disabled="saving || !dirty" @click="flushPendingSave">
+            <Save :size="18" />
+            <span>保存</span>
           </button>
           <button type="button" @click="mobileSheet = 'share'">
             <PanelRightOpen :size="18" />
             <span>分享</span>
           </button>
-          <button type="button" @click="mobileSheet = 'versions'">
-            <RotateCcw :size="18" />
-            <span>版本</span>
-          </button>
-          <button type="button" :disabled="shareLoading" @click="copyShare">
-            <Copy :size="18" />
-            <span>{{ copied ? "已复制" : "复制链接" }}</span>
-          </button>
-          <button class="is-danger" type="button" @click="deleteOpen = true">
-            <Trash2 :size="18" />
-            <span>删除</span>
+          <button type="button" @click="mobileSheet = 'more'">
+            <MoreHorizontal :size="18" />
+            <span>更多</span>
           </button>
         </div>
 
@@ -606,6 +618,12 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-else-if="mobileSheet === 'share'" class="doc-editor-page__mobile-form">
+            <div class="doc-editor-page__share-summary">
+              <strong>{{ shareStateText }}</strong>
+              <span>谁能访问：{{ shareAccessText }}</span>
+              <span>密码：{{ shareHasPassword ? "需要" : "不需要" }}</span>
+              <span>失效：{{ shareExpiryText }}</span>
+            </div>
             <label class="doc-editor-page__check">
               <input v-model="shareEnabled" type="checkbox" />
               <span>{{ auth.isAdmin ? "公开分享" : "申请公开分享" }}</span>
@@ -648,15 +666,36 @@ onBeforeUnmount(() => {
             <p v-if="shareReviewText" class="doc-editor-page__share-status" :class="{ 'is-error': share?.reviewStatus === 'rejected' }">
               {{ shareReviewText }}
             </p>
+            <button v-if="share?.reviewStatus === 'rejected'" class="cd-button primary" type="button" :disabled="shareLoading" @click="resubmitRejectedShare">
+              修改并重新提交
+            </button>
           </div>
 
           <div v-else-if="mobileSheet === 'versions'" class="doc-editor-page__versions is-mobile">
             <button v-for="version in versions" :key="version.id" type="button" @click="restoreVersionFromSheet(version)">
-              <RotateCcw :size="14" />
+              <Eye :size="14" />
               <span>{{ version.title }}</span>
-              <small>{{ formatDate(version.createdAt) }}</small>
+              <small>{{ version.wordCount }} 字 · {{ version.authorName }} · {{ formatDate(version.createdAt) }}</small>
+              <small>{{ version.diffSummary }}</small>
             </button>
             <p v-if="!versions.length" class="doc-editor-page__muted">暂无版本</p>
+            <div v-if="selectedVersion" class="doc-editor-page__version-preview">
+              <strong>{{ selectedVersion.title }}</strong>
+              <p v-if="versionPreviewLoading">正在加载预览…</p>
+              <pre v-else>{{ versionPreview?.contentText || "此版本没有可预览文字。" }}</pre>
+              <div class="doc-editor-page__version-actions">
+                <button class="cd-button" type="button" :disabled="versionPreviewLoading" @click="restorePreviewedVersionAsCopy">恢复为副本</button>
+                <button class="cd-button primary" type="button" :disabled="versionPreviewLoading" @click="restorePreviewedVersion">恢复此版本</button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="mobileSheet === 'more'" class="doc-editor-page__more-actions">
+            <button class="cd-button" type="button" @click="mobileSheet = 'docs'"><BookOpen :size="16" />切换文档</button>
+            <button class="cd-button" type="button" @click="mobileSheet = 'toc'"><Link2 :size="16" />目录导航</button>
+            <button class="cd-button" type="button" @click="mobileSheet = 'versions'"><RotateCcw :size="16" />历史版本</button>
+            <button class="cd-button" type="button" :disabled="shareLoading" @click="copyShare"><Copy :size="16" />{{ copied ? "已复制" : "复制分享信息" }}</button>
+            <button class="cd-button danger" type="button" @click="deleteOpen = true"><Trash2 :size="16" />删除文档</button>
           </div>
         </aside>
 
@@ -699,6 +738,7 @@ onBeforeUnmount(() => {
           <header class="doc-editor-page__bar">
             <input v-model="title" class="doc-editor-page__title" aria-label="文档标题" />
             <span class="doc-editor-page__save" :class="`is-${saveState}`">{{ saveText }}</span>
+            <span class="doc-editor-page__metrics">{{ documentWordCount }} 字 · 同步 {{ lastSaveDurationMs ?? "-" }} ms · 服务端确认 {{ lastServerConfirmedAt || "尚未保存" }}</span>
             <button class="cd-button" :class="{ primary: sharePanelOpen }" type="button" @click="sharePanelOpen = !sharePanelOpen">
               <PanelRightOpen :size="16" />分享
             </button>
@@ -734,6 +774,12 @@ onBeforeUnmount(() => {
             <aside v-if="sharePanelOpen" class="doc-editor-page__aside">
               <section>
                 <h2>分享</h2>
+                <div class="doc-editor-page__share-summary">
+                  <strong>{{ shareStateText }}</strong>
+                  <span>谁能访问：{{ shareAccessText }}</span>
+                  <span>密码：{{ shareHasPassword ? "需要" : "不需要" }}</span>
+                  <span>失效：{{ shareExpiryText }}</span>
+                </div>
                 <label class="doc-editor-page__check">
                   <input v-model="shareEnabled" type="checkbox" />
                   <span>{{ auth.isAdmin ? "公开分享" : "申请公开分享" }}</span>
@@ -768,18 +814,31 @@ onBeforeUnmount(() => {
                 <p v-if="shareReviewText" class="doc-editor-page__share-status" :class="{ 'is-error': share?.reviewStatus === 'rejected' }">
                   {{ shareReviewText }}
                 </p>
+                <button v-if="share?.reviewStatus === 'rejected'" class="cd-button primary" type="button" :disabled="shareLoading" @click="resubmitRejectedShare">
+                  修改并重新提交
+                </button>
               </section>
 
               <section>
                 <h2>历史版本</h2>
                 <div v-if="versions.length" class="doc-editor-page__versions">
-                  <button v-for="version in versions" :key="version.id" type="button" @click="restoreVersion(version)">
-                    <RotateCcw :size="14" />
+                  <button v-for="version in versions" :key="version.id" type="button" @click="openVersionPreview(version)">
+                    <Eye :size="14" />
                     <span>{{ version.title }}</span>
-                    <small>{{ formatDate(version.createdAt) }}</small>
+                    <small>{{ version.wordCount }} 字 · {{ version.authorName }} · {{ formatDate(version.createdAt) }}</small>
+                    <small>{{ version.diffSummary }}</small>
                   </button>
                 </div>
                 <p v-else class="doc-editor-page__muted">暂无版本</p>
+                <div v-if="selectedVersion" class="doc-editor-page__version-preview">
+                  <strong>{{ selectedVersion.title }}</strong>
+                  <p v-if="versionPreviewLoading">正在加载预览…</p>
+                  <pre v-else>{{ versionPreview?.contentText || "此版本没有可预览文字。" }}</pre>
+                  <div class="doc-editor-page__version-actions">
+                    <button class="cd-button" type="button" :disabled="versionPreviewLoading" @click="restorePreviewedVersionAsCopy">恢复为副本</button>
+                    <button class="cd-button primary" type="button" :disabled="versionPreviewLoading" @click="restorePreviewedVersion">恢复此版本</button>
+                  </div>
+                </div>
               </section>
             </aside>
           </div>

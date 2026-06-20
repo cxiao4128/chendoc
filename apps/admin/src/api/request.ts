@@ -2,10 +2,18 @@ import { buildAuthorization, clearAuthSession, getAuthToken, saveAuthSession, sh
 import { buildClientRiskHeader } from "../security/runtimeGuard";
 import { gatewayClientRequest, shouldUseGateway } from "../gateway/client";
 import { apiPaths, isCredentialEndpoint, resolveApiPath } from "./endpoints";
+import { recordClientError } from "../utils/clientTelemetry";
 
 const DEFAULT_ERROR_MESSAGE = "请求失败";
 const LOGIN_NOTICE_KEY = "chendoc_login_notice";
 const LOGIN_REDIRECT_KEY = "chendoc_login_redirect";
+const SESSION_STATUS_EVENT = "chendoc:session-status";
+
+function notifySessionStatus(status: "expiring" | "restored" | "failed") {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(SESSION_STATUS_EVENT, { detail: { status } }));
+  }
+}
 
 export class ApiError extends Error {
   status: number;
@@ -111,8 +119,15 @@ let refreshInFlight: Promise<void> | null = null;
 async function refreshAuthSession() {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    const response = await request<{ token: string; expiresAt?: string | number | Date }>("/api/auth/refresh", { method: "POST" });
-    setToken(response.token, response.expiresAt || Date.now() + 2 * 60 * 60 * 1000);
+    try {
+      notifySessionStatus("expiring");
+      const data = await request<{ token: string; expiresAt?: string | number | Date }>("/api/auth/refresh", { method: "POST" });
+      saveAuthSession(data.token, data.expiresAt || Date.now() + 2 * 60 * 60 * 1000);
+      notifySessionStatus("restored");
+    } catch (error) {
+      recordClientError("auth.refresh", error);
+      notifySessionStatus("failed");
+    }
   })().finally(() => {
     refreshInFlight = null;
   });

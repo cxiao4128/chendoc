@@ -7,6 +7,10 @@ import {
   packGatewayResponse,
   unpackGatewayPacket
 } from "./packet.js";
+import { isGatewayExemptPath } from "./action-registry.js";
+import { measureRequestPhase } from "../utils/requestTiming.js";
+
+const GATEWAY_DEBUG = env.nodeEnv !== "production";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -23,11 +27,16 @@ function isInternalGatewayRequest(request: FastifyRequest) {
   return request.headers["x-gateway-internal"] === "1";
 }
 
-function isGatewayBootstrapRequest(request: FastifyRequest) {
-  const path = request.url.split("?")[0];
-  return path === "/api/crypto/public-key"
-    || path === "/api/crypto/challenge"
-    || path === "/api/bootstrap";
+function requestPath(request: FastifyRequest) {
+  return request.url.split("?")[0]!;
+}
+
+function isGatewayExemptRequest(request: FastifyRequest) {
+  return isGatewayExemptPath(requestPath(request));
+}
+
+function isGatewayEntryRequest(request: FastifyRequest) {
+  return requestPath(request) === "/api/gateway";
 }
 
 function hasRequestBody(request: FastifyRequest) {
@@ -38,7 +47,7 @@ function requirePacket(request: FastifyRequest) {
   return env.nodeEnv === "production"
     && isApiRequest(request)
     && !isInternalGatewayRequest(request)
-    && !isGatewayBootstrapRequest(request);
+    && (!isGatewayExemptRequest(request) || isGatewayEntryRequest(request));
 }
 
 function parseJsonPayload(payload: unknown) {
@@ -52,25 +61,21 @@ function parseJsonPayload(payload: unknown) {
 }
 
 export async function unpackGatewayRequest(request: FastifyRequest, reply: FastifyReply) {
-  if (isInternalGatewayRequest(request) || isGatewayBootstrapRequest(request)) return;
-  if (!isApiRequest(request)) return;
-  if (!hasRequestBody(request)) {
-    if (requirePacket(request)) {
-      return reply.code(400).send({ code: "PACKET_REQUIRED", message: "Invalid gateway packet." });
-    }
-    return;
-  }
+  const isInternal = isInternalGatewayRequest(request);
+  const isExempt = isGatewayExemptRequest(request);
+  if (GATEWAY_DEBUG) console.log(`[gateway] unpackGatewayRequest: ${request.method} ${request.url}, isExempt=${isExempt}, isInternal=${isInternal}`);
+  if (isInternal || !isApiRequest(request)) return;
 
-  if (isGatewayEnvelope(request.body)) {
+  if (hasRequestBody(request) && isGatewayEnvelope(request.body)) {
     try {
       const fingerprint = Array.isArray(request.headers["x-client-fingerprint"])
         ? request.headers["x-client-fingerprint"][0]
         : request.headers["x-client-fingerprint"];
-      const decoded = await unpackGatewayPacket(request.body, {
+      const decoded = await measureRequestPhase("gatewayUnpack", () => unpackGatewayPacket(request.body, {
         ip: request.ip,
         userAgent: request.headers["user-agent"],
         fingerprint
-      });
+      }));
       request.packet = decoded.packet;
       request.gatewayAesKey = decoded.aesKey;
       request.body = decoded.body;
@@ -78,20 +83,26 @@ export async function unpackGatewayRequest(request: FastifyRequest, reply: Fasti
     } catch (error) {
       const code = error instanceof GatewayPacketError ? error.code : "INVALID_PACKET";
       const statusCode = error instanceof GatewayPacketError ? error.statusCode : 400;
+      if (GATEWAY_DEBUG) console.log(`[gateway] INVALID_PACKET for ${request.method} ${request.url}:`, error);
       return reply.code(statusCode).send({ code, message: "Invalid gateway packet." });
     }
   }
 
   if (requirePacket(request)) {
+    if (GATEWAY_DEBUG) console.log(`[gateway] PACKET_REQUIRED (no envelope) for ${request.method} ${request.url}`);
     return reply.code(400).send({ code: "PACKET_REQUIRED", message: "Invalid gateway packet." });
   }
 }
 
 export async function packGatewayReply(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
   if (!isApiRequest(request)) return payload;
-  if (env.nodeEnv !== "production" && !request.gatewayAesKey) return payload;
-  if (isInternalGatewayRequest(request) || isGatewayBootstrapRequest(request)) return payload;
+  const isInternal = isInternalGatewayRequest(request);
+  const isExempt = isGatewayExemptRequest(request);
+  if (GATEWAY_DEBUG) console.log(`[gateway] packGatewayReply: ${request.url}, nodeEnv=${env.nodeEnv}, isExempt=${isExempt}, isInternal=${isInternal}`);
+  if (isInternal) return payload;
   if (reply.statusCode === 204) return payload;
+  if (!request.gatewayAesKey && isExempt) return payload;
+  if (env.nodeEnv !== "production" && !request.gatewayAesKey) return payload;
 
   const parsed = parseJsonPayload(payload);
   reply.header("Content-Type", "application/json; charset=utf-8");

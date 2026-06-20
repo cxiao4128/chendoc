@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { BadRequestError } from "../utils/errors.js";
 import { clientIpFromRequest } from "../utils/requestIp.js";
+import { isGatewayActionCode, type GatewayActionCode } from "./action-registry.js";
+
+// Gateway 调试模式
+const GATEWAY_DEBUG = process.env.NODE_ENV !== "production";
 
 type GatewayMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -61,7 +65,7 @@ function queryString(payload: GatewayPayload) {
   return value ? `?${value}` : "";
 }
 
-function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarget {
+function actionTarget(actionCode: GatewayActionCode, payload: GatewayPayload): GatewayTarget {
   switch (actionCode) {
     case "a1":
       return { method: "POST", url: "/api/auth/login", body: bodyOf(payload) };
@@ -204,6 +208,29 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
     case "w4":
       return { method: "DELETE", url: `/api/spaces/${param(payload, "id")}` };
 
+    case "fm1":
+      return { method: "GET", url: "/api/forms" };
+    case "fm2":
+      return { method: "POST", url: "/api/forms", body: bodyOf(payload) };
+    case "fm3":
+      return { method: "GET", url: `/api/forms/${param(payload, "id")}` };
+    case "fm4":
+      return { method: "PUT", url: `/api/forms/${param(payload, "id")}`, body: bodyOf(payload) };
+    case "fm5":
+      return { method: "DELETE", url: `/api/forms/${param(payload, "id")}` };
+    case "fm6":
+      return { method: "POST", url: `/api/forms/${param(payload, "id")}/publish`, body: bodyOf(payload) };
+    case "fm7":
+      return { method: "GET", url: `/api/forms/${param(payload, "id")}/submissions${queryString(payload)}` };
+    case "fm8":
+      return { method: "GET", url: `/api/forms/${param(payload, "id")}/export${queryString(payload)}` };
+    case "fm9":
+      return { method: "GET", url: `/api/forms/${param(payload, "id")}/ip-stats` };
+    case "fm10":
+      return { method: "DELETE", url: `/api/forms/${param(payload, "id")}/submissions` };
+    case "fm11":
+      return { method: "DELETE", url: `/api/forms/${param(payload, "id")}/submissions/${param(payload, "submissionId")}` };
+
     case "i1":
       return { method: "GET", url: "/api/admin/invites" };
     case "i2":
@@ -228,8 +255,6 @@ function actionTarget(actionCode: string, payload: GatewayPayload): GatewayTarge
       return { method: "POST", url: "/api/admin/security/totp/enable", body: bodyOf(payload) };
     case "y4":
       return { method: "POST", url: "/api/admin/security/totp/disable", body: bodyOf(payload) };
-    case "y5":
-      return { method: "GET", url: "/api/admin/security/totp/recovery-codes" };
     case "y6":
       return { method: "POST", url: "/api/admin/security/totp/recovery-codes", body: bodyOf(payload) };
     case "y7":
@@ -274,27 +299,48 @@ function parseInjectedPayload(payload: string, contentType: string | undefined) 
 
 export async function gatewayRoutes(app: FastifyInstance) {
   app.post("/api/gateway", async (request, reply) => {
-    const actionCode = request.packet?.actionCode;
-    if (!actionCode) return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
+    try {
+      const actionCode = request.packet?.actionCode ?? payloadOf(request).actionCode as string | undefined;
+      if (!actionCode) {
+        return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
+      }
+      if (!isGatewayActionCode(actionCode)) {
+        return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
+      }
 
-    const targetRequest = actionTarget(actionCode, payloadOf(request));
-    const hasBody = targetRequest.method !== "GET" && targetRequest.method !== "DELETE";
+      if (GATEWAY_DEBUG) {
+        console.log(`[gateway] ${request.method} ${request.url} → action: ${actionCode}`);
+      }
 
-    const response = await app.inject({
-      method: targetRequest.method,
-      url: targetRequest.url,
-      headers: {
-        ...internalHeaders(request),
-        ...(hasBody ? { "content-type": "application/json" } : {})
-      },
-      payload: hasBody ? JSON.stringify(targetRequest.body ?? {}) : undefined
-    });
+      const targetRequest = actionTarget(actionCode, payloadOf(request));
+      const hasBody = targetRequest.method !== "GET" && targetRequest.method !== "DELETE";
 
-    const contentType = Array.isArray(response.headers["content-type"])
-      ? response.headers["content-type"][0]
-      : response.headers["content-type"];
-    return reply
-      .code(response.statusCode)
-      .send(parseInjectedPayload(response.body, contentType));
+      const response = await app.inject({
+        method: targetRequest.method,
+        url: targetRequest.url,
+        headers: {
+          ...internalHeaders(request),
+          ...(hasBody ? { "content-type": "application/json" } : {})
+        },
+        payload: hasBody ? JSON.stringify(targetRequest.body ?? {}) : undefined
+      });
+
+      if (GATEWAY_DEBUG && response.statusCode >= 400) {
+        console.log(`[gateway] ${targetRequest.method} ${targetRequest.url} ← ${response.statusCode}`);
+      }
+
+      const contentType = Array.isArray(response.headers["content-type"])
+        ? response.headers["content-type"][0]
+        : response.headers["content-type"];
+      return reply
+        .code(response.statusCode)
+        .send(parseInjectedPayload(response.body, contentType));
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Gateway processing failed");
+      if (GATEWAY_DEBUG) {
+        console.error("[gateway] error:", error.message);
+      }
+      return reply.code(500).send({ code: "GATEWAY_ERROR", message: error.message });
+    }
   });
 }

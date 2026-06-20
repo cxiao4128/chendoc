@@ -50,7 +50,7 @@ export const cryptoKeys = mysqlTable("crypto_keys", {
 
 export const authSessions = mysqlTable("auth_sessions", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  userId: int("user_id").notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   keyEncrypted: text("key_encrypted").notNull(),
   expireAt: ts("expire_at").notNull(),
   lastSeenAt: ts("last_seen_at").notNull(),
@@ -64,7 +64,7 @@ export const spaces = mysqlTable("spaces", {
   id: id(),
   name: varchar("name", { length: 191 }).notNull(),
   description: text("description"),
-  ownerId: int("owner_id"),
+  ownerId: int("owner_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: ts("created_at").notNull(),
   updatedAt: ts("updated_at").notNull()
 });
@@ -72,7 +72,7 @@ export const spaces = mysqlTable("spaces", {
 export const docs = mysqlTable("docs", {
   id: id(),
   docUid: varchar("doc_uid", { length: 32 }).notNull(),
-  spaceId: int("space_id"),
+  spaceId: int("space_id").references(() => spaces.id, { onDelete: "set null" }),
   parentId: int("parent_id"),
   title: varchar("title", { length: 191 }).notNull(),
   contentJson: mediumtext("content_json").notNull(),
@@ -91,10 +91,10 @@ export const docs = mysqlTable("docs", {
   pinned: boolean("pinned").notNull().default(false),
   status: varchar("status", { length: 16 }).notNull().default("draft"),
   sort: int("sort").notNull().default(0),
-  ownerId: int("owner_id"),
+  ownerId: int("owner_id").references(() => users.id, { onDelete: "set null" }),
   ownerRole: varchar("owner_role", { length: 16 }).notNull().default("user"),
-  createdBy: int("created_by"),
-  updatedBy: int("updated_by"),
+  createdBy: int("created_by").references(() => users.id, { onDelete: "set null" }),
+  updatedBy: int("updated_by").references(() => users.id, { onDelete: "set null" }),
   scope: varchar("scope", { length: 16 }).notNull().default("user"),
   isSuperAdminDoc: boolean("is_super_admin_doc").notNull().default(false),
   visibility: varchar("visibility", { length: 16 }).notNull().default("private"),
@@ -119,7 +119,7 @@ export const docs = mysqlTable("docs", {
 
 export const shares = mysqlTable("shares", {
   id: id(),
-  docId: int("doc_id").notNull(),
+  docId: int("doc_id").notNull().references(() => docs.id, { onDelete: "cascade" }),
   shareCode: int("share_code").notNull().unique(),
   shareToken: varchar("share_token", { length: 64 }).notNull().unique(),
   customSlug: varchar("custom_slug", { length: 191 }).unique(),
@@ -128,8 +128,8 @@ export const shares = mysqlTable("shares", {
   reviewStatus: varchar("review_status", { length: 16 }).notNull().default("approved"),
   reviewNote: text("review_note"),
   reviewContentHash: varchar("review_content_hash", { length: 128 }),
-  requestedBy: int("requested_by"),
-  reviewedBy: int("reviewed_by"),
+  requestedBy: int("requested_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedBy: int("reviewed_by").references(() => users.id, { onDelete: "set null" }),
   reviewedAt: ts("reviewed_at"),
   expireAt: ts("expire_at"),
   viewCount: int("view_count").notNull().default(0),
@@ -141,8 +141,8 @@ export const shares = mysqlTable("shares", {
 
 export const uploads = mysqlTable("uploads", {
   id: id(),
-  userId: int("user_id"),
-  docId: int("doc_id"),
+  userId: int("user_id").references(() => users.id, { onDelete: "set null" }),
+  docId: int("doc_id").references(() => docs.id, { onDelete: "set null" }),
   objectKey: varchar("object_key", { length: 191 }).notNull().unique(),
   publicUrl: text("public_url").notNull(),
   mimeType: varchar("mime_type", { length: 120 }).notNull(),
@@ -156,7 +156,7 @@ export const uploads = mysqlTable("uploads", {
 
 export const docVersions = mysqlTable("doc_versions", {
   id: id(),
-  docId: int("doc_id").notNull(),
+  docId: int("doc_id").notNull().references(() => docs.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 191 }).notNull(),
   contentJson: mediumtext("content_json").notNull(),
   contentHtml: mediumtext("content_html").notNull(),
@@ -168,7 +168,7 @@ export const docVersions = mysqlTable("doc_versions", {
   contentHtmlIv: varchar("content_html_iv", { length: 64 }),
   contentHtmlTag: varchar("content_html_tag", { length: 64 }),
   contentHtmlKeyVersion: varchar("content_html_key_version", { length: 32 }),
-  createdBy: int("created_by"),
+  createdBy: int("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: ts("created_at").notNull()
 }, (table) => [
   index("doc_versions_doc_created_idx").on(table.docId, table.createdAt)
@@ -193,7 +193,7 @@ export const loginFailures = mysqlTable("login_failures", {
 
 export const dangerVerifications = mysqlTable("danger_verifications", {
   id: id(),
-  userId: int("user_id").notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   sessionId: varchar("session_id", { length: 64 }).notNull(),
   verifiedAt: ts("verified_at").notNull(),
   expireAt: ts("expire_at").notNull()
@@ -273,6 +273,46 @@ export const operationLogs = mysqlTable("operation_logs", {
 ]);
 
 export const uniqueShareCode = uniqueIndex("shares_share_code_unique").on(shares.shareCode);
+
+// ===== 收集表模块 =====
+export const forms = mysqlTable("forms", {
+  id: id(),
+  formUid: varchar("form_uid", { length: 32 }).notNull().unique(),
+  title: varchar("title", { length: 191 }).notNull(),
+  description: text("description"),
+  fields: mediumtext("fields").notNull().default("[]"),
+  ownerId: int("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 16 }).notNull().default("draft"),
+  maxSubmissions: int("max_submissions"),
+  allowMultiple: boolean("allow_multiple").notNull().default(false),
+  exclusiveInfo: text("exclusive_info"),  // JSON: 提交后展示给填写者的专属信息
+  privacyNotice: text("privacy_notice"),
+  retentionDays: int("retention_days"),
+  storeUserAgent: boolean("store_user_agent").notNull().default(false),
+  viewCount: int("view_count").notNull().default(0),
+  submissionCount: int("submission_count").notNull().default(0),
+  createdAt: ts("created_at").notNull(),
+  updatedAt: ts("updated_at").notNull()
+}, (table) => [
+  uniqueIndex("uk_forms_form_uid").on(table.formUid),
+  index("forms_owner_idx").on(table.ownerId),
+  index("forms_status_idx").on(table.status)
+]);
+
+export const formSubmissions = mysqlTable("form_submissions", {
+  id: id(),
+  formId: int("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+  data: mediumtext("data").notNull(),
+  ip: varchar("ip", { length: 64 }).notNull(), // 不存原始 IP，只存不可逆来源摘要
+  submitterId: varchar("submitter_id", { length: 64 }),
+  userAgent: text("user_agent"),
+  submittedAt: ts("submitted_at").notNull()
+}, (table) => [
+  index("form_submissions_form_idx").on(table.formId),
+  uniqueIndex("form_submissions_identity_unique").on(table.formId, table.submitterId),
+  index("form_submissions_ip_idx").on(table.ip),
+  index("form_submissions_time_idx").on(table.submittedAt)
+]);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

@@ -4,6 +4,24 @@
 
 ## 中文
 
+### 2.6.0
+
+版本号：`2.6.0`
+
+展示版本：`v2.6.0`
+
+本次更新内容：
+
+- 修复公开表单 CSP、会话续期轮换、DOM 输出编码和表单容量/重复/验证码控制。
+- 增加文档密钥 keyring 与轮换预检、TOTP 恢复码哈希和管理员危险操作验证。
+- 增加表单隐私保留、匿名来源摘要、附件生命周期/扫描、MySQL 外键与 CI 校验。
+- 增加加密备份、异地复制、恢复验证、日志保留与轮换。
+- 终检补齐 SQLite→MySQL 表单字段迁移和级联契约，收紧全部私有 API 的 Gateway 强制检查，并修复必填同意框与批量删除事务。
+- 优化文档筛选、真实动态、知识目录、自定义模板、历史版本预览/副本恢复和分享状态说明。
+- 优化移动表单/提交记录/编辑器、上传失败恢复、视觉一致性、响应式图片和首屏构建预算。
+
+更新时间：2026-06-20 +08:00
+
 ### 2.5.2
 
 版本号：`2.5.2`
@@ -33,6 +51,50 @@
 更新时间：2026-06-13 15:16:16 +08:00
 
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+### 2.5.0
+
+版本号：`2.5.0`
+
+展示版本：`v2.5.0`
+
+本次更新内容：
+
+- 架构更新版本，根项目、管理端、服务端、锁文件和系统展示版本已同步到 `2.5.0`。
+- 强化 Gateway Packet Layer：动态 `keyId`、挑战绑定、HMAC-SHA256 签名、nonce/timestamp 防重放和加密响应链路。
+- 强化登录安全：登录风险跟踪、TOTP、危险操作二次验证、单次恢复码和安全中心管理页。
+- 新增文档内容 AES-256-GCM 静态加密，支持历史文档加密迁移脚本。
+- 优化公开分享首屏、ETag / Last-Modified 缓存、密码分享页和分享审核链路。
+- 更新部署预检和 `deploy.sh`，生产部署强制使用 `DATABASE_PROVIDER=mysql` 与 `mysql://` 连接串。
+- 增加安全 CI、服务端测试覆盖、日志脱敏和统一错误处理。
+
+更新时间：2026-06-13 02:05:23 +08:00
+
+文档官网：[https://d.w92.pw/](https://d.w92.pw/)
+
+### 2.3.0
+
+版本号：`2.3.0`
+
+展示版本：`v2.3.0`
+
+本次更新内容：
+
+- 按定版 PNG 落地 ChenDoc 浅紫 UI，统一登录页、文档工作台、回收站、分享审核和系统管理视觉。
+- 登录页换用定版壁纸与半透明登录面板。
+- 后台补齐顶部搜索、快捷入口、横版 ChenDoc wordmark、淡紫选中导航、用户头像和独立退出入口。
+
+### 2.2.0
+
+版本号：`2.2.0`
+
+展示版本：`v2.2.0`
+
+本次更新内容：
+
+- 建立 ChenDoc 文档系统设计语言。
+- 登录、后台、编辑器、分享页和控制中心统一到更成熟的文档平台体验。
+- 保持轻量 Vue / CSS 实现，不引入大型 UI 框架或外链字体资源。
 
 ### 2.0.0
 
@@ -180,6 +242,23 @@
 
 ## English
 
+### 2.6.0
+
+Version: `2.6.0`
+
+Display version: `v2.6.0`
+
+Changes:
+
+- Fixed public-form CSP, session renewal rotation, DOM output encoding, and form abuse controls.
+- Added document keyrings and preflight checks, hashed TOTP recovery codes, and dangerous-operation verification.
+- Added form privacy retention, anonymous source digests, upload lifecycle/scanning, MySQL FKs, and CI validation.
+- Added encrypted backups, offsite copies, restore verification, and log retention/rotation.
+- Improved document filters, activity, knowledge discovery, custom templates, version previews/copy restore, and share-state guidance.
+- Improved mobile forms/submissions/editor actions, upload recovery, visual consistency, responsive images, and initial-load budgets.
+
+Updated at: 2026-06-20 +08:00
+
 ### 2.5.2
 
 Version: `2.5.2`
@@ -209,6 +288,50 @@ Changes:
 Updated at: 2026-06-13 15:16:16 +08:00
 
 Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+### 2.5.0
+
+Version: `2.5.0`
+
+Display version: `v2.5.0`
+
+Changes:
+
+- Architecture update release. Root, admin, server, lockfile, and displayed version are synchronized to `2.5.0`.
+- Hardened Gateway Packet Layer with dynamic `keyId`, challenge binding, HMAC-SHA256 signing, nonce/timestamp replay protection, and encrypted responses.
+- Added login risk tracking, TOTP, dangerous-operation re-verification, recovery codes, and the admin security center.
+- Added AES-256-GCM document encryption at rest and migration scripts for existing documents.
+- Improved public share first paint, ETag / Last-Modified caching, password-protected share pages, and share review.
+- Updated deployment preflight and `deploy.sh` to require `DATABASE_PROVIDER=mysql` and a `mysql://` `DATABASE_URL`.
+- Added security CI, server-side test coverage, log redaction, and unified error handling.
+
+Updated at: 2026-06-13 02:05:23 +08:00
+
+Documentation: [https://d.w92.pw/](https://d.w92.pw/)
+
+### 2.3.0
+
+Version: `2.3.0`
+
+Display version: `v2.3.0`
+
+Changes:
+
+- Implemented the finalized ChenDoc light-purple UI from PNG references across login, document workspace, trash, share review, and system management.
+- Switched login to the finalized wallpaper and translucent login panel.
+- Added top search, quick actions, horizontal ChenDoc wordmark, selected navigation styling, user avatar, and a separate logout entry.
+
+### 2.2.0
+
+Version: `2.2.0`
+
+Display version: `v2.2.0`
+
+Changes:
+
+- Established the ChenDoc document-system design language.
+- Unified login, admin, editor, share page, and control center into a more mature document platform experience.
+- Kept the implementation lightweight with Vue / CSS and no large UI framework or external font dependency.
 
 ### 2.0.0
 

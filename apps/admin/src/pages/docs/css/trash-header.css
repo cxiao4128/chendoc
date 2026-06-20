@@ -1,0 +1,50 @@
+/* ========================================
+   trash-header.css
+   头部、操作按钮、选择框
+   ======================================== */
+
+.trash-page__head {
+  align-items: flex-start;
+  border-bottom: 0;
+  margin-bottom: 24px;
+  padding-bottom: 0;
+}
+
+.trash-page__head h1 {
+  font-size: 38px;
+  margin: 0;
+  color: var(--cd-ink);
+  line-height: 1.08;
+}
+
+.trash-page__head h1 span {
+  color: #9b8cff;
+  font-size: 23px;
+}
+
+.trash-page__head p {
+  margin: 6px 0 0;
+  color: var(--cd-muted);
+}
+
+.trash-page__head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.trash-page__select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cd-muted);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.trash-page__select input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--cd-accent);
+}

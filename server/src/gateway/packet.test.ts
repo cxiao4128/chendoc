@@ -19,7 +19,8 @@ process.env.DEFAULT_ADMIN_PASSWORD = "Test!Password123";
 
 const { closeDatabase } = await import("../db/client.js");
 const { GatewayPacketError, __testing, issueGatewayChallenge } = await import("./packet.js");
-const { packGatewayReply } = await import("./middleware.js");
+const { env } = await import("../config/env.js");
+const { packGatewayReply, unpackGatewayRequest } = await import("./middleware.js");
 
 afterAll(async () => {
   await closeDatabase();
@@ -27,6 +28,12 @@ afterAll(async () => {
 });
 
 describe("gateway challenge replay protection", () => {
+  test("accepts multi-letter form action codes", () => {
+    expect(__testing.validGatewayActionShape("fm1")).toBe(true);
+    expect(__testing.validGatewayActionShape("fm11")).toBe(true);
+    expect(__testing.validGatewayActionShape("1fm")).toBe(false);
+  });
+
   test("consumes a challenge exactly once", () => {
     const challenge = issueGatewayChallenge({ fingerprint: "test-fingerprint" });
 
@@ -89,5 +96,79 @@ describe("gateway response packet", () => {
       token: "plain-token",
       user: { username: "xchen" }
     });
+  });
+
+  test.each(["/api/auth/login", "/api/auth/register"])("does not bypass packing for %s", async (url) => {
+    const aesKey = Buffer.alloc(32, 9);
+    const reply = {
+      statusCode: 200,
+      header() {
+        return reply;
+      }
+    };
+    const payload = await packGatewayReply(
+      { id: "req-auth", url, headers: {}, gatewayAesKey: aesKey } as never,
+      reply as never,
+      { token: "plain-token" }
+    );
+
+    expect(typeof payload).toBe("string");
+    expect(payload).not.toContain("plain-token");
+  });
+});
+
+describe("gateway request enforcement", () => {
+  test.each([
+    ["GET", undefined],
+    ["POST", { raw: true }],
+    ["PUT", { raw: true }],
+    ["PATCH", { raw: true }],
+    ["DELETE", undefined]
+  ])("requires a gateway packet for private %s requests", async (method, body) => {
+    const originalNodeEnv = env.nodeEnv;
+    env.nodeEnv = "production";
+    let sent: unknown;
+    const reply = {
+      statusCode: 200,
+      code(statusCode: number) {
+        reply.statusCode = statusCode;
+        return reply;
+      },
+      send(payload: unknown) {
+        sent = payload;
+        return payload;
+      }
+    };
+    try {
+      await unpackGatewayRequest({ method, url: "/api/docs/42", headers: {}, body } as never, reply as never);
+      expect(reply.statusCode).toBe(400);
+      expect(sent).toMatchObject({ code: "PACKET_REQUIRED" });
+    } finally {
+      env.nodeEnv = originalNodeEnv;
+    }
+  });
+
+  test.each(["/api/auth/login", "/api/auth/register"])("requires a gateway packet for %s", async (url) => {
+    const originalNodeEnv = env.nodeEnv;
+    env.nodeEnv = "production";
+    let sent: unknown;
+    const reply = {
+      statusCode: 200,
+      code(statusCode: number) {
+        reply.statusCode = statusCode;
+        return reply;
+      },
+      send(payload: unknown) {
+        sent = payload;
+        return payload;
+      }
+    };
+    try {
+      await unpackGatewayRequest({ method: "POST", url, headers: {}, body: { raw: true } } as never, reply as never);
+      expect(reply.statusCode).toBe(400);
+      expect(sent).toMatchObject({ code: "PACKET_REQUIRED" });
+    } finally {
+      env.nodeEnv = originalNodeEnv;
+    }
   });
 });

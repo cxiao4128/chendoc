@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { castAsText, db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { docs, docVersions, shares, uploads, users } from "../../db/schema.js";
@@ -10,6 +10,8 @@ import { generateDocUid } from "../../utils/docUid.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { renderContentJsonToHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
 import { canAccessDocument, type DocumentAction, type DocumentActor } from "./documentAccess.js";
+import { invalidateDecryptedDocCache } from "../shares/shares.service.js";
+import { invalidateShareHtmlCache } from "../public/public.service.js";
 
 type Actor = DocumentActor;
 type PageOptions = { page?: number; pageSize?: number };
@@ -227,6 +229,7 @@ function listSelect() {
     parentId: docs.parentId,
     title: docs.title,
     summary: docs.summary,
+    tags: docs.tags,
     status: docs.status,
     pinned: docs.pinned,
     sort: docs.sort,
@@ -434,6 +437,12 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
       updatedAt: now()
     }).where(eq(shares.docId, id)));
   }
+
+  // ===== 分享页秒开优化：文档更新后清除缓存 =====
+  // 使用 Promise.resolve 包装以便安全调用 .catch
+  Promise.resolve().then(() => invalidateShareHtmlCache()).catch(() => undefined);
+  Promise.resolve().then(() => invalidateDecryptedDocCache(id)).catch(() => undefined);
+
   return await getDoc(id, actor);
 }
 
@@ -604,23 +613,81 @@ export async function publishDoc(id: number, userId: number, actor?: Actor) {
 }
 
 export async function listDocVersions(docId: number, actor?: Actor) {
-  await getDoc(docId, actor);
-  return await dbAll(db
-    .select({
-      id: docVersions.id,
-      title: docVersions.title,
-      createdBy: docVersions.createdBy,
-      createdAt: docVersions.createdAt
-    })
+  const current = await getDoc(docId, actor);
+  const rows = await dbAll<typeof docVersions.$inferSelect>(db
+    .select()
     .from(docVersions)
     .where(eq(docVersions.docId, docId))
     .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
     .limit(50));
+  const userIds = Array.from(new Set(rows.map((row) => row.createdBy).filter((id): id is number => !!id)));
+  const authors = userIds.length
+    ? await dbAll<{ id: number; username: string }>(db.select({ id: users.id, username: users.username }).from(users).where(inArray(users.id, userIds)))
+    : [];
+  const authorMap = new Map(authors.map((author) => [author.id, author.username]));
+  const currentWordCount = plainTextFromHtml(current.contentHtml).length;
+  return rows.map((row) => {
+    const version = decryptDocumentRecord(row);
+    const wordCount = plainTextFromHtml(version.contentHtml).length;
+    const delta = wordCount - currentWordCount;
+    return {
+      id: row.id,
+      title: version.title,
+      wordCount,
+      authorName: row.createdBy ? authorMap.get(row.createdBy) || `用户 #${row.createdBy}` : "系统",
+      diffSummary: `${version.title === current.title ? "标题未变" : "标题有修改"} · 较当前${delta === 0 ? "字数相同" : `${delta > 0 ? "+" : ""}${delta} 字`}`,
+      createdBy: row.createdBy,
+      createdAt: row.createdAt
+    };
+  });
 }
 
 export async function listDocVersionsByUid(docUid: string, actor: Actor) {
   const id = await docIdByUid(docUid, actor, "history");
   return await listDocVersions(id, actor);
+}
+
+function plainTextFromHtml(value: string) {
+  return value.replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function getDocVersionPreviewByUid(docUid: string, versionId: number, actor: Actor) {
+  const docId = await docIdByUid(docUid, actor, "history");
+  const row = await dbGet<typeof docVersions.$inferSelect>(db.select().from(docVersions)
+    .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, docId))).limit(1));
+  if (!row) throw new NotFoundError("版本不存在", "VERSION_NOT_FOUND");
+  const version = decryptDocumentRecord(row);
+  return {
+    id: row.id,
+    title: version.title,
+    contentText: plainTextFromHtml(version.contentHtml),
+    wordCount: plainTextFromHtml(version.contentHtml).length,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt
+  };
+}
+
+export async function restoreDocVersionAsCopyByUid(docUid: string, versionId: number, userId: number, actor: Actor) {
+  const previewDocId = await docIdByUid(docUid, actor, "history");
+  const row = await dbGet<typeof docVersions.$inferSelect>(db.select().from(docVersions)
+    .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, previewDocId))).limit(1));
+  if (!row) throw new NotFoundError("版本不存在", "VERSION_NOT_FOUND");
+  const version = decryptDocumentRecord(row);
+  const copy = await createDoc(userId, { title: `${version.title}（恢复副本）` }, actor);
+  return await updateDoc(copy.id, userId, {
+    title: `${version.title}（恢复副本）`,
+    contentJson: version.contentJson,
+    contentHtml: version.contentHtml,
+    summary: `从历史版本恢复，原文档 ${docUid}`
+  }, actor);
 }
 
 export async function restoreDocVersion(docId: number, versionId: number, userId: number, actor?: Actor) {
@@ -658,4 +725,91 @@ export async function restoreDocVersion(docId: number, versionId: number, userId
 export async function restoreDocVersionByUid(docUid: string, versionId: number, userId: number, actor: Actor) {
   const id = await docIdByUid(docUid, actor, "history");
   return await restoreDocVersion(id, versionId, userId, actor);
+}
+
+// ===== 回收站统计 =====
+export interface TrashStats {
+  trashCount: number;           // 回收站文档数
+  storageUsedBytes: number;     // 回收站占用存储（字节）
+  storageTotalBytes: number;    // 用户总存储配额（字节）
+  oldestDeletedAt: string | null; // 最旧删除时间
+  oldestDeletedDocUid: string | null;
+  oldestDeletedTitle: string | null;
+}
+
+export async function getTrashStats(actor: Actor): Promise<TrashStats> {
+  // 获取用户自己的回收站文档（仅 user 角色）
+  let trashDocs: { id: number; docUid: string; title: string; deletedAt: Date | null; }[] = [];
+
+  if (actor.role === "user" && actor.id) {
+    trashDocs = await dbAll(
+      db.select({
+        id: docs.id,
+        docUid: docs.docUid,
+        title: docs.title,
+        deletedAt: docs.deletedAt
+      })
+        .from(docs)
+        .where(and(
+          eq(docs.ownerId, actor.id),
+          isNotNull(docs.deletedAt)
+        ))
+    );
+  } else if (actor.role === "admin") {
+    // 管理员看到所有回收站文档
+    trashDocs = await dbAll(
+      db.select({
+        id: docs.id,
+        docUid: docs.docUid,
+        title: docs.title,
+        deletedAt: docs.deletedAt
+      })
+        .from(docs)
+        .where(isNotNull(docs.deletedAt))
+    );
+  }
+
+  // 获取关联的上传文件大小（近似估算）
+  const trashDocIds = trashDocs.map(d => d.id);
+  let storageUsedBytes = 0;
+
+  if (trashDocIds.length > 0) {
+    const uploadStats = await dbGet<{ totalSize: number | null }>(
+      db.select({ totalSize: sql<number>`COALESCE(SUM(${uploads.fileSize || 0}), 0)` })
+        .from(uploads)
+        .where(inArray(uploads.docId, trashDocIds))
+    );
+    storageUsedBytes = Number(uploadStats?.totalSize || 0);
+  }
+
+  // 估算文档内容大小（基于 docVersions 表的 content_json 大小）
+  const contentSize = trashDocs.length * 15 * 1024; // 假设每个文档平均 15KB
+  storageUsedBytes += contentSize;
+
+  // 查找最旧删除的文档
+  let oldestInfo = { deletedAt: null as string | null, docUid: null as string | null, title: null as string | null };
+  if (trashDocs.length > 0) {
+    // 按 deletedAt 升序，取最旧的
+    const sorted = [...trashDocs].sort((a, b) => {
+      if (!a.deletedAt || !b.deletedAt) return 1;
+      return a.deletedAt.getTime() - b.deletedAt.getTime();
+    });
+    const oldest = sorted.find(d => d.deletedAt);
+    if (oldest) {
+      oldestInfo = {
+        deletedAt: oldest.deletedAt?.toISOString() || null,
+        docUid: oldest.docUid,
+        title: oldest.title
+      };
+    }
+  }
+
+  return {
+    trashCount: trashDocs.length,
+    storageUsedBytes,
+    storageTotalBytes: 30 * 1024 * 1024 * 1024, // 30GB 配额
+    oldestDeletedAt: oldestInfo.deletedAt,
+    oldestDeletedDocUid: oldestInfo.docUid,
+    oldestDeletedTitle: oldestInfo.title
+  };
 }

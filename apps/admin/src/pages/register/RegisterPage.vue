@@ -5,7 +5,7 @@ import { Eye, EyeOff, KeyRound, LockKeyhole, UserRound } from "lucide-vue-next";
 import CaptchaInput from "../../components/auth/CaptchaInput.vue";
 import { getPublicSiteConfigApi } from "../../api/settings";
 import { bundledLogoUrl, bundledWallpaperUrl, preloadImageAsset, withBundledSiteAssets } from "../../config/site-assets";
-import "./register.css";
+import "./css/register.css";
 
 const router = useRouter();
 const username = ref("");
@@ -61,7 +61,7 @@ function applySiteConfig(config: Awaited<ReturnType<typeof getPublicSiteConfigAp
 
 function validate() {
   if (username.value.length < 6 || !/^[A-Za-z0-9_]+$/.test(username.value)) return "账号至少 6 位，只能包含字母、数字、下划线";
-  if (password.value.length < 8 || !/[A-Z]/.test(password.value) || !/[a-z]/.test(password.value)) return "密码至少 8 位，并且必须包含大小写字母";
+  if (password.value.length < 12) return "密码至少 12 位";
   if (password.value !== confirmPassword.value) return "两次密码不一致";
   if (!inviteCode.value.trim()) return "请输入注册卡密";
   return "";

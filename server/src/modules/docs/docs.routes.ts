@@ -11,6 +11,8 @@ import {
   bulkRestoreDocsByUid,
   bulkSoftDeleteDocsByUid,
   getDocByUid,
+  getDocVersionPreviewByUid,
+  getTrashStats,
   hardDeleteDocByUid,
   listDocsPage,
   listDocVersionsByUid,
@@ -18,6 +20,7 @@ import {
   publishDocByUid,
   restoreDocByUid,
   restoreDocVersionByUid,
+  restoreDocVersionAsCopyByUid,
   safeDocListPayload,
   safeDocPayload,
   softDeleteDocByUid,
@@ -97,6 +100,10 @@ export async function docsRoutes(app: FastifyInstance) {
     const query = listQuerySchema.parse(request.query);
     const result = await listTrashDocsPage(request.user!, query);
     return { ...result, docs: safeDocListPayload(result.docs) };
+  });
+  app.get("/api/admin/docs/trash/stats", { preHandler: adminOnly }, async (request) => {
+    const stats = await getTrashStats(request.user!);
+    return stats;
   });
   app.post("/api/docs/trash/batch-restore", { preHandler: authenticate }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
@@ -247,6 +254,22 @@ export async function docsRoutes(app: FastifyInstance) {
   app.get("/api/docs/:docUid/versions", { preHandler: authenticate }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
     return { versions: await listDocVersionsByUid(params.docUid, request.user!) };
+  });
+  app.get("/api/docs/:docUid/versions/:versionId", { preHandler: authenticate }, async (request) => {
+    const params = z.object({ docUid: docUidSchema, versionId: z.coerce.number().int().positive() }).parse(request.params);
+    return { version: await getDocVersionPreviewByUid(params.docUid, params.versionId, request.user!) };
+  });
+  app.post("/api/docs/:docUid/versions/:versionId/restore-copy", { preHandler: authenticate }, async (request) => {
+    const params = z.object({ docUid: docUidSchema, versionId: z.coerce.number().int().positive() }).parse(request.params);
+    const doc = await restoreDocVersionAsCopyByUid(params.docUid, params.versionId, request.user!.id, request.user!);
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.version.restore_copy",
+      targetType: "doc",
+      targetId: doc.docUid,
+      ...auditMetaFromRequest(request)
+    });
+    return { doc: safeDocPayload(doc) };
   });
   app.post("/api/docs/:docUid/versions/:versionId/restore", { preHandler: authenticate }, async (request) => {
     const params = z.object({

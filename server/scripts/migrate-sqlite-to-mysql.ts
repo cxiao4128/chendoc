@@ -81,6 +81,29 @@ const tablePlans: TablePlan[] = [
     defaults: { is_enabled: 1, review_status: "approved", view_count: 0 }
   },
   {
+    name: "forms",
+    columns: [
+      "id", "form_uid", "title", "description", "fields", "owner_id", "status", "max_submissions",
+      "allow_multiple", "exclusive_info", "privacy_notice", "retention_days", "store_user_agent",
+      "view_count", "submission_count", "created_at", "updated_at"
+    ],
+    dateColumns: ["created_at", "updated_at"],
+    booleanColumns: ["allow_multiple", "store_user_agent"],
+    defaults: {
+      fields: "[]",
+      status: "draft",
+      allow_multiple: 0,
+      store_user_agent: 0,
+      view_count: 0,
+      submission_count: 0
+    }
+  },
+  {
+    name: "form_submissions",
+    columns: ["id", "form_id", "data", "ip", "submitter_id", "user_agent", "submitted_at"],
+    dateColumns: ["submitted_at"]
+  },
+  {
     name: "uploads",
     columns: ["id", "user_id", "doc_id", "object_key", "public_url", "mime_type", "file_size", "kind", "original_name", "created_at"],
     dateColumns: ["created_at"]
@@ -363,6 +386,22 @@ async function validateShareReviews(connection: mysql.PoolConnection, sqlite: Da
   return ok ? [] : ["share review metadata changed"];
 }
 
+async function validateFormCounts(connection: mysql.PoolConnection, sqlite: Database.Database) {
+  const sqliteRows = tableExists(sqlite, "forms")
+    ? sqlite.prepare("SELECT id, submission_count FROM forms ORDER BY id").all() as Array<{ id: number; submission_count: number }>
+    : [];
+  const [mysqlRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id, submission_count FROM forms ORDER BY id");
+  const storedCountsMatch = JSON.stringify(sqliteRows) === JSON.stringify(mysqlRows);
+  const [actualRows] = await connection.query<mysql.RowDataPacket[]>(`
+    SELECT f.id, f.submission_count, COUNT(s.id) AS actual_count
+    FROM forms f LEFT JOIN form_submissions s ON s.form_id = f.id
+    GROUP BY f.id, f.submission_count ORDER BY f.id
+  `);
+  const countersValid = actualRows.every((row) => Number(row.submission_count) === Number(row.actual_count));
+  console.log(`form_counts: stored=${storedCountsMatch ? "OK" : "FAIL"} actual=${countersValid ? "OK" : "FAIL"}`);
+  return storedCountsMatch && countersValid ? [] : ["form submission counts changed or are inconsistent"];
+}
+
 async function validateDeletedDocs(connection: mysql.PoolConnection, sqlite: Database.Database) {
   const sqliteDeleted = tableExists(sqlite, "docs")
     ? Number((sqlite.prepare("SELECT COUNT(*) AS count FROM docs WHERE deleted_at IS NOT NULL").get() as { count: number }).count)
@@ -387,6 +426,7 @@ async function validateMigration(connection: mysql.PoolConnection, sqlite: Datab
   failures.push(...await validateDeletedDocs(connection, sqlite));
   failures.push(...await validateShareIdentifiers(connection, sqlite));
   failures.push(...await validateShareReviews(connection, sqlite));
+  failures.push(...await validateFormCounts(connection, sqlite));
   return failures;
 }
 

@@ -77,6 +77,40 @@
   height: 16px;
 }
 
+.share-dialog__summary {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.share-dialog__summary div {
+  display: grid;
+  gap: 3px;
+  border-radius: 8px;
+  background: var(--cd-paper-soft);
+  padding: 9px 10px;
+}
+
+.share-dialog__summary dt {
+  color: var(--cd-muted);
+  font-size: 11px;
+}
+
+.share-dialog__summary dd {
+  margin: 0;
+  color: var(--cd-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.share-dialog__feedback {
+  grid-column: 1 / -1;
+  margin: 0 !important;
+  font-size: 12px;
+}
+
 .share-dialog__box code {
   overflow: hidden;
   border: 1px solid var(--cd-border);
@@ -115,6 +149,10 @@
   }
 
   .share-dialog__box {
+    grid-template-columns: 1fr;
+  }
+
+  .share-dialog__summary {
     grid-template-columns: 1fr;
   }
 }

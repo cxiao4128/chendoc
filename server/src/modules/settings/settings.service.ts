@@ -1,6 +1,8 @@
 import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { and, desc, eq, gte, inArray, isNotNull, lte, ne, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { authSessions, captchas, docs, docVersions, invites, logs, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
@@ -55,13 +57,15 @@ type UserActor = {
 type SystemAction =
   | "cleanupExpiredSessions"
   | "cleanupExpiredCaptchas"
+  | "cleanupExpiredLogs"
   | "emptyTrash"
   | "refreshStatus"
   | "healthCheck";
 
 const defaultRemoteLogoUrl = "";
 const defaultRemoteWallpaperUrl = "";
-const APP_VERSION = "2.5.2";
+const APP_VERSION = "2.6.0";
+const DATABASE_SCHEMA_VERSION = "20260620.1";
 const REMOTE_ASSET_TIMEOUT_MS = 5000;
 const REMOTE_LOGO_MAX_BYTES = 1024 * 1024;
 const REMOTE_WALLPAPER_MAX_BYTES = 5 * 1024 * 1024;
@@ -300,6 +304,31 @@ async function safeR2Config() {
   }
 }
 
+function latestBackupStatus() {
+  const directory = resolve(env.paths.projectRoot, process.env.CHENDOC_BACKUP_DIR || "backups/db");
+  if (!existsSync(directory)) return null;
+  const rows = readdirSync(directory)
+    .filter((name) => name.endsWith(".gz.enc.json"))
+    .flatMap((name) => {
+      try {
+        const value = JSON.parse(readFileSync(resolve(directory, name), "utf8")) as {
+          createdAt?: string; fileName?: string; size?: number; sha256?: string;
+        };
+        return value.createdAt && value.fileName && value.sha256 ? [value] : [];
+      } catch {
+        return [];
+      }
+    })
+    .sort((left, right) => Date.parse(right.createdAt!) - Date.parse(left.createdAt!));
+  const latest = rows[0];
+  return latest ? {
+    createdAt: latest.createdAt!,
+    fileName: latest.fileName!,
+    size: Number(latest.size || 0),
+    sha256: latest.sha256!
+  } : null;
+}
+
 export async function getSystemOverview() {
   const todayStart = startOfLocalDay();
   const yesterdayStart = startOfLocalDay(-1);
@@ -374,8 +403,10 @@ export async function getSystemOverview() {
     database: {
       status: "ok" as const,
       label: "正常",
-      provider: env.databaseProvider
+      provider: env.databaseProvider,
+      schemaVersion: DATABASE_SCHEMA_VERSION
     },
+    backup: latestBackupStatus(),
     storage: {
       fileCount: uploadRows.length,
       totalBytes: storageBytes,
@@ -445,11 +476,40 @@ export async function runSystemMaintenanceAction(action: SystemAction) {
     return { action, changed, message: `已永久清理 ${changed} 篇回收站文档` };
   }
 
+  if (action === "cleanupExpiredLogs") {
+    const cutoff = new Date(Date.now() - env.logRetentionDays * 86_400_000);
+    const [main, legacy] = await Promise.all([
+      dbRun(db.delete(logs).where(lt(logs.createdAt, cutoff))),
+      dbRun(db.delete(operationLogs).where(lt(operationLogs.createdAt, cutoff)))
+    ]);
+    return { action, changed: main.changes + legacy.changes, message: `已清理 ${main.changes + legacy.changes} 条过期日志` };
+  }
+
   if (action === "refreshStatus") {
     return { action, changed: 0, message: "运行状态已刷新", status: await getSystemOverview() };
   }
 
-  return { action, changed: 0, message: "系统健康检测完成", status: await getSystemOverview() };
+  const status = await getSystemOverview();
+  let r2Probe = { checked: false, ok: true, message: "R2 未配置，已跳过探测" };
+  if (status.r2.configured) {
+    try {
+      await testR2Connection(false);
+      r2Probe = { checked: true, ok: true, message: "R2 探测通过" };
+    } catch (error) {
+      r2Probe = { checked: true, ok: false, message: error instanceof Error ? error.message : "R2 探测失败" };
+    }
+  }
+  return {
+    action,
+    changed: 0,
+    message: r2Probe.ok ? "系统健康检测完成" : "系统健康检测完成，R2 探测失败",
+    status,
+    health: {
+      database: { ok: true, provider: env.databaseProvider, schemaVersion: DATABASE_SCHEMA_VERSION },
+      r2: r2Probe,
+      buildVersion: APP_VERSION
+    }
+  };
 }
 
 export async function exportSystemConfig() {

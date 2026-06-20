@@ -1,6 +1,8 @@
 # ChenDoc / 陈书
 
-当前版本 / Current version: `v2.5.2`
+> 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
+
+当前版本 / Current version: `v2.6.0`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -8,7 +10,7 @@
 
 ### 项目简介
 
-ChenDoc / 陈书 是一个轻量化自托管文档管理平台，面向个人站点、小团队资料库和内部知识发布场景。
+ChenDoc / 陈书 是一个轻量化自托管文档管理平台，面向站长本人或极小私有知识发布流程。
 
 核心能力：
 
@@ -96,6 +98,13 @@ bash ./stop.sh           # 停止服务
 
 ### 更新日志
 
+#### 2.6.0
+
+- 修复公开表单 CSP、会话令牌轮换、动态 HTML 输出和表单防滥用。
+- 增加文档密钥 keyring、恢复码哈希、危险操作验证和 MySQL 外键校验。
+- 增加表单隐私保留、附件清理/扫描、加密备份恢复验证和日志轮换。
+- 优化文档筛选、版本预览、分享状态、移动端操作、上传重试和首屏性能预算。
+
 #### 2.5.2
 
 版本号：`2.5.2`
@@ -172,7 +181,7 @@ bash ./stop.sh           # 停止服务
 
 ### Overview
 
-ChenDoc / Chen Shu is a lightweight self-hosted document management platform for personal sites, small teams, and internal knowledge publishing.
+ChenDoc / Chen Shu is a lightweight self-hosted document platform for one owner or a very small private publishing workflow.
 
 Main features:
 
@@ -227,6 +236,13 @@ http://127.0.0.1:8985
 ```
 
 ### Changelog
+
+#### 2.6.0
+
+- Hardened form CSP, session rotation, dynamic output, and form abuse controls.
+- Added document keyrings, hashed recovery codes, dangerous-operation checks, and MySQL integrity validation.
+- Added form retention controls, upload cleanup/scanning, encrypted backup verification, and log rotation.
+- Improved document filters, version previews, share states, mobile actions, upload recovery, and initial-load budgets.
 
 #### 2.5.2
 

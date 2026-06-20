@@ -116,25 +116,21 @@ export const useDocStore = defineStore("doc", () => {
 
   async function saveDoc(docUid: string, patch: Partial<DocDetail>) {
     detailError.value = null;
-    try {
-      const response = await updateDocApi(docUid, patch);
-      current.value = response.doc;
-      setDetailCache(response.doc);
-      const index = docs.value.findIndex((item) => item.docUid === docUid);
-      if (index >= 0) {
-        docs.value[index] = {
-          ...docs.value[index],
-          title: response.doc.title,
-          summary: response.doc.summary,
-          pinned: response.doc.pinned,
-          updatedAt: response.doc.updatedAt,
-          status: response.doc.status
-        };
-      }
-      return response.doc;
-    } catch (error) {
-      throw error;
+    const response = await updateDocApi(docUid, patch);
+    current.value = response.doc;
+    setDetailCache(response.doc);
+    const index = docs.value.findIndex((item) => item.docUid === docUid);
+    if (index >= 0) {
+      docs.value[index] = {
+        ...docs.value[index],
+        title: response.doc.title,
+        summary: response.doc.summary,
+        pinned: response.doc.pinned,
+        updatedAt: response.doc.updatedAt,
+        status: response.doc.status
+      };
     }
+    return response.doc;
   }
 
   async function bulkDeleteDocs(docUids: string[]) {

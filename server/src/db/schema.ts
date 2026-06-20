@@ -23,6 +23,8 @@ export const dangerVerifications = activeSchema.dangerVerifications as typeof sq
 export const auditLogs = activeSchema.auditLogs as typeof sqliteSchema.auditLogs;
 export const logs = activeSchema.logs as typeof sqliteSchema.logs;
 export const uniqueShareCode = activeSchema.uniqueShareCode as typeof sqliteSchema.uniqueShareCode;
+export const forms = activeSchema.forms as typeof sqliteSchema.forms;
+export const formSubmissions = activeSchema.formSubmissions as typeof sqliteSchema.formSubmissions;
 
 export type User = typeof sqliteSchema.users.$inferSelect;
 export type NewUser = typeof sqliteSchema.users.$inferInsert;

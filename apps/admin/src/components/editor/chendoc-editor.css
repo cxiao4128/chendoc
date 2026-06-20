@@ -54,6 +54,33 @@
   font-weight: 650;
 }
 
+.chendoc-editor__upload-failed {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--cd-danger) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cd-danger) 7%, var(--cd-panel));
+  padding: 9px 10px;
+}
+
+.chendoc-editor__upload-failed > div {
+  display: flex;
+  gap: 6px;
+}
+
+.chendoc-editor__upload-failed button {
+  min-height: 32px;
+  border: 1px solid var(--cd-border);
+  border-radius: 7px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
 .chendoc-editor__image-tools {
   display: flex;
   flex-wrap: wrap;

@@ -108,8 +108,8 @@ function checkAdminPassword(env) {
   if (isWeak(value)) {
     fail("DEFAULT_ADMIN_PASSWORD still uses a known weak/default value.");
   }
-  if (!allowWeakAdminPassword(env) && value.length < 6) {
-    fail("DEFAULT_ADMIN_PASSWORD must be at least 6 characters.");
+  if (!allowWeakAdminPassword(env) && value.length < 12) {
+    fail("DEFAULT_ADMIN_PASSWORD must be at least 12 characters.");
   }
 }
 
@@ -145,8 +145,34 @@ if (Number.isFinite(major) && major >= 20) {
 checkSecret(env, "JWT_SECRET", 32);
 checkSecret(env, "CONFIG_ENCRYPTION_KEY", 32);
 checkSecret(env, "RSA_PRIVATE_KEY_ENCRYPTION_KEY", 32);
+checkSecret(env, "CHENDOC_DOCUMENT_ENCRYPTION_KEY", 32);
+checkSecret(env, "CHENDOC_BACKUP_ENCRYPTION_KEY", 32);
 checkAdminPassword(env);
 requireValue(env, "PUBLIC_SITE_URL");
+
+if (!String(env.PUBLIC_SITE_URL || "").startsWith("https://")) {
+  fail("PUBLIC_SITE_URL must use https:// in production.");
+}
+if (!flagEnabled(env.CHENDOC_FORCE_HTTPS)) {
+  fail("CHENDOC_FORCE_HTTPS=true is required in production.");
+}
+
+function documentKeyVersions(env) {
+  const versions = new Set([String(env.CHENDOC_DOCUMENT_KEY_VERSION || "v1")]);
+  if (!env.CHENDOC_DOCUMENT_KEYRING) return versions;
+  try {
+    const keyring = JSON.parse(env.CHENDOC_DOCUMENT_KEYRING);
+    for (const [version, secret] of Object.entries(keyring)) {
+      if (Buffer.byteLength(String(secret), "utf8") < 32) fail(`Document keyring entry ${version} must be at least 32 bytes.`);
+      versions.add(version);
+    }
+  } catch {
+    fail("CHENDOC_DOCUMENT_KEYRING must be a JSON object.");
+  }
+  return versions;
+}
+
+const configuredDocumentVersions = documentKeyVersions(env);
 
 function databaseUrlKind(value) {
   const normalized = String(value || "").trim().toLowerCase();
@@ -189,6 +215,30 @@ if (databaseProvider === "mysql") {
     fail(`DATABASE_URL must be a mysql:// URL when DATABASE_PROVIDER=mysql. Current source: ${envSources.DATABASE_URL || "missing"}.`);
   } else {
     note(`MySQL database provider selected (${envSources.DATABASE_PROVIDER || "default mysql"}).`);
+    try {
+      const mysql = await import("mysql2/promise");
+      const connection = await mysql.createConnection(env.DATABASE_URL);
+      const [rows] = await connection.query(`
+        SELECT DISTINCT key_version FROM (
+          SELECT content_json_key_version AS key_version FROM docs WHERE content_json_ciphertext IS NOT NULL
+          UNION SELECT content_html_key_version FROM docs WHERE content_html_ciphertext IS NOT NULL
+          UNION SELECT content_json_key_version FROM doc_versions WHERE content_json_ciphertext IS NOT NULL
+          UNION SELECT content_html_key_version FROM doc_versions WHERE content_html_ciphertext IS NOT NULL
+        ) versions WHERE key_version IS NOT NULL
+      `);
+      await connection.end();
+      for (const row of rows) {
+        if (!configuredDocumentVersions.has(String(row.key_version))) {
+          fail(`Database uses document key version ${row.key_version}, but no key is configured for it.`);
+        }
+      }
+    } catch (error) {
+      if (error && typeof error === "object" && ["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error.code)) {
+        note("Document key-version check deferred until the initial migration.");
+      } else {
+        fail(`Unable to verify document key versions: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 } else {
   fail(`Production deployment requires DATABASE_PROVIDER=mysql. Current source: ${envSources.DATABASE_PROVIDER || "missing"}. SQLite is only kept for historical migration/testing notes.`);

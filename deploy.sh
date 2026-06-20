@@ -34,13 +34,13 @@ if [ "${DATABASE_PROVIDER_VALUE:-mysql}" != "mysql" ] || [[ "${DATABASE_URL_VALU
 fi
 
 node -e "const major=Number(process.versions.node.split('.')[0]); if (major < 20) { console.error('Node.js 20+ is required.'); process.exit(1); }"
-node scripts/preflight-deploy.js
-
 if [ -f "package-lock.json" ]; then
   npm ci --workspaces --include-workspace-root
 else
   npm install --workspaces --include-workspace-root
 fi
+
+node scripts/preflight-deploy.js
 
 NPM_AUDIT_REGISTRY="${NPM_AUDIT_REGISTRY:-https://registry.npmjs.org}"
 npm --registry="$NPM_AUDIT_REGISTRY" audit --omit=dev

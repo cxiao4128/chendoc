@@ -136,7 +136,7 @@ function packetObject(input: unknown) {
   if (typeof row.challenge !== "string" || !row.challenge) throw new GatewayPacketError("INVALID_CHALLENGE");
   if (typeof row.fingerprint !== "string" || row.fingerprint.length < 12) throw new GatewayPacketError("INVALID_PACKET");
   if (typeof row.signature !== "string" || row.signature.length < 32) throw new GatewayPacketError("INVALID_SIGNATURE");
-  if (typeof row.action !== "string" || !/^[a-z][0-9]+$/i.test(row.action)) {
+  if (!validGatewayActionShape(row.action)) {
     throw new GatewayPacketError("INVALID_ACTION");
   }
 
@@ -156,6 +156,10 @@ function packetObject(input: unknown) {
     signature: row.signature,
     action: row.action
   };
+}
+
+function validGatewayActionShape(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z]+[0-9]+$/i.test(value);
 }
 
 function normalizeTimestamp(timestamp: number) {
@@ -270,7 +274,8 @@ export function issueGatewayChallenge(context: GatewayRequestContext & { action?
 
 export const __testing = {
   consumeChallenge: (challenge: string, action = "x0", fingerprint = "test-fingerprint") =>
-    validateChallenge(challenge, { action, fingerprint }, { fingerprint })
+    validateChallenge(challenge, { action, fingerprint }, { fingerprint }),
+  validGatewayActionShape
 };
 
 function signatureInput(packet: { action: string; timestamp: number; nonce: string; body: string; challenge: string }) {

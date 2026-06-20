@@ -1,7 +1,11 @@
 import bcrypt from "bcryptjs";
 
 const USERNAME_RE = /^[A-Za-z0-9_]{6,}$/;
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 12;
+const COMMON_PASSWORDS = new Set([
+  "123456789012", "password1234", "qwerty123456", "admin12345678",
+  "letmein123456", "iloveyou12345", "welcome123456"
+]);
 
 type Argon2Module = {
   argon2id: number;
@@ -50,6 +54,10 @@ export function validateUserRegistration(username: string, password: string) {
 export function validatePassword(password: string) {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `密码至少 ${MIN_PASSWORD_LENGTH} 位`;
+  }
+  const normalized = password.trim().toLowerCase();
+  if (COMMON_PASSWORDS.has(normalized) || /^(.)\1{11,}$/.test(normalized)) {
+    return "密码已出现在常见泄漏密码中，请更换";
   }
   return null;
 }

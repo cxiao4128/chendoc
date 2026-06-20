@@ -27,14 +27,16 @@ if [ ! -f "server/dist/server.js" ]; then
   exit 1
 fi
 
-if ! command -v pm2 >/dev/null 2>&1; then
-  npm install -g pm2
+PM2="$(pwd)/node_modules/.bin/pm2"
+if [ ! -x "$PM2" ]; then
+  echo "Pinned local PM2 is missing. Run npm ci --omit=dev during deployment."
+  exit 1
 fi
 
-pm2 delete chendoc >/dev/null 2>&1 || true
-pm2 start server/dist/server.js --name chendoc --cwd "$(pwd)" --interpreter "$NODE_EXEC" --update-env --time
-pm2 save
+"$PM2" delete chendoc >/dev/null 2>&1 || true
+"$PM2" start server/dist/server.js --name chendoc --cwd "$(pwd)" --interpreter "$NODE_EXEC" --update-env --time
+"$PM2" save
 
 sleep 1
-pm2 list
+"$PM2" list
 curl -I http://127.0.0.1:8985/login || true

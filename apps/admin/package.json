@@ -1,11 +1,15 @@
 {
   "name": "@chendoc/admin",
-  "version": "2.5.2",
+  "version": "2.6.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5175",
-    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint src vite.config.ts",
+    "build:vite": "vite build",
+    "build": "npm run typecheck && npm run build:vite && node scripts/check-build.mjs",
+    "check": "npm run lint && npm run build",
     "preview": "vite preview --host 0.0.0.0 --port 4175"
   },
   "dependencies": {
@@ -34,9 +38,14 @@
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.1",
+    "eslint": "^10.5.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "globals": "^17.6.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.61.1",
     "vite": "^7.1.12",
     "vite-plugin-bundle-obfuscator": "^1.12.0",
     "vue-tsc": "^3.1.1"

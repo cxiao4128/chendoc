@@ -1,9 +1,12 @@
 {
   "name": "chendoc",
-  "version": "2.5.2",
+  "version": "2.6.0",
   "private": true,
   "type": "module",
   "description": "ChenDoc / Chen Shu commercial document management and knowledge publishing platform.",
+  "dependencies": {
+    "pm2": "7.0.1"
+  },
   "workspaces": [
     "apps/admin",
     "server"
@@ -16,23 +19,34 @@
     "start": "npm --prefix server run start",
     "test": "npm --workspace @chendoc/server run test",
     "test:server": "npm --workspace @chendoc/server run test",
+    "test:e2e": "playwright test",
+    "typecheck": "npm --prefix apps/admin run typecheck && npm --prefix server run build",
+    "lint": "npm --prefix apps/admin run lint",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run security:audit",
+    "env:sync": "node --import tsx scripts/sync-env-example.js",
+    "env:check": "node --import tsx scripts/sync-env-example.js --check",
     "db:migrate": "npm --prefix server run db:migrate",
     "migrate:sqlite-to-mysql": "npm --prefix server run migrate:sqlite-to-mysql",
     "db:backup": "node scripts/backup-db.js",
+    "db:backup:verify": "node scripts/verify-backup.js",
     "deploy:preflight": "node scripts/preflight-deploy.js",
     "security:audit": "npm audit --omit=dev",
     "security:audit:signatures": "npm audit signatures",
     "html:resanitize": "npm --prefix server run html:resanitize",
     "admin:init": "npm --prefix server run admin:init",
-    "r2:import": "npm --prefix server run r2:import"
+    "r2:import": "npm --prefix server run r2:import",
+    "uploads:cleanup": "npm --prefix server run uploads:cleanup"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.0",
     "concurrently": "^9.2.1"
   },
   "overrides": {
     "atomic-sleep": "1.0.0",
     "brace-expansion": "5.0.6",
     "fast-uri": "3.1.2",
-    "fast-xml-builder": "1.2.0"
+    "fast-xml-builder": "1.2.0",
+    "js-yaml": "4.2.0",
+    "ws": "8.21.0"
   }
 }

@@ -1,0 +1,93 @@
+name: release
+
+on:
+  workflow_run:
+    workflows: [security-ci]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - id: release-commit
+        run: |
+          if git log -1 --pretty=%s | grep -Eq '^Release ChenDoc v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: version
+        if: steps.release-commit.outputs.enabled == 'true'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - id: existing
+        if: steps.release-commit.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package public release
+        if: steps.existing.outputs.found == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          mkdir -p release
+          git archive --format=zip --output="release/chendoc-$VERSION-public.zip" HEAD
+          unzip -Z1 "release/chendoc-$VERSION-public.zip" > release/entries.txt
+          grep -qx 'deploy.sh' release/entries.txt
+          grep -qx 'package.json' release/entries.txt
+          grep -qx 'apps/' release/entries.txt
+          grep -qx 'server/' release/entries.txt
+          grep -qx '.env.example' release/entries.txt
+          if grep -Eq '(^|/)node_modules/|^(data|\.tmp|backups|logs|release)/|(^|/)\.env$|(^|/)\.env\.local$|\.sqlite$|\.log$|^docs/' release/entries.txt; then
+            echo 'Release archive contains a forbidden path.' >&2
+            exit 1
+          fi
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const version = process.env.VERSION;
+          const changelog = readFileSync('CHANGELOG.md', 'utf8');
+          const marker = `### ${version}`;
+          const start = changelog.indexOf(marker);
+          if (start < 0) throw new Error(`Missing changelog section: ${version}`);
+          const rest = changelog.slice(start + marker.length);
+          const end = rest.search(/\n###\s/);
+          const body = (end < 0 ? rest : rest.slice(0, end)).trim();
+          writeFileSync('release/release-notes.md', `# ChenDoc v${version}\n\n${body}\n`);
+          NODE
+
+      - name: Publish GitHub Release
+        if: steps.existing.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.value }}
+          TARGET: ${{ github.event.workflow_run.head_sha }}
+        run: >-
+          gh release create "$TAG"
+          "release/chendoc-$VERSION-public.zip"
+          --target "$TARGET"
+          --title "ChenDoc v$VERSION"
+          --notes-file release/release-notes.md

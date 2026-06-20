@@ -1,6 +1,7 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import type { R2Config } from "../modules/settings/settings.service.js";
 import { env } from "./env.js";
+import { measureRequestPhase } from "../utils/requestTiming.js";
 
 export function getR2Endpoint(config: Pick<R2Config, "accountId" | "endpoint">) {
   return config.endpoint || `https://${config.accountId}.r2.cloudflarestorage.com`;
@@ -15,7 +16,7 @@ export function getR2CorsAllowedOrigins() {
 }
 
 export function createR2Client(config: R2Config) {
-  return new S3Client({
+  const client = new S3Client({
     region: config.region || "auto",
     endpoint: getR2Endpoint(config),
     credentials: {
@@ -23,4 +24,8 @@ export function createR2Client(config: R2Config) {
       secretAccessKey: config.secretAccessKey
     }
   });
+  const send = client.send.bind(client);
+  client.send = ((...args: Parameters<typeof client.send>) =>
+    measureRequestPhase("r2", () => send(...args))) as typeof client.send;
+  return client;
 }
