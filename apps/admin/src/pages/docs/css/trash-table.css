@@ -1,0 +1,153 @@
+/* ========================================
+   trash-table.css
+   表格、行、工具栏、筛选、空态、骨架屏、操作列
+   ======================================== */
+
+/* 工具栏 */
+.trash-page__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--cd-border);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+  padding: 20px 24px;
+}
+
+.trash-page__filters {
+  display: flex;
+  gap: 18px;
+}
+
+.trash-page__filters button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--cd-muted);
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.trash-page__filters button.is-active {
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+}
+
+/* 表格容器 */
+.trash-page__table {
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: 12px;
+  background: var(--cd-panel);
+  box-shadow: var(--cd-shadow-soft);
+}
+
+/* 表头行 */
+.trash-page__bulkbar,
+.trash-page__row {
+  display: grid;
+  grid-template-columns: 38px minmax(220px, 1.1fr) minmax(145px, 0.85fr) 170px 110px 86px minmax(230px, auto);
+  gap: 14px;
+  align-items: center;
+  padding-inline: 24px;
+}
+
+.trash-page__bulkbar {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 850;
+  min-height: 46px;
+  border-bottom: 1px solid var(--cd-border);
+  background: var(--cd-paper);
+}
+
+.trash-page__bulkbar .trash-page__select {
+  grid-column: 1 / 3;
+}
+
+/* 数据行 */
+.trash-page__row {
+  min-height: 66px;
+  border-bottom: 1px solid var(--cd-border);
+  padding: 12px 14px;
+  transition: background-color 140ms ease-out;
+}
+
+.trash-page__row:hover {
+  background: #fbfdff;
+}
+
+.trash-page__row:last-child {
+  border-bottom: 0;
+}
+
+.trash-page__row > span,
+.trash-page__row small {
+  display: block;
+  color: var(--cd-muted);
+  font-size: 13px;
+}
+
+/* 保留剩余标签 */
+.trash-page__pill {
+  width: fit-content;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #16a34a !important;
+  padding: 4px 10px;
+  font-weight: 800;
+}
+
+.trash-page__pill.is-urgent {
+  background: #fef2f2;
+  color: #dc2626 !important;
+}
+
+/* 操作列 */
+.trash-page__actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.trash-page__actions > button:not(.cd-button) {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cd-muted);
+  cursor: pointer;
+}
+
+/* 空态 */
+.trash-page__empty {
+  padding: 22px;
+  color: var(--cd-muted);
+  background: var(--cd-panel);
+  box-shadow: none;
+}
+
+/* 骨架屏 */
+.trash-page__skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.trash-page__skeleton span {
+  height: 58px;
+}
+
+/* 加载更多 */
+.trash-page__more {
+  justify-content: center;
+  width: calc(100% - 28px);
+  margin: 12px 14px;
+}

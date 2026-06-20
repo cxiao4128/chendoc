@@ -3,7 +3,7 @@ import { ref } from "vue";
 import { Search, Trash2 } from "lucide-vue-next";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import { dangerDeleteDocApi, getDangerDocApi } from "../../api/settings";
-import "./danger.css";
+import "./css/danger.css";
 
 const id = ref("");
 const doc = ref<{ docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } | null>(null);

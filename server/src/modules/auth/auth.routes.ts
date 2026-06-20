@@ -17,7 +17,6 @@ import {
   disableTotp,
   enableTotp,
   getTotpStatus,
-  listRecoveryCodes,
   regenerateRecoveryCodes
 } from "./totp.service.js";
 
@@ -119,7 +118,11 @@ export async function authRoutes(app: FastifyInstance) {
     const current = await currentUser(request);
     if (!current.user) return current;
     const { currentIp: _currentIp, ...sessionUser } = current.user;
-    const session = await renewAuthSession(request.user!.sessionId!, sessionUser);
+    const session = await renewAuthSession(
+      request.user!.sessionId!,
+      sessionUser,
+      request.user!.sessionTokenDigest ?? ""
+    );
     return { token: session.token, user: current.user, expiresAt: session.expiresAt };
   });
 
@@ -160,9 +163,12 @@ export async function authRoutes(app: FastifyInstance) {
   }));
 
   app.post("/api/admin/security/totp/enable", { preHandler: adminOnly }, async (request, reply) => {
-    const body = z.object({ otp: z.string().trim().min(4).max(16) }).parse(request.body);
+    const body = z.object({
+      otp: z.string().trim().min(4).max(16),
+      setupToken: z.string().min(20).max(2048)
+    }).parse(request.body);
     try {
-      const result = await enableTotp(request.user!.id, body.otp);
+      const result = await enableTotp(request.user!.id, body.otp, body.setupToken);
       await writeAuditLog({
         userId: request.user!.id,
         action: "auth.totp.enable",
@@ -187,10 +193,6 @@ export async function authRoutes(app: FastifyInstance) {
     });
     return { ok: true };
   });
-
-  app.get("/api/admin/security/totp/recovery-codes", { preHandler: dangerousAdmin }, async (request) => ({
-    recoveryCodes: await listRecoveryCodes(request.user!.id)
-  }));
 
   app.post("/api/admin/security/totp/recovery-codes", { preHandler: dangerousAdmin }, async (request) => ({
     recoveryCodes: await regenerateRecoveryCodes(request.user!.id)

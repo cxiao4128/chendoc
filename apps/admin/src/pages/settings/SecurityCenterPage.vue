@@ -7,14 +7,13 @@ import {
   disableTotpApi,
   enableTotpApi,
   getTotpStatusApi,
-  listRecoveryCodesApi,
   regenerateRecoveryCodesApi,
   resetTotpApi,
   type TotpSetupView,
   type TotpStatusView
 } from "../../api/security";
 import { nativeConfirm } from "../../services/nativeDialog";
-import "./security-center.css";
+import "./css/security-center.css";
 
 const status = ref<TotpStatusView | null>(null);
 const setup = ref<TotpSetupView | null>(null);
@@ -76,7 +75,8 @@ async function enableTotp() {
   }
   loading.value = true;
   try {
-    const result = await enableTotpApi(otp.value.trim());
+    if (!setup.value?.setupToken) throw new Error("TOTP 设置已过期");
+    const result = await enableTotpApi(otp.value.trim(), setup.value.setupToken);
     recoveryCodes.value = result.recoveryCodes;
     setup.value = null;
     otp.value = "";
@@ -102,15 +102,6 @@ async function disableTotp() {
     recoveryCodes.value = [];
     message.value = "TOTP 已关闭";
     await loadStatus();
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function showRecoveryCodes() {
-  loading.value = true;
-  try {
-    recoveryCodes.value = (await listRecoveryCodesApi()).recoveryCodes;
   } finally {
     loading.value = false;
   }
@@ -175,7 +166,6 @@ onMounted(() => {
         <button v-if="!status?.enabled" class="cd-button primary" type="button" :disabled="loading" @click="beginSetup">
           <KeyRound :size="16" />绑定验证器
         </button>
-        <button v-if="status?.enabled" class="cd-button" type="button" :disabled="loading" @click="showRecoveryCodes">查看恢复码</button>
         <button v-if="status?.enabled" class="cd-button" type="button" :disabled="loading" @click="regenerateRecoveryCodes">生成恢复码</button>
         <button v-if="status?.enabled" class="cd-button" type="button" :disabled="loading" @click="resetTotp">重置 TOTP</button>
         <button v-if="status?.enabled" class="cd-button danger" type="button" :disabled="loading" @click="disableTotp">关闭 TOTP</button>
@@ -229,7 +219,7 @@ onMounted(() => {
 
       <div v-if="recoveryCodes.length" class="security-center__codes">
         <div class="security-center__codes-head">
-          <strong>恢复码</strong>
+          <strong>恢复码（仅显示一次）</strong>
           <button class="cd-button" type="button" @click="copyText(recoveryCodes.join('\n'), '恢复码')">
             <Copy :size="15" />全部复制
           </button>

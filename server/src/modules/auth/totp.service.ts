@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
+import jwt from "jsonwebtoken";
 import { db, dbGet, dbRun } from "../../db/client.js";
 import { users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
@@ -7,10 +8,8 @@ import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { now } from "../../utils/date.js";
 
 type UserWithTotp = typeof users.$inferSelect;
-type PendingSecret = { secret: string; expireAt: number };
-type RecoveryCode = { code: string; usedAt: string | null };
+type RecoveryCode = { digest: string; usedAt: string | null };
 
-const pendingSecrets = new Map<number, PendingSecret>();
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 function base32Encode(input: Buffer) {
@@ -57,17 +56,24 @@ function recoveryDigest(code: string) {
   return createHash("sha256").update(code.trim().toUpperCase()).digest("hex");
 }
 
-function encryptRecoveryCodes(codes: RecoveryCode[]) {
-  return encryptValue(JSON.stringify(codes), env.configEncryptionKey);
+function serializeRecoveryCodes(codes: RecoveryCode[]) {
+  return JSON.stringify(codes);
 }
 
 function decryptRecoveryCodes(value?: string | null): RecoveryCode[] {
   if (!value) return [];
   try {
-    return JSON.parse(decryptValue(value, env.configEncryptionKey)) as RecoveryCode[];
+    const parsed = JSON.parse(value) as RecoveryCode[];
+    if (parsed.every((item) => typeof item.digest === "string")) return parsed;
   } catch {
-    return [];
+    try {
+      const legacy = JSON.parse(decryptValue(value, env.configEncryptionKey)) as Array<{ code: string; usedAt: string | null }>;
+      return legacy.map((item) => ({ digest: recoveryDigest(item.code), usedAt: item.usedAt }));
+    } catch {
+      return [];
+    }
   }
+  return [];
 }
 
 function generateRecoveryCodes() {
@@ -92,6 +98,10 @@ function publicStatus(user: UserWithTotp) {
 export async function getTotpStatus(userId: number) {
   const user = await dbGet<UserWithTotp>(db.select().from(users).where(eq(users.id, userId)).limit(1));
   if (!user) throw new Error("User not found.");
+  if (user.totpRecoveryCodesEncrypted?.startsWith("v1:")) {
+    user.totpRecoveryCodesEncrypted = serializeRecoveryCodes(decryptRecoveryCodes(user.totpRecoveryCodesEncrypted));
+    await dbRun(db.update(users).set({ totpRecoveryCodesEncrypted: user.totpRecoveryCodesEncrypted }).where(eq(users.id, userId)));
+  }
   return publicStatus(user);
 }
 
@@ -99,23 +109,26 @@ export async function beginTotpSetup(userId: number) {
   const user = await dbGet<UserWithTotp>(db.select().from(users).where(eq(users.id, userId)).limit(1));
   if (!user) throw new Error("User not found.");
   const secret = base32Encode(randomBytes(20));
-  pendingSecrets.set(userId, { secret, expireAt: Date.now() + 10 * 60 * 1000 });
-  return { secret, otpauthUrl: otpauthUrl(user.username, secret), expireAt: Date.now() + 10 * 60 * 1000 };
+  const expireAt = Date.now() + 10 * 60 * 1000;
+  const setupToken = jwt.sign({ userId, secret }, env.jwtSecret, {
+    expiresIn: "10m", audience: "chendoc-totp-setup", issuer: "chendoc"
+  });
+  return { secret, setupToken, otpauthUrl: otpauthUrl(user.username, secret), expireAt };
 }
 
-export async function enableTotp(userId: number, otp: string) {
-  const pending = pendingSecrets.get(userId);
-  if (!pending || pending.expireAt <= Date.now()) throw new Error("TOTP setup expired.");
-  if (!verifyTotp(pending.secret, otp)) throw new Error("Invalid OTP.");
+export async function enableTotp(userId: number, otp: string, setupToken: string) {
+  const pending = jwt.verify(setupToken, env.jwtSecret, {
+    audience: "chendoc-totp-setup", issuer: "chendoc"
+  }) as { userId: number; secret: string };
+  if (pending.userId !== userId || !verifyTotp(pending.secret, otp)) throw new Error("Invalid OTP.");
   const recoveryCodes = generateRecoveryCodes();
   await dbRun(db.update(users).set({
     totpEnabled: true,
     totpSecretEncrypted: encryptValue(pending.secret, env.configEncryptionKey),
-    totpRecoveryCodesEncrypted: encryptRecoveryCodes(recoveryCodes.map((code) => ({ code, usedAt: null }))),
+    totpRecoveryCodesEncrypted: serializeRecoveryCodes(recoveryCodes.map((code) => ({ digest: recoveryDigest(code), usedAt: null }))),
     totpUpdatedAt: now(),
     updatedAt: now()
   }).where(eq(users.id, userId)));
-  pendingSecrets.delete(userId);
   return { enabled: true, recoveryCodes };
 }
 
@@ -127,20 +140,13 @@ export async function disableTotp(userId: number) {
     totpUpdatedAt: now(),
     updatedAt: now()
   }).where(eq(users.id, userId)));
-  pendingSecrets.delete(userId);
   return { enabled: false };
-}
-
-export async function listRecoveryCodes(userId: number) {
-  const user = await dbGet<UserWithTotp>(db.select().from(users).where(eq(users.id, userId)).limit(1));
-  if (!user) throw new Error("User not found.");
-  return decryptRecoveryCodes(user.totpRecoveryCodesEncrypted).filter((item) => !item.usedAt).map((item) => item.code);
 }
 
 export async function regenerateRecoveryCodes(userId: number) {
   const recoveryCodes = generateRecoveryCodes();
   await dbRun(db.update(users).set({
-    totpRecoveryCodesEncrypted: encryptRecoveryCodes(recoveryCodes.map((code) => ({ code, usedAt: null }))),
+    totpRecoveryCodesEncrypted: serializeRecoveryCodes(recoveryCodes.map((code) => ({ digest: recoveryDigest(code), usedAt: null }))),
     totpUpdatedAt: now(),
     updatedAt: now()
   }).where(eq(users.id, userId)));
@@ -156,13 +162,12 @@ export async function verifyAdminSecondFactor(user: UserWithTotp, otp?: string, 
     const codes = decryptRecoveryCodes(user.totpRecoveryCodesEncrypted);
     const wanted = recoveryDigest(recoveryCode);
     const index = codes.findIndex((item) => {
-      const digest = recoveryDigest(item.code);
-      return !item.usedAt && digest.length === wanted.length && timingSafeEqual(Buffer.from(digest), Buffer.from(wanted));
+      return !item.usedAt && item.digest.length === wanted.length && timingSafeEqual(Buffer.from(item.digest), Buffer.from(wanted));
     });
     if (index >= 0) {
       codes[index] = { ...codes[index]!, usedAt: now().toISOString() };
       await dbRun(db.update(users).set({
-        totpRecoveryCodesEncrypted: encryptRecoveryCodes(codes),
+        totpRecoveryCodesEncrypted: serializeRecoveryCodes(codes),
         updatedAt: now()
       }).where(eq(users.id, user.id)));
       return true;

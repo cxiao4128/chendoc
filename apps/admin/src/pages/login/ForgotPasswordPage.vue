@@ -9,7 +9,7 @@ import {
   preloadImageAsset,
   withBundledSiteAssets
 } from "../../config/site-assets";
-import "./login.css";
+import "./css/login.css";
 
 type PublicSiteConfig = Awaited<ReturnType<typeof getPublicSiteConfigApi>>["config"];
 
@@ -49,7 +49,7 @@ async function preparePage() {
   try {
     nextConfig = withBundledSiteAssets((await getPublicSiteConfigApi()).config);
   } catch {
-    nextConfig = null;
+    // Bundled assets remain the fallback.
   }
 
   const next = nextConfig ?? site;

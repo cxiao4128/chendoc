@@ -5,13 +5,17 @@ import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import {
   bulkHardDeleteTrashDocsApi,
   bulkRestoreTrashDocsApi,
+  getTrashStatsApi,
   hardDeleteDocApi,
   listTrashDocsApi,
   restoreDocApi,
-  type DocSummary
+  type DocSummary,
+  type TrashStats
 } from "../../api/docs";
-import "./trash.css";
+import { useIsMobileViewport } from "../../composables/useViewport";
+import "./css/trash.css";
 
+const isMobile = useIsMobileViewport();
 const docs = ref<DocSummary[]>([]);
 const loading = ref(false);
 const operating = ref(false);
@@ -21,11 +25,73 @@ const bulkRemoving = ref(false);
 const selectedDocUids = ref<string[]>([]);
 const page = ref(1);
 const hasMore = ref(false);
+// ===== 回收站优化：时间筛选 =====
+const timeFilter = ref<"all" | "today" | "week" | "month">("all");
+
+// ===== 回收站优化：真实统计 =====
+const trashStats = ref<TrashStats | null>(null);
 
 const selectedCount = computed(() => selectedDocUids.value.length);
 const allSelected = computed(() => docs.value.length > 0 && selectedDocUids.value.length === docs.value.length);
 const recoverableCount = computed(() => docs.value.length);
-const releaseSize = computed(() => Math.max(0.42, docs.value.length * 0.047).toFixed(2));
+
+// 可释放空间（GB）
+const releaseSize = computed(() => {
+  if (!trashStats.value) return 0;
+  return Math.round(trashStats.value.storageUsedBytes / (1024 * 1024 * 1024) * 10) / 10;
+});
+
+// 存储使用百分比
+const storagePercent = computed(() => {
+  if (!trashStats.value) return 0;
+  return Math.min(100, Math.round((trashStats.value.storageUsedBytes / trashStats.value.storageTotalBytes) * 100));
+});
+
+// 格式化存储大小
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+const usedStorageText = computed(() => {
+  if (!trashStats.value) return "--";
+  return `${formatBytes(trashStats.value.storageUsedBytes)} / ${formatBytes(trashStats.value.storageTotalBytes)}`;
+});
+
+// ===== 回收站优化：时间筛选计算 =====
+const filteredDocs = computed(() => {
+  if (timeFilter.value === "all") return docs.value;
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  return docs.value.filter((doc) => {
+    if (!doc.deletedAt) return false;
+    const deletedTime = new Date(doc.deletedAt).getTime();
+    const diffDays = (now - deletedTime) / dayMs;
+    if (timeFilter.value === "today") return diffDays < 1;
+    if (timeFilter.value === "week") return diffDays < 7;
+    if (timeFilter.value === "month") return diffDays < 30;
+    return true;
+  });
+});
+
+// ===== 回收站优化：真实删除倒计时 =====
+const TRASH_RETENTION_DAYS = 7;
+
+function getRetentionDaysLeft(deletedAt?: string | null): number {
+  if (!deletedAt) return TRASH_RETENTION_DAYS;
+  const deletedTime = new Date(deletedAt).getTime();
+  const daysPassed = (Date.now() - deletedTime) / (24 * 60 * 60 * 1000);
+  return Math.max(0, Math.ceil(TRASH_RETENTION_DAYS - daysPassed));
+}
+
+function getRetentionText(deletedAt?: string | null): string {
+  const daysLeft = getRetentionDaysLeft(deletedAt);
+  if (daysLeft <= 0) return "即将清除";
+  if (daysLeft === 1) return "明天清除";
+  return `${daysLeft}天后清除`;
+}
 
 async function load(options: { append?: boolean } = {}) {
   const nextPage = options.append ? page.value + 1 : 1;
@@ -109,7 +175,18 @@ async function bulkHardDelete() {
   }
 }
 
-onMounted(load);
+async function loadStats() {
+  try {
+    trashStats.value = await getTrashStatsApi();
+  } catch {
+    // 静默失败，使用默认值
+  }
+}
+
+onMounted(() => {
+  void load();
+  void loadStats();
+});
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
@@ -125,13 +202,13 @@ function formatDate(value?: string | null) {
 </script>
 
 <template>
-  <section class="trash-page">
+  <section class="trash-page" :class="{ 'is-mobile': isMobile }">
     <div class="trash-page__head">
       <div>
         <h1>回收站 <span aria-hidden="true">✦</span></h1>
         <p>已删除的内容会暂存在这里，可随时恢复或永久删除。</p>
       </div>
-      <div v-if="docs.length" class="trash-page__head-actions">
+      <div v-if="filteredDocs.length" class="trash-page__head-actions">
         <button class="cd-button" type="button" :disabled="!selectedCount || operating" @click="bulkRestoring = true">
           <RotateCcw :size="16" />批量恢复
         </button>
@@ -142,7 +219,7 @@ function formatDate(value?: string | null) {
     </div>
 
     <div class="trash-page__stats">
-      <article><span><Archive :size="27" /></span><b>待清理文档</b><strong>{{ docs.length }}</strong><small>已占用存储空间</small></article>
+      <article><span><Archive :size="27" /></span><b>待清理文档</b><strong>{{ filteredDocs.length }}</strong><small>筛选后数量</small></article>
       <article><span class="is-green"><RotateCcw :size="27" /></span><b>可恢复项目</b><strong>{{ recoverableCount }}</strong><small>可恢复文档和文件</small></article>
       <article><span><HardDrive :size="27" /></span><b>已释放空间潜力</b><strong>{{ releaseSize }} GB</strong><small>永久删除后可释放</small></article>
     </div>
@@ -151,10 +228,10 @@ function formatDate(value?: string | null) {
       <main class="trash-page__main">
         <div class="trash-page__toolbar">
           <div class="trash-page__filters">
-            <button class="is-active" type="button">全部</button>
-            <button type="button">今天删除</button>
-            <button type="button">7天内</button>
-            <button type="button">30天内</button>
+            <button type="button" :class="{ 'is-active': timeFilter === 'all' }" @click="timeFilter = 'all'">全部</button>
+            <button type="button" :class="{ 'is-active': timeFilter === 'today' }" @click="timeFilter = 'today'">今天删除</button>
+            <button type="button" :class="{ 'is-active': timeFilter === 'week' }" @click="timeFilter = 'week'">7天内</button>
+            <button type="button" :class="{ 'is-active': timeFilter === 'month' }" @click="timeFilter = 'month'">30天内</button>
           </div>
           <div class="trash-page__sort">
             <button class="cd-button" type="button"><Clock :size="15" />按删除时间（最新）</button>
@@ -165,7 +242,9 @@ function formatDate(value?: string | null) {
           <span v-for="i in 4" :key="i" class="cd-skeleton" />
         </div>
 
-        <div v-else-if="!docs.length" class="trash-page__empty cd-card">回收站为空</div>
+        <div v-else-if="!filteredDocs.length" class="trash-page__empty cd-card">
+          <p>筛选范围内没有文档</p>
+        </div>
 
         <div v-else class="trash-page__table">
           <div class="trash-page__bulkbar">
@@ -179,7 +258,7 @@ function formatDate(value?: string | null) {
             <span>大小</span>
             <span>操作</span>
           </div>
-          <div v-for="doc in docs" :key="doc.docUid" class="trash-page__row">
+          <div v-for="doc in filteredDocs" :key="doc.docUid" class="trash-page__row">
             <label class="trash-page__select" :aria-label="`选择 ${doc.title}`">
               <input
                 type="checkbox"
@@ -194,8 +273,10 @@ function formatDate(value?: string | null) {
             </div>
             <span>/个人/临时文件</span>
             <span>{{ formatDate(doc.deletedAt) }}</span>
-            <span class="trash-page__pill">7天后清除</span>
-            <span>0.95 MB</span>
+            <span class="trash-page__pill" :class="{ 'is-urgent': getRetentionDaysLeft(doc.deletedAt) <= 1 }">
+              {{ getRetentionText(doc.deletedAt) }}
+            </span>
+            <span>--</span>
             <div class="trash-page__actions">
               <button class="cd-button" type="button" :disabled="operating" @click="restore(doc.docUid)">
                 <RotateCcw :size="16" />恢复
@@ -215,8 +296,8 @@ function formatDate(value?: string | null) {
       <aside class="trash-page__aside">
         <section>
           <strong>存储释放概览</strong>
-          <div class="trash-page__ring"><span>72%</span></div>
-          <p>已用 21.6 GB / 30 GB</p>
+          <div class="trash-page__ring"><span>{{ storagePercent }}%</span></div>
+          <p>已用 {{ usedStorageText }}</p>
           <button class="cd-button" type="button">查看存储详情</button>
         </section>
         <section>
@@ -226,7 +307,7 @@ function formatDate(value?: string | null) {
           <p>定期清理回收站</p>
         </section>
         <section>
-          <strong>最近删除</strong>
+          <strong>最早删除</strong>
           <article v-for="doc in docs.slice(0, 3)" :key="doc.docUid">
             <b>{{ doc.title }}</b>
             <small>{{ formatDate(doc.deletedAt) }}</small>

@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from "vue";
 import { Save, UploadCloud, Wifi } from "lucide-vue-next";
 import { getR2ConfigApi, saveR2ConfigApi, testR2Api } from "../../api/settings";
 import type { R2ConfigView } from "../../api/settings";
-import "./settings-storage.css";
+import "./css/settings-storage.css";
 
 const form = reactive<R2ConfigView>({
   accountId: "",

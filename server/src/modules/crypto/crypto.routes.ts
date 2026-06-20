@@ -3,7 +3,7 @@ import { z } from "zod";
 import { issueGatewayChallenge } from "../../gateway/packet.js";
 import { getActivePublicKey } from "./crypto.service.js";
 
-const challengeQuerySchema = z.object({ action: z.string().regex(/^[a-z][0-9]+$/i).optional() });
+const challengeQuerySchema = z.object({ action: z.string().regex(/^[a-z]+[0-9]+$/i).optional() });
 
 function headerValue(request: FastifyRequest, name: string) {
   const value = request.headers[name];

@@ -2,16 +2,18 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { FilePlus2 } from "lucide-vue-next";
+import { getDocApi, type DocSummary } from "../../api/docs";
 import { useDocStore } from "../../stores/doc";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
-import "./utility-pages.css";
+import "./css/utility-pages.css";
 
 const router = useRouter();
 const docs = useDocStore();
 const { docPath } = useWorkspaceRoutes();
 const creatingKey = ref("");
 
-const templates = [
+type TemplateDefinition = { key: string; title: string; summary: string; html: string };
+const baseTemplates: TemplateDefinition[] = [
   {
     key: "note",
     title: "知识卡片",
@@ -31,14 +33,17 @@ const templates = [
     html: "<h2>周报</h2><h3>本周完成</h3><p></p><h3>问题</h3><p></p><h3>下周计划</h3><p></p>"
   }
 ];
+const customTemplates = ref<TemplateDefinition[]>([]);
+const templates = computed(() => [...baseTemplates, ...customTemplates.value]);
 
 const recentDocs = computed(() => docs.docs.slice(0, 6));
 
 onMounted(() => {
+  try { customTemplates.value = JSON.parse(localStorage.getItem("chendoc_custom_templates") || "[]"); } catch { customTemplates.value = []; }
   void docs.loadList();
 });
 
-async function createFromTemplate(template: typeof templates[number]) {
+async function createFromTemplate(template: TemplateDefinition) {
   creatingKey.value = template.key;
   try {
     const doc = await docs.createDoc(template.title);
@@ -47,6 +52,18 @@ async function createFromTemplate(template: typeof templates[number]) {
   } finally {
     creatingKey.value = "";
   }
+}
+
+async function saveAsTemplate(doc: DocSummary) {
+  const detail = (await getDocApi(doc.docUid)).doc;
+  const template: TemplateDefinition = {
+    key: `custom-${doc.docUid}`,
+    title: doc.title,
+    summary: detail.summary || "从当前文档保存",
+    html: detail.contentHtml
+  };
+  customTemplates.value = [template, ...customTemplates.value.filter((item) => item.key !== template.key)].slice(0, 20);
+  localStorage.setItem("chendoc_custom_templates", JSON.stringify(customTemplates.value));
 }
 </script>
 
@@ -70,9 +87,10 @@ async function createFromTemplate(template: typeof templates[number]) {
 
     <section class="utility-page__panel">
       <strong>最近文档</strong>
-      <RouterLink v-for="doc in recentDocs" :key="doc.docUid" :to="docPath(doc.docUid)">
-        {{ doc.title }}
-      </RouterLink>
+      <div v-for="doc in recentDocs" :key="doc.docUid" class="utility-page__template-source">
+        <RouterLink :to="docPath(doc.docUid)">{{ doc.title }}</RouterLink>
+        <button type="button" @click="saveAsTemplate(doc)">保存为模板</button>
+      </div>
     </section>
   </section>
 </template>

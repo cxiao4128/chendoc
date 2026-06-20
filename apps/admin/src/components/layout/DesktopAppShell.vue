@@ -2,7 +2,8 @@
 import { ref } from "vue";
 import AppHeader from "./AppHeader.vue";
 import AppSidebar from "./AppSidebar.vue";
-import "../../pages/admin/admin-layout.css";
+import SessionStatusBanner from "./SessionStatusBanner.vue";
+import "../../pages/admin/css/admin-layout.css";
 
 const sidebarOpen = ref(false);
 const sidebarCollapsed = ref(false);
@@ -18,6 +19,7 @@ const sidebarCollapsed = ref(false);
     />
     <main class="admin-layout__main">
       <AppHeader @menu="sidebarOpen = true" />
+      <SessionStatusBanner />
       <RouterView />
     </main>
   </div>

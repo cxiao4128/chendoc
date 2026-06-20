@@ -163,7 +163,7 @@ function migrateSqlite() {
 
     CREATE TABLE IF NOT EXISTS shares (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      doc_id INTEGER NOT NULL REFERENCES docs(id),
+      doc_id INTEGER NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
       share_code INTEGER NOT NULL UNIQUE,
       share_token TEXT NOT NULL,
       custom_slug TEXT UNIQUE,
@@ -172,11 +172,31 @@ function migrateSqlite() {
       review_status TEXT NOT NULL DEFAULT 'approved',
       review_note TEXT,
       review_content_hash TEXT,
-      requested_by INTEGER REFERENCES users(id),
-      reviewed_by INTEGER REFERENCES users(id),
+      requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       reviewed_at INTEGER,
       expire_at INTEGER,
       view_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS forms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_uid TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT,
+      fields TEXT NOT NULL DEFAULT '[]',
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'draft',
+      max_submissions INTEGER,
+      allow_multiple INTEGER NOT NULL DEFAULT 0,
+      exclusive_info TEXT,
+      privacy_notice TEXT,
+      retention_days INTEGER,
+      store_user_agent INTEGER NOT NULL DEFAULT 0,
+      view_count INTEGER NOT NULL DEFAULT 0,
+      submission_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -202,6 +222,16 @@ function migrateSqlite() {
       content_html TEXT NOT NULL,
       created_by INTEGER REFERENCES users(id),
       created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS form_submissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_id INTEGER NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+      data TEXT NOT NULL,
+      ip TEXT NOT NULL,
+      submitter_id TEXT,
+      user_agent TEXT,
+      submitted_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -287,6 +317,11 @@ function migrateSqlite() {
     CREATE INDEX IF NOT EXISTS auth_sessions_expire_idx ON auth_sessions(expire_at);
     CREATE INDEX IF NOT EXISTS shares_doc_idx ON shares(doc_id);
     CREATE INDEX IF NOT EXISTS doc_versions_doc_created_idx ON doc_versions(doc_id, created_at);
+    CREATE INDEX IF NOT EXISTS forms_owner_idx ON forms(owner_id);
+    CREATE INDEX IF NOT EXISTS forms_status_idx ON forms(status);
+    CREATE INDEX IF NOT EXISTS form_submissions_form_idx ON form_submissions(form_id);
+    CREATE INDEX IF NOT EXISTS form_submissions_ip_idx ON form_submissions(ip);
+    CREATE INDEX IF NOT EXISTS form_submissions_time_idx ON form_submissions(submitted_at);
     CREATE INDEX IF NOT EXISTS operation_logs_target_idx ON operation_logs(target_type, target_id);
     CREATE INDEX IF NOT EXISTS operation_logs_user_idx ON operation_logs(user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS login_failures_dimension_unique ON login_failures(username, scope, dimension, dimension_value);
@@ -375,6 +410,18 @@ function migrateSqlite() {
     sqlite.exec("ALTER TABLE auth_sessions ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0");
     sqlite.exec("UPDATE auth_sessions SET last_seen_at = created_at WHERE last_seen_at = 0");
   }
+  const formColumns = sqlite.prepare("PRAGMA table_info(forms)").all() as Array<{ name: string }>;
+  const hasFormColumn = (name: string) => formColumns.some((column) => column.name === name);
+  if (!hasFormColumn("exclusive_info")) sqlite.exec("ALTER TABLE forms ADD COLUMN exclusive_info TEXT");
+  if (!hasFormColumn("privacy_notice")) sqlite.exec("ALTER TABLE forms ADD COLUMN privacy_notice TEXT");
+  if (!hasFormColumn("retention_days")) sqlite.exec("ALTER TABLE forms ADD COLUMN retention_days INTEGER");
+  if (!hasFormColumn("store_user_agent")) sqlite.exec("ALTER TABLE forms ADD COLUMN store_user_agent INTEGER NOT NULL DEFAULT 0");
+
+  const submissionColumns = sqlite.prepare("PRAGMA table_info(form_submissions)").all() as Array<{ name: string }>;
+  if (!submissionColumns.some((column) => column.name === "submitter_id")) sqlite.exec("ALTER TABLE form_submissions ADD COLUMN submitter_id TEXT");
+  sqlite.exec("UPDATE form_submissions SET submitter_id = NULL WHERE form_id IN (SELECT id FROM forms WHERE allow_multiple = 1)");
+  sqlite.exec("DROP INDEX IF EXISTS form_submissions_identity_idx");
+  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS form_submissions_identity_unique ON form_submissions(form_id, submitter_id)");
 
   const shareColumns = sqlite.prepare("PRAGMA table_info(shares)").all() as Array<{ name: string }>;
   const hasShareColumn = (name: string) => shareColumns.some((column) => column.name === name);
@@ -388,8 +435,8 @@ function migrateSqlite() {
   if (!hasShareColumn("review_status")) sqlite.exec("ALTER TABLE shares ADD COLUMN review_status TEXT NOT NULL DEFAULT 'approved'");
   if (!hasShareColumn("review_note")) sqlite.exec("ALTER TABLE shares ADD COLUMN review_note TEXT");
   if (!hasShareColumn("review_content_hash")) sqlite.exec("ALTER TABLE shares ADD COLUMN review_content_hash TEXT");
-  if (!hasShareColumn("requested_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN requested_by INTEGER REFERENCES users(id)");
-  if (!hasShareColumn("reviewed_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_by INTEGER REFERENCES users(id)");
+  if (!hasShareColumn("requested_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL");
+  if (!hasShareColumn("reviewed_by")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL");
   if (!hasShareColumn("reviewed_at")) sqlite.exec("ALTER TABLE shares ADD COLUMN reviewed_at INTEGER");
   sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS shares_custom_slug_unique ON shares(custom_slug)");
   logDocIdentityStats(sqliteDocIdentityStats);
@@ -432,6 +479,14 @@ async function migrateMysql() {
   await addMysqlColumnIfMissing(databaseName, "auth_sessions", "last_seen_at", "DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
   await mysqlPool.query("UPDATE auth_sessions SET last_seen_at = created_at WHERE last_seen_at IS NULL");
   await addMysqlColumnIfMissing(databaseName, "shares", "share_token", "VARCHAR(64) NULL");
+  await addMysqlColumnIfMissing(databaseName, "forms", "exclusive_info", "TEXT NULL");
+  await addMysqlColumnIfMissing(databaseName, "forms", "privacy_notice", "TEXT NULL");
+  await addMysqlColumnIfMissing(databaseName, "forms", "retention_days", "INT NULL");
+  await addMysqlColumnIfMissing(databaseName, "forms", "store_user_agent", "TINYINT(1) NOT NULL DEFAULT 0");
+  await addMysqlColumnIfMissing(databaseName, "form_submissions", "submitter_id", "VARCHAR(64) NULL");
+  await mysqlPool.query("UPDATE form_submissions s JOIN forms f ON f.id = s.form_id SET s.submitter_id = NULL WHERE f.allow_multiple = 1");
+  await mysqlPool.query("ALTER TABLE form_submissions DROP INDEX form_submissions_identity_idx").catch(() => undefined);
+  await addMysqlUniqueIndexIfMissing(databaseName, "form_submissions", "form_submissions_identity_unique", "`form_id`, `submitter_id`");
   await mysqlPool.query("UPDATE shares SET share_token = CONCAT('legacy-', id) WHERE share_token IS NOT NULL AND share_token != ''");
   await mysqlPool.query("UPDATE shares SET share_token = CAST(share_code AS CHAR)");
   await mysqlPool.query("ALTER TABLE shares MODIFY COLUMN share_token VARCHAR(64) NOT NULL");
@@ -439,6 +494,7 @@ async function migrateMysql() {
 
   await addMysqlIndexesIfMissing(databaseName, MYSQL_INDEXES);
   await addMysqlIndexesIfMissing(databaseName, MYSQL_QUERY_INDEXES);
+  await addMysqlForeignKeys(databaseName);
   logDocIdentityStats(mysqlDocIdentityStats);
 }
 
@@ -572,6 +628,55 @@ async function addMysqlColumnIfMissing(databaseName: string, tableName: string, 
   );
   if ((existingRows as unknown[]).length) return;
   await mysqlPool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`);
+}
+
+async function addMysqlForeignKeys(databaseName: string) {
+  if (!mysqlPool) throw new Error("MySQL connection is not available.");
+  await mysqlPool.query("DELETE s FROM auth_sessions s LEFT JOIN users u ON u.id = s.user_id WHERE u.id IS NULL");
+  await mysqlPool.query("UPDATE spaces s LEFT JOIN users u ON u.id = s.owner_id SET s.owner_id = NULL WHERE s.owner_id IS NOT NULL AND u.id IS NULL");
+  await mysqlPool.query("UPDATE docs d LEFT JOIN spaces s ON s.id = d.space_id SET d.space_id = NULL WHERE d.space_id IS NOT NULL AND s.id IS NULL");
+  for (const column of ["owner_id", "created_by", "updated_by"]) {
+    await mysqlPool.query(`UPDATE docs d LEFT JOIN users u ON u.id = d.\`${column}\` SET d.\`${column}\` = NULL WHERE d.\`${column}\` IS NOT NULL AND u.id IS NULL`);
+  }
+  await mysqlPool.query("UPDATE uploads x LEFT JOIN users u ON u.id = x.user_id SET x.user_id = NULL WHERE x.user_id IS NOT NULL AND u.id IS NULL");
+  await mysqlPool.query("UPDATE uploads x LEFT JOIN docs d ON d.id = x.doc_id SET x.doc_id = NULL WHERE x.doc_id IS NOT NULL AND d.id IS NULL");
+  await mysqlPool.query("DELETE v FROM doc_versions v LEFT JOIN docs d ON d.id = v.doc_id WHERE d.id IS NULL");
+  await mysqlPool.query("UPDATE doc_versions v LEFT JOIN users u ON u.id = v.created_by SET v.created_by = NULL WHERE v.created_by IS NOT NULL AND u.id IS NULL");
+  await mysqlPool.query("DELETE v FROM danger_verifications v LEFT JOIN users u ON u.id = v.user_id WHERE u.id IS NULL");
+  await mysqlPool.query("DELETE s FROM form_submissions s LEFT JOIN forms f ON f.id = s.form_id WHERE f.id IS NULL");
+  await mysqlPool.query("DELETE s FROM shares s LEFT JOIN docs d ON d.id = s.doc_id WHERE d.id IS NULL");
+  await mysqlPool.query("UPDATE shares s LEFT JOIN users u ON u.id = s.requested_by SET s.requested_by = NULL WHERE s.requested_by IS NOT NULL AND u.id IS NULL");
+  await mysqlPool.query("UPDATE shares s LEFT JOIN users u ON u.id = s.reviewed_by SET s.reviewed_by = NULL WHERE s.reviewed_by IS NOT NULL AND u.id IS NULL");
+  await mysqlPool.query("DELETE f FROM forms f LEFT JOIN users u ON u.id = f.owner_id WHERE u.id IS NULL");
+  const constraints = [
+    { table: "auth_sessions", name: "fk_auth_sessions_user", column: "user_id", target: "users(id)" },
+    { table: "spaces", name: "fk_spaces_owner", column: "owner_id", target: "users(id)", onDelete: "SET NULL" },
+    { table: "docs", name: "fk_docs_space", column: "space_id", target: "spaces(id)", onDelete: "SET NULL" },
+    { table: "docs", name: "fk_docs_owner", column: "owner_id", target: "users(id)", onDelete: "SET NULL" },
+    { table: "docs", name: "fk_docs_created_by", column: "created_by", target: "users(id)", onDelete: "SET NULL" },
+    { table: "docs", name: "fk_docs_updated_by", column: "updated_by", target: "users(id)", onDelete: "SET NULL" },
+    { table: "shares", name: "fk_shares_doc", column: "doc_id", target: "docs(id)", onDelete: "CASCADE" },
+    { table: "uploads", name: "fk_uploads_user", column: "user_id", target: "users(id)", onDelete: "SET NULL" },
+    { table: "uploads", name: "fk_uploads_doc", column: "doc_id", target: "docs(id)", onDelete: "SET NULL" },
+    { table: "doc_versions", name: "fk_doc_versions_doc", column: "doc_id", target: "docs(id)" },
+    { table: "doc_versions", name: "fk_doc_versions_created_by", column: "created_by", target: "users(id)", onDelete: "SET NULL" },
+    { table: "danger_verifications", name: "fk_danger_verifications_user", column: "user_id", target: "users(id)" },
+    { table: "forms", name: "fk_forms_owner", column: "owner_id", target: "users(id)", onDelete: "CASCADE" },
+    { table: "form_submissions", name: "fk_form_submissions_form", column: "form_id", target: "forms(id)", onDelete: "CASCADE" },
+    { table: "shares", name: "fk_shares_requested_by", column: "requested_by", target: "users(id)", onDelete: "SET NULL" },
+    { table: "shares", name: "fk_shares_reviewed_by", column: "reviewed_by", target: "users(id)", onDelete: "SET NULL" }
+  ];
+  for (const item of constraints) {
+    const [rows] = await mysqlPool.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+       WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? LIMIT 1`,
+      [databaseName, item.table, item.name]
+    );
+    if ((rows as unknown[]).length) continue;
+    await mysqlPool.query(
+      `ALTER TABLE \`${item.table}\` ADD CONSTRAINT \`${item.name}\` FOREIGN KEY (\`${item.column}\`) REFERENCES ${item.target} ON DELETE ${item.onDelete ?? "CASCADE"}`
+    );
+  }
 }
 
 async function addMysqlUniqueIndexIfMissing(databaseName: string, tableName: string, indexName: string, columns: string) {

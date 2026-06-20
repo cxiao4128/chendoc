@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, appendFileSync } from "node:fs";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createGzip } from "node:zlib";
+import { pipeline } from "node:stream/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -31,7 +34,43 @@ function timestamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-function mysqlBackup(env) {
+async function protectAndRotateBackup(sqlPath, env) {
+  const secret = String(env.CHENDOC_BACKUP_ENCRYPTION_KEY || "");
+  if (Buffer.byteLength(secret, "utf8") < 32) throw new Error("CHENDOC_BACKUP_ENCRYPTION_KEY must be at least 32 bytes.");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", createHash("sha256").update(secret).digest(), iv);
+  const target = `${sqlPath}.gz.enc`;
+  writeFileSync(target, Buffer.concat([Buffer.from("CDBK1"), iv]));
+  await pipeline(createReadStream(sqlPath), createGzip({ level: 9 }), cipher, createWriteStream(target, { flags: "a" }));
+  appendFileSync(target, cipher.getAuthTag());
+  rmSync(sqlPath);
+  const bytes = readFileSync(target);
+  const metadata = {
+    version: 1,
+    provider: "mysql",
+    createdAt: new Date().toISOString(),
+    fileName: target.split(/[\\/]/).pop(),
+    size: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex")
+  };
+  writeFileSync(`${target}.json`, `${JSON.stringify(metadata, null, 2)}\n`);
+
+  const backupDir = dirname(target);
+  const retentionMs = Number(env.CHENDOC_BACKUP_RETENTION_DAYS || 30) * 86_400_000;
+  for (const name of readdirSync(backupDir)) {
+    const path = resolve(backupDir, name);
+    if ((name.endsWith(".gz.enc") || name.endsWith(".gz.enc.json")) && Date.now() - statSync(path).mtimeMs > retentionMs) rmSync(path);
+  }
+  if (env.CHENDOC_BACKUP_OFFSITE_DIR) {
+    const offsite = resolve(env.CHENDOC_BACKUP_OFFSITE_DIR);
+    mkdirSync(offsite, { recursive: true });
+    copyFileSync(target, resolve(offsite, target.split(/[\\/]/).pop()));
+    copyFileSync(`${target}.json`, resolve(offsite, `${target.split(/[\\/]/).pop()}.json`));
+  }
+  return target;
+}
+
+async function mysqlBackup(env) {
   const databaseUrl = env.DATABASE_URL || "";
   if (!databaseUrl.startsWith("mysql://")) {
     throw new Error("DATABASE_URL must be mysql:// for MySQL backup.");
@@ -72,7 +111,8 @@ function mysqlBackup(env) {
   if (result.status !== 0) {
     throw new Error(`mysqldump exited with status ${result.status}.`);
   }
-  console.log(`MySQL backup completed: ${out}`);
+  const protectedPath = await protectAndRotateBackup(out, env);
+  console.log(`MySQL encrypted backup completed: ${protectedPath}`);
 }
 
 function sqliteBackup() {
@@ -93,7 +133,7 @@ const env = {
 
 try {
   const provider = String(env.DATABASE_PROVIDER || "mysql").trim().toLowerCase();
-  if (provider === "mysql") mysqlBackup(env);
+  if (provider === "mysql") await mysqlBackup(env);
   else if (provider === "sqlite") sqliteBackup();
   else throw new Error(`Unsupported DATABASE_PROVIDER: ${provider}`);
 } catch (error) {

@@ -8,23 +8,19 @@ import {
   deleteManagedUser,
   disableManagedUser,
   enableManagedUser,
-  exportSystemConfig,
   getManagedUser,
   getManagedUserPasswordView,
-  getR2Config,
-  getSiteConfig,
-  getSystemOverview,
   listManagedUsers,
-  listOperationLogs,
-  listSettings,
   promoteManagedUser,
-  resetManagedUserPassword,
-  runSystemMaintenanceAction,
-  saveR2Config,
-  saveSiteConfig,
-  setSetting,
-  testR2Connection
-} from "./settings.service.js";
+  resetManagedUserPassword
+} from "./settings.users.service.js";
+import { getSiteConfig, saveSiteConfig } from "./settings.site.service.js";
+import { getR2Config, saveR2Config, testR2Connection } from "./settings.storage.service.js";
+import { listSettings, setSetting } from "./settings.core.service.js";
+import { listOperationLogs } from "./settings.logs.service.js";
+import {
+  exportSystemConfig, getSystemOverview, runSystemMaintenanceAction
+} from "./settings.maintenance.service.js";
 
 export async function settingsRoutes(app: FastifyInstance) {
   const adminOnly = [authenticate, requireAdmin];
@@ -52,7 +48,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post("/api/settings/system/actions/:action", { preHandler: dangerousAdmin }, async (request) => {
     const params = z.object({
-      action: z.enum(["cleanupExpiredSessions", "cleanupExpiredCaptchas", "emptyTrash", "refreshStatus", "healthCheck"])
+      action: z.enum(["cleanupExpiredSessions", "cleanupExpiredCaptchas", "cleanupExpiredLogs", "emptyTrash", "refreshStatus", "healthCheck"])
     }).parse(request.params);
     const result = await runSystemMaintenanceAction(params.action);
     await writeAuditLog({
@@ -98,7 +94,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { user };
   });
 
-  app.post("/api/admin/users/:id/enable", { preHandler: adminOnly }, async (request) => {
+  app.post("/api/admin/users/:id/enable", { preHandler: dangerousAdmin }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const user = await enableManagedUser(params.id, request.user!);
     await writeAuditLog({
@@ -124,7 +120,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/api/admin/users/:id/password", { preHandler: adminOnly }, async (request) => {
+  app.get("/api/admin/users/:id/password", { preHandler: dangerousAdmin }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const password = await getManagedUserPasswordView(params.id, request.user!);
     await writeAuditLog({
@@ -137,7 +133,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { password };
   });
 
-  app.post("/api/admin/users/:id/password", { preHandler: adminOnly }, async (request, reply) => {
+  app.post("/api/admin/users/:id/password", { preHandler: dangerousAdmin }, async (request, reply) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const body = z.object({ password: z.string().min(1).max(128) }).parse(request.body);
     try {

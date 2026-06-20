@@ -50,7 +50,7 @@ function requestDialog<T extends NativeDialogResult>(request: Omit<NativeDialogR
   return new Promise<T | null>((resolve) => {
     queue.push({
       request: { ...request, id: nextId++ },
-      resolve
+      resolve: (value) => resolve(value as T | null)
     });
     runNext();
   });

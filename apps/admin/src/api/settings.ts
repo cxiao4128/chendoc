@@ -64,6 +64,7 @@ export type SystemAction =
   | "cleanupExpiredSessions"
   | "cleanupExpiredCaptchas"
   | "emptyTrash"
+  | "cleanupExpiredLogs"
   | "refreshStatus"
   | "healthCheck";
 
@@ -83,7 +84,9 @@ export interface SystemStatusView {
     status: "ok";
     label: string;
     provider: "sqlite" | "mysql";
+    schemaVersion: string;
   };
+  backup: null | { createdAt: string; fileName: string; size: number; sha256: string };
   storage: {
     fileCount: number;
     totalBytes: number;
@@ -181,7 +184,7 @@ export function disableManagedUserApi(id: number) {
 }
 
 export function enableManagedUserApi(id: number) {
-  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}/enable`, { method: "POST" });
+  return ensureDangerVerified().then(() => request<{ user: ManagedUserView }>(`/api/admin/users/${id}/enable`, { method: "POST" }));
 }
 
 export function deleteManagedUserApi(id: number) {
@@ -189,14 +192,14 @@ export function deleteManagedUserApi(id: number) {
 }
 
 export function getManagedUserPasswordApi(id: number) {
-  return request<{ password: { viewable: false; message: string } }>(`/api/admin/users/${id}/password`);
+  return ensureDangerVerified().then(() => request<{ password: { viewable: false; message: string } }>(`/api/admin/users/${id}/password`));
 }
 
 export function resetManagedUserPasswordApi(id: number, password: string) {
-  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}/password`, {
+  return ensureDangerVerified().then(() => request<{ user: ManagedUserView }>(`/api/admin/users/${id}/password`, {
     method: "POST",
     body: JSON.stringify({ password })
-  });
+  }));
 }
 
 export function saveSiteConfigApi(config: SiteConfigView) {

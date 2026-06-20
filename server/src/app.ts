@@ -16,12 +16,16 @@ import { captchaRoutes } from "./modules/captcha/captcha.routes.js";
 import { cryptoRoutes } from "./modules/crypto/crypto.routes.js";
 import { dangerRoutes } from "./modules/danger/danger.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
+import { formsRoutes } from "./modules/forms/forms.routes.js";
+import { formsPublicRoutes } from "./modules/forms/forms.public.routes.js";
+import { runFormMaintenance } from "./modules/forms/forms.service.js";
 import { invitesRoutes } from "./modules/invites/invites.routes.js";
 import { publicRoutes } from "./modules/public/public.routes.js";
 import { settingsRoutes } from "./modules/settings/settings.routes.js";
 import { sharesRoutes } from "./modules/shares/shares.routes.js";
 import { spacesRoutes } from "./modules/spaces/spaces.routes.js";
 import { uploadsRoutes } from "./modules/uploads/uploads.routes.js";
+import { currentRequestTiming, enterRequestTiming } from "./utils/requestTiming.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -60,7 +64,16 @@ export async function buildApp() {
   });
 
   registerErrorHandler(app);
+  const formMaintenanceTimer = setInterval(() => {
+    void runFormMaintenance().catch((error) => app.log.error({ error }, "form maintenance failed"));
+  }, 6 * 60 * 60 * 1000);
+  formMaintenanceTimer.unref();
+  app.addHook("onRequest", async (request) => {
+    enterRequestTiming(request.id);
+    request.headers["x-request-id"] = request.id;
+  });
   app.addHook("onClose", async () => {
+    clearInterval(formMaintenanceTimer);
     await shutdownAsyncLogQueue();
   });
   app.addHook("preValidation", unpackGatewayRequest);
@@ -76,15 +89,22 @@ export async function buildApp() {
         mediaSrc: ["'self'", "blob:", "https:"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
-        connectSrc: ["'self'", "https:"],
+        connectSrc: ["'self'", ...env.cspConnectSources],
         frameAncestors: ["'self'"]
       }
     },
     global: true
   });
 
-  app.addHook("onRequest", async (_request, reply) => {
+  app.addHook("onRequest", async (request, reply) => {
     reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (env.nodeEnv === "production" && env.forceHttps && request.protocol !== "https") {
+      if (request.method === "GET" || request.method === "HEAD") {
+        const publicOrigin = new URL(env.publicSiteUrl).origin;
+        return reply.redirect(`${publicOrigin}${request.url}`, 308);
+      }
+      return reply.code(426).send({ code: "HTTPS_REQUIRED", message: "HTTPS is required." });
+    }
   });
 
   const requestStartedAt = new WeakMap<object, number>();
@@ -101,7 +121,8 @@ export async function buildApp() {
       requestId: request.id,
       actionCode: request.packet?.actionCode,
       status: reply.statusCode,
-      durationMs
+      durationMs,
+      phases: currentRequestTiming()
     }, "slow request");
   });
 
@@ -111,6 +132,7 @@ export async function buildApp() {
   });
 
   await app.register(publicRoutes);
+  await app.register(formsPublicRoutes);
   await app.register(cryptoRoutes);
   await app.register(captchaRoutes);
   await app.register(gatewayRoutes);
@@ -120,6 +142,7 @@ export async function buildApp() {
   await app.register(docsRoutes);
   await app.register(sharesRoutes);
   await app.register(uploadsRoutes);
+  await app.register(formsRoutes);
   await app.register(settingsRoutes);
   await app.register(dangerRoutes);
 

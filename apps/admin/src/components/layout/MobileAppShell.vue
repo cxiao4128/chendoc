@@ -5,7 +5,8 @@ import { Bell, BookOpen, ChevronRight, LogOut, Menu, Plus, UserRound, X } from "
 import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { useDocStore } from "../../stores/doc";
-import logoUrl from "../../assets/chendoc-logo.png";
+import { bundledLogoUrl as logoUrl } from "../../config/site-assets";
+import SessionStatusBanner from "./SessionStatusBanner.vue";
 import { getAdminRouteMeta, getWorkspaceNavItems, isAdminNavActive } from "./admin-nav";
 import "./mobile-app-shell.css";
 
@@ -46,6 +47,7 @@ async function createDoc() {
 
 <template>
   <div class="mobile-shell" :class="{ 'is-editor-route': isEditorRoute }">
+    <SessionStatusBanner />
     <template v-if="isEditorRoute">
       <RouterView />
     </template>

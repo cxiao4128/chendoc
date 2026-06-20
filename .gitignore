@@ -13,7 +13,13 @@ release/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+test-results/
+playwright-report/
+.tmp/
+backups/
+logs/
 更改必读规范.md
 FILE_GUIDE.md
+超记忆副本.md
 优化建议.md
 /docs/

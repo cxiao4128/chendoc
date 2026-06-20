@@ -1,4 +1,5 @@
 import jwt, { type SignOptions } from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
 import { env } from "./env.js";
 
 export interface JwtUser {
@@ -7,6 +8,8 @@ export interface JwtUser {
   role: "admin" | "user";
   isSuperAdmin?: boolean;
   sessionId?: string;
+  sessionTokenDigest?: string;
+  tokenNonce?: string;
   jti?: string;
   exp?: number;
   iat?: number;
@@ -17,7 +20,7 @@ export function signJwt(user: Omit<JwtUser, "exp" | "iat" | "jti">, sessionId: s
     expiresIn: env.jwtExpiresIn as SignOptions["expiresIn"],
     jwtid: sessionId
   };
-  return jwt.sign({ ...user, sessionId }, env.jwtSecret, options);
+  return jwt.sign({ ...user, sessionId, tokenNonce: randomUUID() }, env.jwtSecret, options);
 }
 
 export function verifyJwt(token: string) {

@@ -1,8 +1,12 @@
 import { resolveApiPath } from "../api/endpoints";
+import { isGatewayActionCode, isGatewayExemptPath, type GatewayActionCode } from "../../../../server/src/gateway/action-registry";
 
 const PACKET_VERSION = "xchen";
 const REQUEST_PREFIX = "chendoc";
 const RESPONSE_PREFIX = "XCHEN";
+
+// Gateway 调试模式 - 仅开发时输出详细日志
+const GATEWAY_DEBUG = import.meta.env.DEV && import.meta.env.VITE_DEBUG_GATEWAY === "true";
 
 interface PublicKeyResponse {
   keyId: string;
@@ -43,7 +47,7 @@ interface PackedGatewayBody {
 }
 
 interface GatewayAction {
-  action: string;
+  action: GatewayActionCode;
   payload: Record<string, unknown>;
 }
 
@@ -52,7 +56,6 @@ const textDecoder = new TextDecoder();
 
 let publicKeyCache: PublicKeyResponse | null = null;
 let importedKeyCache: ImportedServerKey | null = null;
-let challengeCache: ChallengeBox | null = null;
 let fingerprintCache: string | null = null;
 
 export const packetLayerDisabled =
@@ -139,11 +142,18 @@ async function fetchServerKey(action?: string) {
   const query = action ? `?action=${encodeURIComponent(action)}` : "";
   if (action) headers.set("X-Client-Fingerprint", await clientFingerprint());
 
-  const response = await fetch(`/api/crypto/public-key${query}`, {
+  const url = `/api/crypto/public-key${query}`;
+  if (GATEWAY_DEBUG) console.log("[gateway] fetchServerKey:", url, "action:", action);
+  const response = await fetch(url, {
     cache: "no-store",
     ...(action ? { headers } : {})
   });
-  if (!response.ok) throw new Error("Failed to load gateway public key");
+  if (GATEWAY_DEBUG) console.log("[gateway] fetchServerKey response:", response.status, response.statusText);
+  if (!response.ok) {
+    const text = await response.text().catch(() => "N/A");
+    console.error("[gateway] fetchServerKey error:", text);
+    throw new Error(`Failed to load gateway public key: ${response.status} ${response.statusText}`);
+  }
   return await response.json() as PublicKeyResponse;
 }
 
@@ -184,7 +194,6 @@ async function gatewayChallenge(action?: string) {
   if (!response.ok) throw new Error("Failed to load gateway challenge");
   const challenge = pickChallenge(await response.json());
   if (!challenge) throw new Error("Invalid gateway challenge");
-  challengeCache = challenge;
   return challenge.value;
 }
 
@@ -193,7 +202,6 @@ async function gatewayCryptoContext(action: string) {
   const keyBox = await importServerKey(response);
   const challenge = pickChallenge(response.challenge);
   if (challenge) {
-    challengeCache = challenge;
     return { keyBox, challenge: challenge.value };
   }
   return { keyBox, challenge: await gatewayChallenge(action) };
@@ -213,7 +221,7 @@ async function clientFingerprint() {
 }
 
 async function importAesKey(key: Uint8Array, usages: KeyUsage[]) {
-  return await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, usages);
+  return await crypto.subtle.importKey("raw", Uint8Array.from(key).buffer, { name: "AES-GCM" }, false, usages);
 }
 
 async function encryptServerKey(value: string, serverKeyBox?: ImportedServerKey) {
@@ -229,13 +237,27 @@ async function encryptServerKey(value: string, serverKeyBox?: ImportedServerKey)
   };
 }
 
+function safeJsonStringify(value: unknown): string {
+  const seen = new WeakSet();
+  return JSON.stringify(value, (key, val) => {
+    if (typeof val === "object" && val !== null) {
+      if (seen.has(val)) return undefined;
+      seen.add(val);
+      // 跳过 Vue 响应式对象内部属性
+      if (typeof val.__v_isRef === "function") return (val as { value: unknown }).value;
+      if (val instanceof Map || val instanceof Set) return undefined;
+    }
+    return val;
+  });
+}
+
 async function encryptAesGcm(key: Uint8Array, value: unknown) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const aes = await importAesKey(key, ["encrypt"]);
   const body = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv, tagLength: 128 },
     aes,
-    textEncoder.encode(JSON.stringify(value ?? {}))
+    textEncoder.encode(safeJsonStringify(value ?? {}))
   );
   return {
     iv: bytesToBase64url(iv),
@@ -244,7 +266,7 @@ async function encryptAesGcm(key: Uint8Array, value: unknown) {
 }
 
 async function hmacSha256(key: Uint8Array, value: string) {
-  const cryptoKey = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const cryptoKey = await crypto.subtle.importKey("raw", Uint8Array.from(key).buffer, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return bytesToBase64url(await crypto.subtle.sign("HMAC", cryptoKey, textEncoder.encode(value)));
 }
 
@@ -350,6 +372,7 @@ function actionPayload(
     scope?: string;
   } = {}
 ): GatewayAction {
+  if (!isGatewayActionCode(action)) throw new Error(`Unknown gateway action code: ${action}`);
   return {
     action,
     payload: {
@@ -464,6 +487,24 @@ function resolveGatewayAction(url: string, method: string, body: unknown): Gatew
   if (method === "PATCH" && space) return actionPayload("w3", { params: { id: space[1] }, body });
   if (method === "DELETE" && space) return actionPayload("w4", { params: { id: space[1] } });
 
+  if (method === "GET" && path === "/api/forms") return actionPayload("fm1");
+  if (method === "POST" && path === "/api/forms") return actionPayload("fm2", { body });
+  const formDetail = path.match(/^\/api\/forms\/(\d+)$/);
+  if (method === "GET" && formDetail) return actionPayload("fm3", { params: { id: formDetail[1] } });
+  if (method === "PUT" && formDetail) return actionPayload("fm4", { params: { id: formDetail[1] }, body });
+  if (method === "DELETE" && formDetail) return actionPayload("fm5", { params: { id: formDetail[1] } });
+  const formPublish = path.match(/^\/api\/forms\/(\d+)\/publish$/);
+  if (method === "POST" && formPublish) return actionPayload("fm6", { params: { id: formPublish[1] }, body });
+  const formSubmissions = path.match(/^\/api\/forms\/(\d+)\/submissions$/);
+  if (method === "GET" && formSubmissions) return actionPayload("fm7", { params: { id: formSubmissions[1] }, query });
+  if (method === "DELETE" && formSubmissions) return actionPayload("fm10", { params: { id: formSubmissions[1] } });
+  const formSubmission = path.match(/^\/api\/forms\/(\d+)\/submissions\/(\d+)$/);
+  if (method === "DELETE" && formSubmission) return actionPayload("fm11", { params: { id: formSubmission[1], submissionId: formSubmission[2] } });
+  const formExport = path.match(/^\/api\/forms\/(\d+)\/export$/);
+  if (method === "GET" && formExport) return actionPayload("fm8", { params: { id: formExport[1] }, query });
+  const formIpStats = path.match(/^\/api\/forms\/(\d+)\/ip-stats$/);
+  if (method === "GET" && formIpStats) return actionPayload("fm9", { params: { id: formIpStats[1] } });
+
   if (method === "GET" && path === "/api/admin/invites") return actionPayload("i1");
   if (method === "POST" && path === "/api/admin/invites") return actionPayload("i2", { body });
   if (method === "POST" && path === "/api/admin/invites/batch") return actionPayload("i3", { body });
@@ -480,7 +521,6 @@ function resolveGatewayAction(url: string, method: string, body: unknown): Gatew
   if (method === "POST" && path === "/api/admin/security/totp/setup") return actionPayload("y2");
   if (method === "POST" && path === "/api/admin/security/totp/enable") return actionPayload("y3", { body });
   if (method === "POST" && path === "/api/admin/security/totp/disable") return actionPayload("y4", { body });
-  if (method === "GET" && path === "/api/admin/security/totp/recovery-codes") return actionPayload("y5");
   if (method === "POST" && path === "/api/admin/security/totp/recovery-codes") return actionPayload("y6", { body });
   if (method === "POST" && path === "/api/admin/security/totp/reset") return actionPayload("y7", { body });
   if (method === "POST" && path === "/api/admin/security/danger-verify") return actionPayload("y8", { body });
@@ -493,10 +533,7 @@ export function shouldUseGateway(url: string, body?: BodyInit | null) {
   if (body instanceof FormData) return false;
   const path = resolveApiPath(url);
   return path.startsWith("/api/")
-    && path !== "/api/gateway"
-    && path !== "/api/crypto/public-key"
-    && path !== "/api/crypto/challenge"
-    && path !== "/api/bootstrap";
+    && !isGatewayExemptPath(path);
 }
 
 export async function gatewayClientRequest<T>(url: string, options: RequestInit, headers: Headers) {

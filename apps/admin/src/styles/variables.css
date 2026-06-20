@@ -1,71 +1,69 @@
-@font-face {
-  font-family: "AlibabaPuHuiTi";
-  src: url("/fonts/AlibabaPuHuiTi-3-55-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "AlibabaPuHuiTi";
-  src: url("/fonts/AlibabaPuHuiTi-3-85-Bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "SourceHanSans";
-  src: url("/fonts/SourceHanSansSC-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "SourceHanSerif";
-  src: url("/fonts/SourceHanSerifSC-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  --cd-font-sans: "AlibabaPuHuiTi", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --cd-font-serif: "SourceHanSerif", "Songti SC", "STSong", "SimSun", serif;
+  --cd-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --cd-font-serif: "Songti SC", "STSong", "SimSun", serif;
   --cd-font-mono: "JetBrains Mono", Consolas, "SFMono-Regular", ui-monospace, monospace;
-  --cd-bg: #fbfcff;
+
+  /* ChenDoc 基础表面 */
+  --cd-bg: #f5f6f8;
   --cd-bg-plain: #ffffff;
-  --cd-surface: #f7f8ff;
+  --cd-surface: #ffffff;
   --cd-panel: #ffffff;
-  --cd-paper: #fbfcff;
-  --cd-ink: #17213a;
-  --cd-border: #e4e7f4;
-  --cd-border-strong: #c8cdec;
-  --cd-text: #24304d;
-  --cd-muted: #657191;
-  --cd-faint: #9ea8c7;
-  --cd-primary: #7d6be8;
-  --cd-primary-hover: #6652d4;
-  --cd-primary-soft: #f2efff;
-  --cd-accent: #7d6be8;
-  --cd-accent-hover: #6652d4;
-  --cd-accent-soft: #f2efff;
+  --cd-paper: #ffffff;
+  --cd-paper-soft: #f8fafc;
+
+  /* 文字颜色 */
+  --cd-ink: #0f172a;
+  --cd-text: #1d2939;
+  --cd-text-secondary: #64748b;
+
+  /* 边框色系 */
+  --cd-border: #e8eaed;
+  --cd-border-strong: #d0d5dd;
+
+  /* 辅助文字色 */
+  --cd-muted: #5f6b85;
+  --cd-faint: #667085;
+
+  /* 主色调 - 品牌蓝 */
+  --cd-primary: #2563eb;
+  --cd-primary-hover: #1d4ed8;
+  --cd-primary-soft: #eff6ff;
+
+  /* 强调色 */
+  --cd-accent: #2563eb;
+  --cd-accent-hover: #1d4ed8;
+  --cd-accent-soft: #eff6ff;
+
+  /* 品牌绿 */
   --cd-brand-accent: #059669;
   --cd-brand-accent-soft: #e9f8f1;
-  --cd-aura: #f3f0ff;
+
+  /* 紫罗兰色系（保留给部分装饰元素） */
+  --cd-aura: #f2efff;
   --cd-aura-strong: #8c7af0;
   --cd-lilac: #f2efff;
+
+  /* 功能色 */
   --cd-danger: #dc2626;
   --cd-danger-soft: #fef2f2;
   --cd-warning: #d97706;
   --cd-success: #059669;
   --cd-success-soft: #ecfdf5;
-  --cd-radius: 10px;
-  --cd-shadow: 0 18px 42px rgba(82, 73, 146, 0.10);
-  --cd-shadow-soft: 0 10px 24px rgba(82, 73, 146, 0.07);
-  --cd-focus: rgba(125, 107, 232, 0.24);
+
+  /* 圆角 */
+  --cd-radius: 12px;
+
+  /* 阴影系统 */
+  --cd-shadow: 0 20px 44px rgba(15, 23, 42, 0.14);
+  --cd-shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --cd-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* 焦点样式 */
+  --cd-focus: rgba(37, 99, 235, 0.24);
+
+  /* 布局尺寸 */
   --cd-sidebar: 226px;
   --cd-header: 80px;
+
   font-family: var(--cd-font-sans);
 }

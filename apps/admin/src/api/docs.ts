@@ -6,6 +6,7 @@ export interface DocSummary {
   parentId: number | null;
   title: string;
   summary?: string | null;
+  tags?: string[] | string | null;
   status: "draft" | "published" | "archived";
   pinned?: boolean;
   sort: number;
@@ -41,6 +42,18 @@ export type DocUpdateInput = Partial<Pick<DocDetail, "title" | "contentJson" | "
 export interface DocVersion {
   id: number;
   title: string;
+  wordCount: number;
+  authorName: string;
+  diffSummary: string;
+  createdBy?: number | null;
+  createdAt: string;
+}
+
+export interface DocVersionPreview {
+  id: number;
+  title: string;
+  contentText: string;
+  wordCount: number;
   createdBy?: number | null;
   createdAt: string;
 }
@@ -70,6 +83,19 @@ export function listTrashDocsApi(options: { page?: number; pageSize?: number; si
   if (options.pageSize) params.set("pageSize", String(options.pageSize));
   const query = params.toString() ? `?${params.toString()}` : "";
   return request<{ docs: DocSummary[]; pagination?: PageInfo }>(`/api/docs/trash${query}`, { signal: options.signal });
+}
+
+export interface TrashStats {
+  trashCount: number;
+  storageUsedBytes: number;
+  storageTotalBytes: number;
+  oldestDeletedAt: string | null;
+  oldestDeletedDocUid: string | null;
+  oldestDeletedTitle: string | null;
+}
+
+export function getTrashStatsApi() {
+  return request<TrashStats>("/api/admin/docs/trash/stats");
 }
 
 export function createDocApi(title: string) {
@@ -133,4 +159,12 @@ export function listDocVersionsApi(docUid: string) {
 
 export function restoreDocVersionApi(docUid: string, versionId: number) {
   return request<{ doc: DocDetail }>(`/api/docs/${docUid}/versions/${versionId}/restore`, { method: "POST" });
+}
+
+export function getDocVersionPreviewApi(docUid: string, versionId: number) {
+  return request<{ version: DocVersionPreview }>(`/api/docs/${docUid}/versions/${versionId}`);
+}
+
+export function restoreDocVersionAsCopyApi(docUid: string, versionId: number) {
+  return request<{ doc: DocDetail }>(`/api/docs/${docUid}/versions/${versionId}/restore-copy`, { method: "POST" });
 }

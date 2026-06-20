@@ -2,7 +2,8 @@
 import DesktopAppShell from "../../components/layout/DesktopAppShell.vue";
 import MobileAppShell from "../../components/layout/MobileAppShell.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
-import "../reviews/share-review.css";
+import "./css/admin-layout.css";
+import "../reviews/css/share-review.css";
 
 const isMobile = useIsMobileViewport();
 </script>

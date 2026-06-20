@@ -7,6 +7,7 @@ import { drizzle as drizzleMysql } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { env } from "../config/env.js";
 import * as schema from "./schema.js";
+import { measureRequestPhase } from "../utils/requestTiming.js";
 
 type RunResult = {
   changes: number;
@@ -58,33 +59,43 @@ const rawDb = databaseProvider === "mysql"
 
 export const db: any = rawDb;
 
-export async function dbAll<T = unknown>(query: any): Promise<T[]> {
-  if (typeof query.all === "function") return query.all() as T[];
-  if (typeof query.execute === "function") return await query.execute() as T[];
-  return await query as T[];
+export async function dbAll<T = any>(query: any): Promise<T[]> {
+  return await measureRequestPhase("db", async () => {
+    if (typeof query.all === "function") return query.all() as T[];
+    if (typeof query.execute === "function") return await query.execute() as T[];
+    return await query as T[];
+  });
 }
 
-export async function dbGet<T = unknown>(query: any): Promise<T | undefined> {
-  if (typeof query.get === "function") return query.get() as T | undefined;
-  const rows = await dbAll<T>(query);
-  return rows[0];
+export async function dbGet<T = any>(query: any): Promise<T | undefined> {
+  return await measureRequestPhase("db", async () => {
+    if (typeof query.get === "function") return query.get() as T | undefined;
+    if (typeof query.execute === "function") {
+      const rows = await query.execute() as T[];
+      return rows[0];
+    }
+    const rows = await query as T[];
+    return rows[0];
+  });
 }
 
 export async function dbRun(query: any): Promise<RunResult> {
-  if (typeof query.run === "function") {
-    const result = query.run();
-    return {
-      changes: Number(result.changes ?? 0),
-      lastInsertRowid: Number(result.lastInsertRowid ?? 0)
-    };
-  }
+  return await measureRequestPhase("db", async () => {
+    if (typeof query.run === "function") {
+      const result = query.run();
+      return {
+        changes: Number(result.changes ?? 0),
+        lastInsertRowid: Number(result.lastInsertRowid ?? 0)
+      };
+    }
 
-  const result = typeof query.execute === "function" ? await query.execute() : await query;
-  const header = Array.isArray(result) ? result[0] : result;
-  return {
-    changes: Number(header?.affectedRows ?? header?.changedRows ?? 0),
-    lastInsertRowid: Number(header?.insertId ?? 0)
-  };
+    const result = typeof query.execute === "function" ? await query.execute() : await query;
+    const header = Array.isArray(result) ? result[0] : result;
+    return {
+      changes: Number(header?.affectedRows ?? header?.changedRows ?? 0),
+      lastInsertRowid: Number(header?.insertId ?? 0)
+    };
+  });
 }
 
 export async function dbTransaction<T>(callback: (tx: any) => Promise<T>): Promise<T> {

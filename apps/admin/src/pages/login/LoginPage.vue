@@ -5,12 +5,14 @@ import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-vue-next";
 import type { SiteConfigView } from "../../api/settings";
 import {
   bundledLogoUrl,
+  bundledWallpaperSmallUrl,
   bundledWallpaperUrl,
   preloadImageAsset,
   withBundledSiteAssets
 } from "../../config/site-assets";
 import { allowedPostLoginPath } from "../../router/access";
 import { useAuthStore } from "../../stores/auth";
+import "./css/login.css";
 
 type PublicSiteConfig = SiteConfigView;
 
@@ -49,6 +51,9 @@ const effectiveLogoUrl = computed(() => site.logoUrl || bundledLogoUrl);
 const effectiveWallpaperUrl = computed(() => site.authWallpaperUrl || bundledWallpaperUrl);
 const brandTitle = computed(() => site.shortName?.trim() || "陈书");
 const isCustomWallpaper = computed(() => effectiveWallpaperUrl.value !== bundledWallpaperUrl);
+const bundledWallpaperSrcset = computed(() => isCustomWallpaper.value
+  ? undefined
+  : `${bundledWallpaperSmallUrl} 720w, ${bundledWallpaperUrl} 1920w`);
 
 function takeStoredValue(key: string) {
   try {
@@ -172,7 +177,7 @@ async function prepareLoginPage() {
     const { getPublicSiteConfigApi } = await import("../../api/settings");
     nextConfig = withBundledSiteAssets((await getPublicSiteConfigApi()).config);
   } catch {
-    nextConfig = null;
+    // Bundled assets remain the fallback.
   }
 
   if (!nextConfig) {
@@ -246,6 +251,8 @@ onMounted(() => {
         <img
           class="auth-scene__image"
           :src="effectiveWallpaperUrl"
+          :srcset="bundledWallpaperSrcset"
+          sizes="100vw"
           alt=""
           decoding="async"
           fetchpriority="high"
@@ -274,8 +281,8 @@ onMounted(() => {
             <div class="auth-card__header">
               <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" referrerpolicy="no-referrer" />
               <div class="auth-heading">
-                <h1>{{ brandTitle }}</h1>
-                <p>文档管理平台</p>
+                <p class="auth-heading__title">{{ brandTitle }}</p>
+                <p class="auth-heading__subtitle">文档管理平台</p>
               </div>
             </div>
 

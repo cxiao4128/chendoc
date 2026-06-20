@@ -13,6 +13,7 @@ export interface TotpSetupView {
   secret: string;
   otpauthUrl: string;
   expireAt: number;
+  setupToken: string;
 }
 
 async function promptDangerPayload() {
@@ -61,21 +62,16 @@ export function beginTotpSetupApi() {
   return request<{ setup: TotpSetupView }>("/api/admin/security/totp/setup", { method: "POST" });
 }
 
-export function enableTotpApi(otp: string) {
+export function enableTotpApi(otp: string, setupToken: string) {
   return request<{ enabled: true; recoveryCodes: string[] }>("/api/admin/security/totp/enable", {
     method: "POST",
-    body: JSON.stringify({ otp })
+    body: JSON.stringify({ otp, setupToken })
   });
 }
 
 export async function disableTotpApi() {
   await ensureDangerVerified();
   return request<{ ok: true }>("/api/admin/security/totp/disable", { method: "POST" });
-}
-
-export async function listRecoveryCodesApi() {
-  await ensureDangerVerified();
-  return request<{ recoveryCodes: string[] }>("/api/admin/security/totp/recovery-codes");
 }
 
 export async function regenerateRecoveryCodesApi() {

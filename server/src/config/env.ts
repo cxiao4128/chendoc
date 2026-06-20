@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
+import { ENV_DEFAULTS } from "./env-defaults.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const serverDir = resolve(here, "../..");
@@ -84,8 +85,8 @@ function optionalAdminPassword(name: string, username: string): string | undefin
   if (weakAdminPasswordValues.has(normalized) || normalized.startsWith("please_change_this")) {
     throw new Error(`${name} must be changed before initializing the admin account.`);
   }
-  if (!allowWeakAdminPassword() && value.length < 6) {
-    throw new Error(`${name} must be at least 6 characters.`);
+  if (!allowWeakAdminPassword() && value.length < 12) {
+    throw new Error(`${name} must be at least 12 characters.`);
   }
   if (usernamePart && normalized.includes(usernamePart)) {
     throw new Error(`${name} must not contain DEFAULT_ADMIN_USERNAME.`);
@@ -169,10 +170,20 @@ export const env = {
   trustProxy: trustProxySetting(),
   jwtSecret: requiredSecret("JWT_SECRET", 32),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "2h",
+  // IDLE_TIMEOUT_MS: 会话 idle 超时时间（毫秒），默认 4 小时，确保正常使用时不会频繁失效
+  idleTimeoutMs: optionalInt("IDLE_TIMEOUT_MS", ENV_DEFAULTS.IDLE_TIMEOUT_MS),
   configEncryptionKey: requiredSecret("CONFIG_ENCRYPTION_KEY", 32),
   rsaPrivateKeyEncryptionKey: requiredSecret("RSA_PRIVATE_KEY_ENCRYPTION_KEY", 32),
   documentEncryptionKey: requiredSecret("CHENDOC_DOCUMENT_ENCRYPTION_KEY", 32),
   documentKeyVersion: process.env.CHENDOC_DOCUMENT_KEY_VERSION?.trim() || "v1",
+  documentKeyring: process.env.CHENDOC_DOCUMENT_KEYRING?.trim() || "",
+  forceHttps: flagEnabled("CHENDOC_FORCE_HTTPS"),
+  cspConnectSources: (process.env.CHENDOC_CSP_CONNECT_SRC ?? "https://*.r2.cloudflarestorage.com")
+    .split(",").map((item) => item.trim()).filter(Boolean),
+  uploadScanWebhook: process.env.CHENDOC_UPLOAD_SCAN_WEBHOOK?.trim() || "",
+  uploadOrphanRetentionHours: optionalPositiveInt("CHENDOC_UPLOAD_ORPHAN_RETENTION_HOURS", 24),
+  logRetentionDays: optionalPositiveInt("CHENDOC_LOG_RETENTION_DAYS", 90),
+  failedLogMaxMb: optionalPositiveInt("CHENDOC_FAILED_LOG_MAX_MB", 20),
   defaultAdminUsername,
   defaultAdminPassword: optionalAdminPassword("DEFAULT_ADMIN_PASSWORD", defaultAdminUsername),
   r2: {

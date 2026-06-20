@@ -1,18 +1,4 @@
 export const sharePageStyle = `
-  @font-face {
-    font-family: "AlibabaPuHuiTi";
-    src: url("/fonts/AlibabaPuHuiTi-3-55-Regular.woff2") format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }
-  @font-face {
-    font-family: "SourceHanSerif";
-    src: url("/fonts/SourceHanSerifSC-Regular.woff2") format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }
   :root {
     color-scheme: light;
     --bg: #f6f8fb;
@@ -29,9 +15,9 @@ export const sharePageStyle = `
     --success: #059669;
     --success-soft: #e9f8f1;
     --danger: #dc2626;
-    --font-sans: "AlibabaPuHuiTi", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-    --font-serif: "SourceHanSerif", "Songti SC", "STSong", "SimSun", serif;
-    --font-mono: "JetBrains Mono", Consolas, "SFMono-Regular", ui-monospace, monospace;
+    --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    --font-serif: "Songti SC", "STSong", "SimSun", serif;
+    --font-mono: Consolas, "SFMono-Regular", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   body {
@@ -43,6 +29,12 @@ export const sharePageStyle = `
     font-size: 16px;
   }
   ::selection { background: rgba(37, 99, 235, 0.18); color: var(--ink); }
+  /* ===== 分享页秒开优化：内容骨架屏渲染 ===== */
+  .content {
+    min-width: 0;
+    min-height: 200px;
+    overflow-wrap: anywhere;
+  }
   .topbar {
     position: sticky;
     top: 0;
@@ -120,7 +112,13 @@ export const sharePageStyle = `
   .content h2 { font-size: 28px; }
   .content h3 { font-size: 22px; }
   .content :where(p,ul,ol,blockquote,pre,table,figure) { margin: 16px 0; }
-  .content a { color: var(--accent-dark); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  .content a {
+    color: var(--accent-dark);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
   .content blockquote {
     border-left: 3px solid var(--accent);
     background: var(--accent-soft);

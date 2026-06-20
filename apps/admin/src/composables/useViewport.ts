@@ -17,7 +17,7 @@ export function useViewport(query = MOBILE_VIEWPORT_QUERY) {
       mediaQuery.addEventListener("change", update);
       return;
     }
-    mediaQuery.addListener(update);
+    (mediaQuery as MediaQueryList & { addListener(listener: () => void): void }).addListener(update);
   });
 
   onBeforeUnmount(() => {
@@ -26,7 +26,7 @@ export function useViewport(query = MOBILE_VIEWPORT_QUERY) {
       mediaQuery.removeEventListener("change", update);
       return;
     }
-    mediaQuery.removeListener(update);
+    (mediaQuery as MediaQueryList & { removeListener(listener: () => void): void }).removeListener(update);
   });
 
   return matches;

@@ -7,6 +7,8 @@ export const MYSQL_TABLE_NAMES = [
   "auth_sessions",
   "docs",
   "shares",
+  "forms",
+  "form_submissions",
   "uploads",
   "doc_versions",
   "settings",
@@ -158,7 +160,51 @@ export const MYSQL_CREATE_TABLES = [
     UNIQUE KEY shares_share_code_unique (share_code),
     UNIQUE KEY shares_share_token_unique (share_token),
     UNIQUE KEY shares_custom_slug_unique (custom_slug),
-    KEY shares_doc_idx (doc_id)
+    KEY shares_doc_idx (doc_id),
+    CONSTRAINT fk_shares_doc FOREIGN KEY (doc_id) REFERENCES docs(id) ON DELETE CASCADE,
+    CONSTRAINT fk_shares_requested_by FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_shares_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS forms (
+    id INT NOT NULL AUTO_INCREMENT,
+    form_uid VARCHAR(32) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    fields TEXT NOT NULL DEFAULT ('[]'),
+    owner_id INT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'draft',
+    max_submissions INT NULL,
+    allow_multiple TINYINT(1) NOT NULL DEFAULT 0,
+    exclusive_info TEXT NULL,
+    privacy_notice TEXT NULL,
+    retention_days INT NULL,
+    store_user_agent TINYINT(1) NOT NULL DEFAULT 0,
+    view_count INT NOT NULL DEFAULT 0,
+    submission_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY forms_form_uid_unique (form_uid),
+    KEY forms_owner_idx (owner_id),
+    KEY forms_status_idx (status),
+    CONSTRAINT fk_forms_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS form_submissions (
+    id INT NOT NULL AUTO_INCREMENT,
+    form_id INT NOT NULL,
+    data TEXT NOT NULL,
+    ip VARCHAR(64) NOT NULL,
+    submitter_id VARCHAR(64) NULL,
+    user_agent TEXT NULL,
+    submitted_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY form_submissions_identity_unique (form_id, submitter_id),
+    KEY form_submissions_form_idx (form_id),
+    KEY form_submissions_ip_idx (ip),
+    KEY form_submissions_time_idx (submitted_at),
+    CONSTRAINT fk_form_submissions_form FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
   ) ${tableOptions}`,
 
   `CREATE TABLE IF NOT EXISTS uploads (

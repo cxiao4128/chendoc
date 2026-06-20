@@ -4,7 +4,6 @@ interface AuthJwtSession {
 }
 
 const REFRESH_SKEW_MS = 10 * 60 * 1000;
-let session: AuthJwtSession | null = null;
 
 function parseExpireAt(expireAt?: string | number | Date) {
   if (expireAt instanceof Date) return expireAt.getTime();
@@ -15,6 +14,10 @@ function parseExpireAt(expireAt?: string | number | Date) {
   }
   return 0;
 }
+
+// Token 只保存在当前页面内存。刷新/关闭页面后必须重新登录，避免同源 XSS
+// 从 sessionStorage 直接窃取长期有效的认证令牌。
+let session: AuthJwtSession | null = null;
 
 export function saveAuthSession(token: string, expireAt?: string | number | Date) {
   const value = parseExpireAt(expireAt);
@@ -34,7 +37,9 @@ export function getSessionId() {
 }
 
 export function shouldRefreshAuthSession() {
-  return !!session && session.expireAt - Date.now() <= REFRESH_SKEW_MS;
+  if (!session) return false;
+  // 距离过期还有 10 分钟时触发刷新
+  return session.expireAt - Date.now() <= REFRESH_SKEW_MS;
 }
 
 export async function buildAuthorization() {

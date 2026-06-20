@@ -1,0 +1,13 @@
+/* ========================================
+   腾讯文档风格 - 回收站
+   主入口：各模块 CSS 组合
+   ======================================== */
+
+/* 模块 */
+@import "./trash-header.css";
+@import "./trash-stats.css";
+@import "./trash-layout.css";
+@import "./trash-table.css";
+
+/* 响应式（最后，覆盖上面的布局） */
+@import "./trash-responsive.css";

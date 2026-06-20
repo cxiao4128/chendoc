@@ -10,6 +10,7 @@ const chunkNames = {
   auth: "core-a",
   session: "core-b",
   request: "core-c",
+  gateway: "gateway",
   crypto: "core-d",
   docCore: "feature-doc-core",
   editorShell: "editor-shell",
@@ -66,14 +67,13 @@ function manualChunks(id: string) {
 
   if (normalized.includes("/node_modules/")) return chunkNames.vendor;
 
-  if (normalized.includes("/src/gateway/")) return chunkNames.request;
+  if (normalized.includes("/src/gateway/") || normalized.endsWith("/src/api/endpoints.ts")) return chunkNames.gateway;
   if (normalized.endsWith("/src/security/cryptoClient.ts")) return chunkNames.crypto;
   if (normalized.endsWith("/src/security/sessionToken.ts") || normalized.endsWith("/src/stores/auth.ts")) return chunkNames.session;
   if (normalized.endsWith("/src/api/auth.ts")) return chunkNames.auth;
   if (normalized.endsWith("/src/api/docs.ts") || normalized.endsWith("/src/stores/doc.ts")) return chunkNames.docCore;
   if (
     normalized.endsWith("/src/api/request.ts")
-    || normalized.endsWith("/src/api/endpoints.ts")
     || normalized.endsWith("/src/security/runtimeGuard.ts")
   ) return chunkNames.request;
 
@@ -85,6 +85,7 @@ function chunkFileNames(chunk: { name: string }) {
   if (chunk.name.startsWith("editor-")) return "assets/e-[hash].js";
   if (chunk.name === chunkNames.crypto) return "assets/c-[hash].js";
   if (chunk.name === chunkNames.request) return "assets/b-[hash].js";
+  if (chunk.name === chunkNames.gateway) return "assets/g-[hash].js";
   if (chunk.name === chunkNames.auth || chunk.name === chunkNames.session) return "assets/a-[hash].js";
   if (chunk.name === chunkNames.docCore) return "assets/p-[hash].js";
   if (chunk.name.startsWith("page-")) return "assets/p-[hash].js";
@@ -116,7 +117,7 @@ export default defineConfig(({ command, mode }) => {
       log: false,
       autoExcludeNodeModules: false,
       threadPool: false,
-      excludes: [/^assets\/(?:e|v)-[\w-]+\.js$/],
+      excludes: [/^(?!assets\/g-).*\.js$/],
       options: obfuscatorOptions
     }));
   }
@@ -131,11 +132,13 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       sourcemap: false,
-      // Keep route CSS in the initial stylesheet so authenticated redirects
-      // cannot render admin pages before their async page styles arrive.
-      cssCodeSplit: false,
+      cssCodeSplit: true,
       minify: "esbuild",
       rollupOptions: {
+        onLog(level, log, handler) {
+          if (level === "warn") throw new Error(`Build warning: ${log.message}`);
+          handler(level, log);
+        },
         output: {
           entryFileNames: "assets/a-[hash].js",
           chunkFileNames,

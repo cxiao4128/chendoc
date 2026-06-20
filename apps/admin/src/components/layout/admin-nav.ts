@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
+import { BookOpen, ClipboardCheck, FileSpreadsheet, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
 import type { WorkspaceBase } from "../../router/access";
 
 export interface AdminNavItem {
@@ -17,6 +17,8 @@ export interface AdminRouteMeta {
 export const adminNavItems: AdminNavItem[] = [
   { to: "/admin/docs", label: "文档", icon: BookOpen },
   { to: "/admin/trash", label: "回收站", icon: Trash2, adminOnly: true },
+  { to: "/admin/invites", label: "邀请码", icon: BookOpen, adminOnly: true },
+  { to: "/admin/forms", label: "收集表", icon: FileSpreadsheet, adminOnly: true },
   { to: "/admin/share-reviews", label: "审核", icon: ClipboardCheck, adminOnly: true },
   { to: "/admin/security", label: "安全中心", icon: ShieldCheck, adminOnly: true },
   { to: "/admin/templates", label: "模板中心", icon: BookOpen },
@@ -56,6 +58,14 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
       eyebrow: "ChenDoc",
       title: "文档",
       description: "文档、状态、分享。"
+    };
+  }
+
+  if (normalizedPath.startsWith("/admin/forms")) {
+    return {
+      eyebrow: "数据收集",
+      title: "收集表",
+      description: "问卷调查、活动报名、反馈收集。"
     };
   }
 

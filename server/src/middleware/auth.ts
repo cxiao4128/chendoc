@@ -32,7 +32,8 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
       username: user.username,
       role: user.role,
       isSuperAdmin: isSuperAdminUser(user),
-      sessionId: session.sessionId
+      sessionId: session.sessionId,
+      sessionTokenDigest: session.tokenDigest
     };
   } catch {
     return reply.code(401).send({ code: "SESSION_EXPIRED", message: "未登录或登录已过期" });

@@ -489,25 +489,91 @@ function publicDocSelect() {
   };
 }
 
+// ===== 分享页秒开优化：缓存解密结果 =====
+interface DecryptedDocCache {
+  doc: PublicDocRecord;
+  decryptedAt: number;
+}
+
+const DECRYPT_CACHE_TTL_MS = 30 * 1000; // 30秒解密缓存
+const DECRYPT_CACHE_MAX_SIZE = 200;
+const decryptedDocCache = new Map<number, DecryptedDocCache>();
+
+function getCachedDecryptedDoc(docId: number): PublicDocRecord | null {
+  const cached = decryptedDocCache.get(docId);
+  if (!cached) return null;
+  if (Date.now() - cached.decryptedAt > DECRYPT_CACHE_TTL_MS) {
+    decryptedDocCache.delete(docId);
+    return null;
+  }
+  return cached.doc;
+}
+
+function setCachedDecryptedDoc(docId: number, doc: PublicDocRecord) {
+  if (decryptedDocCache.size >= DECRYPT_CACHE_MAX_SIZE) {
+    const entries = Array.from(decryptedDocCache.entries());
+    entries.sort((a, b) => a[1].decryptedAt - b[1].decryptedAt);
+    const deleteCount = Math.ceil(entries.length * 0.3);
+    for (let i = 0; i < deleteCount; i++) {
+      decryptedDocCache.delete(entries[i][0]);
+    }
+  }
+  decryptedDocCache.set(docId, { doc, decryptedAt: Date.now() });
+}
+
+function invalidateDecryptedDocCache(docId?: number) {
+  if (docId) {
+    decryptedDocCache.delete(docId);
+  } else {
+    decryptedDocCache.clear();
+  }
+}
+
+export { invalidateDecryptedDocCache };
+
 export async function resolvePublicShare(shareKey: string | number): Promise<PublicShareResolution> {
-  const share = await dbGet<typeof shares.$inferSelect>(db
-    .select()
-    .from(shares)
-    .where(shareWhere(shareKey))
-    .limit(1));
+  // ===== 分享页秒开优化：并行查询 shares 和 docs =====
+  const [share, docRecord] = await Promise.all([
+    dbGet<typeof shares.$inferSelect>(db
+      .select()
+      .from(shares)
+      .where(shareWhere(shareKey))
+      .limit(1)),
+    dbGet<PublicDocRecord>(db
+      .select(publicDocSelect())
+      .from(docs)
+      .where(sql`${docs.id} = (SELECT doc_id FROM shares WHERE ${shareWhere(shareKey)} LIMIT 1)`)
+      .limit(1))
+  ]);
+
   if (!share) return { ok: false, reason: "missing" };
   if (!share.isEnabled || share.reviewStatus !== "approved") return { ok: false, reason: "disabled" };
   if (share.expireAt && share.expireAt.getTime() <= Date.now()) return { ok: false, reason: "expired" };
 
-  const doc = await dbGet<PublicDocRecord>(db
-    .select(publicDocSelect())
-    .from(docs)
-    .leftJoin(users, eq(docs.createdBy, users.id))
-    .where(eq(docs.id, share.docId))
-    .limit(1));
+  // ===== 分享页秒开优化：先检查数据库中的删除状态，再考虑缓存 =====
+  if (!docRecord) return { ok: false, reason: "missing" };
 
-  if (!doc) return { ok: false, reason: "missing" };
-  const decryptedDoc = decryptDocumentRecord(doc);
+  // 如果数据库中已删除，永不使用缓存
+  if (docRecord.deletedAt) {
+    invalidateDecryptedDocCache(share.docId);
+    return { ok: false, reason: "deleted" };
+  }
+
+  // 检查缓存
+  const docId = share.docId;
+  let cachedDoc = getCachedDecryptedDoc(docId);
+
+  if (cachedDoc && !cachedDoc.deletedAt) {
+    // 缓存命中且未删除，直接使用
+    if (isUserOwnedDoc(cachedDoc) && !isUserShareCode(share.shareCode)) return { ok: false, reason: "missing" };
+    if (!isUserOwnedDoc(cachedDoc) && !isAdminShareCode(share.shareCode)) return { ok: false, reason: "missing" };
+    return { ok: true, share, doc: cachedDoc, protected: !!share.passwordHash };
+  }
+
+  // 解密并缓存
+  const decryptedDoc = decryptDocumentRecord(docRecord);
+  setCachedDecryptedDoc(docId, decryptedDoc);
+
   if (decryptedDoc.deletedAt) return { ok: false, reason: "deleted" };
   if (isUserOwnedDoc(decryptedDoc) && !isUserShareCode(share.shareCode)) return { ok: false, reason: "missing" };
   if (!isUserOwnedDoc(decryptedDoc) && !isAdminShareCode(share.shareCode)) return { ok: false, reason: "missing" };

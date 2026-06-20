@@ -116,7 +116,7 @@ export const docs = sqliteTable("docs", {
 
 export const shares = sqliteTable("shares", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  docId: integer("doc_id").notNull().references(() => docs.id),
+  docId: integer("doc_id").notNull().references(() => docs.id, { onDelete: "cascade" }),
   shareCode: integer("share_code").notNull().unique(),
   shareToken: text("share_token").notNull().unique(),
   customSlug: text("custom_slug").unique(),
@@ -125,8 +125,8 @@ export const shares = sqliteTable("shares", {
   reviewStatus: text("review_status", { enum: ["pending", "approved", "rejected"] }).notNull().default("approved"),
   reviewNote: text("review_note"),
   reviewContentHash: text("review_content_hash"),
-  requestedBy: integer("requested_by").references(() => users.id),
-  reviewedBy: integer("reviewed_by").references(() => users.id),
+  requestedBy: integer("requested_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedBy: integer("reviewed_by").references(() => users.id, { onDelete: "set null" }),
   reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
   expireAt: integer("expire_at", { mode: "timestamp_ms" }),
   viewCount: integer("view_count").notNull().default(0),
@@ -270,6 +270,46 @@ export const operationLogs = sqliteTable("operation_logs", {
 }));
 
 export const uniqueShareCode = uniqueIndex("shares_share_code_unique").on(shares.shareCode);
+
+// ===== 收集表模块 =====
+export const forms = sqliteTable("forms", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  formUid: text("form_uid").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  fields: text("fields").notNull().default("[]"),  // JSON: FormField[]
+  ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["draft", "published", "closed"] }).notNull().default("draft"),
+  maxSubmissions: integer("max_submissions"),
+  allowMultiple: integer("allow_multiple", { mode: "boolean" }).notNull().default(false),
+  exclusiveInfo: text("exclusive_info"),  // JSON: 提交后展示给填写者的专属信息
+  privacyNotice: text("privacy_notice"),
+  retentionDays: integer("retention_days"),
+  storeUserAgent: integer("store_user_agent", { mode: "boolean" }).notNull().default(false),
+  viewCount: integer("view_count").notNull().default(0),
+  submissionCount: integer("submission_count").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  formUidUnique: uniqueIndex("uk_forms_form_uid").on(table.formUid),
+  formOwnerIdx: index("forms_owner_idx").on(table.ownerId),
+  formStatusIdx: index("forms_status_idx").on(table.status)
+}));
+
+export const formSubmissions = sqliteTable("form_submissions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  formId: integer("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+  data: text("data").notNull(),  // JSON: 提交的数据
+  ip: text("ip").notNull(), // 不存原始 IP，只存不可逆来源摘要
+  submitterId: text("submitter_id"),
+  userAgent: text("user_agent"),
+  submittedAt: integer("submitted_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  submissionFormIdx: index("form_submissions_form_idx").on(table.formId),
+  submissionIdentityIdx: uniqueIndex("form_submissions_identity_unique").on(table.formId, table.submitterId),
+  submissionIpIdx: index("form_submissions_ip_idx").on(table.ip),
+  submissionTimeIdx: index("form_submissions_time_idx").on(table.submittedAt)
+}));
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

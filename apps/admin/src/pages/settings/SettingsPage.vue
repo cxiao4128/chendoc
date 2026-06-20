@@ -49,13 +49,18 @@ import { defaultRemoteLogoUrl, defaultRemoteWallpaperUrl } from "../../config/si
 import { useIsMobileViewport } from "../../composables/useViewport";
 import { nativeConfirm } from "../../services/nativeDialog";
 import { useAuthStore } from "../../stores/auth";
-import "./settings.css";
+import LogsSettingsSection from "./components/LogsSettingsSection.vue";
+import MaintenanceSettingsSection from "./components/MaintenanceSettingsSection.vue";
+import SiteSettingsSection from "./components/SiteSettingsSection.vue";
+import StorageSettingsSection from "./components/StorageSettingsSection.vue";
+import UsersSettingsSection from "./components/UsersSettingsSection.vue";
+import "./css/settings.css";
 
 type ActivePanel = "overview" | "logs" | "appearance" | "recovery" | "users" | "security" | "shares" | "storage" | "maintenance" | "version";
 type UserDetailTab = "info" | "roles" | "login" | "actions";
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v2.5.2";
+const APP_VERSION = "v2.6.0";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -572,12 +577,34 @@ async function checkUpdate() {
 }
 
 async function runSystemAction(action: SystemAction) {
-  if (action === "emptyTrash") {
-    const confirmed = await nativeConfirm({
-      title: "清空回收站",
-      message: "确认永久清理回收站全部文档吗？该操作不可撤销。",
+  const confirmations: Partial<Record<SystemAction, { title: string; message: string; confirmText: string; danger?: boolean }>> = {
+    cleanupExpiredSessions: {
+      title: "清理过期会话",
+      message: `将删除 ${systemStatus.value?.security.expiredSessions ?? 0} 个已过期登录会话。有效会话不受影响。`,
+      confirmText: "确认清理"
+    },
+    cleanupExpiredCaptchas: {
+      title: "清理验证码",
+      message: `将删除 ${systemStatus.value?.security.staleCaptchas ?? 0} 个已过期或已使用验证码。删除后不可恢复。`,
+      confirmText: "确认清理"
+    },
+    cleanupExpiredLogs: {
+      title: "清理过期日志",
+      message: "将永久删除超过系统保留期限的登录日志和操作日志；保留期限内日志不受影响。",
       confirmText: "永久清理",
       danger: true
+    },
+    emptyTrash: {
+      title: "清空回收站",
+      message: `将永久删除回收站内 ${systemStatus.value?.docs.trash ?? 0} 篇文档。该操作不可撤销。`,
+      confirmText: "永久清理",
+      danger: true
+    }
+  };
+  const confirmation = confirmations[action];
+  if (confirmation) {
+    const confirmed = await nativeConfirm({
+      ...confirmation
     });
     if (!confirmed) return;
   }
@@ -595,6 +622,12 @@ async function runSystemAction(action: SystemAction) {
 }
 
 async function exportConfig() {
+  const confirmed = await nativeConfirm({
+    title: "导出系统配置",
+    message: "将下载站点配置、脱敏 R2 配置、系统设置和运行统计。密钥及数据库密码不会导出。",
+    confirmText: "确认导出"
+  });
+  if (!confirmed) return;
   systemActionLoading.value = "export";
   systemMessage.value = "";
   try {
@@ -791,7 +824,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="activePanel === 'logs'" class="settings-page__panel">
+    <LogsSettingsSection v-if="activePanel === 'logs'">
       <div class="settings-page__panel-head">
         <div>
           <small>最近 80 条</small>
@@ -811,9 +844,9 @@ onBeforeUnmount(() => {
           <code>{{ logTargetText(log) }}</code>
         </article>
       </div>
-    </section>
+    </LogsSettingsSection>
 
-    <form v-if="activePanel === 'appearance'" class="settings-page__panel settings-page__appearance" @submit.prevent="save">
+    <SiteSettingsSection v-if="activePanel === 'appearance'" @submit="save">
       <div class="settings-page__panel-head">
         <div>
           <small>品牌显示</small>
@@ -849,7 +882,7 @@ onBeforeUnmount(() => {
       </div>
       <p class="settings-page__hint">为空则不展示，会显示在公开分享页正文下方。</p>
       <p v-if="message" class="settings-page__save-message">{{ message }}</p>
-    </form>
+    </SiteSettingsSection>
 
     <form v-if="activePanel === 'recovery'" class="settings-page__panel settings-page__appearance" @submit.prevent="save">
       <div class="settings-page__panel-head">
@@ -867,7 +900,7 @@ onBeforeUnmount(() => {
       <p v-if="message" class="settings-page__save-message">{{ message }}</p>
     </form>
 
-    <section v-if="activePanel === 'users'" class="settings-page__panel settings-page__users">
+    <UsersSettingsSection v-if="activePanel === 'users'">
       <template v-if="!userDetailOpen">
         <div class="settings-page__users-hero">
           <div>
@@ -1249,7 +1282,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </template>
-    </section>
+    </UsersSettingsSection>
 
     <section v-if="activePanel === 'security'" class="settings-page__panel">
       <div class="settings-page__panel-head">
@@ -1297,7 +1330,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="activePanel === 'storage'" class="settings-page__panel">
+    <StorageSettingsSection v-if="activePanel === 'storage'">
       <div class="settings-page__panel-head">
         <div>
           <small>上传记录</small>
@@ -1319,9 +1352,9 @@ onBeforeUnmount(() => {
         <span>{{ systemStatus?.r2.message || "等待状态刷新" }}</span>
         <code v-if="systemStatus?.r2.bucket">{{ systemStatus.r2.bucket }}</code>
       </div>
-    </section>
+    </StorageSettingsSection>
 
-    <section v-if="activePanel === 'maintenance'" class="settings-page__panel">
+    <MaintenanceSettingsSection v-if="activePanel === 'maintenance'">
       <div class="settings-page__panel-head">
         <div>
           <small>手动维护</small>
@@ -1334,13 +1367,20 @@ onBeforeUnmount(() => {
       <div class="settings-page__quick settings-page__quick--panel">
         <button type="button" :disabled="!!systemActionLoading" @click="runSystemAction('cleanupExpiredSessions')"><Trash2 :size="18" /><span><strong>清理过期会话</strong><small>删除过期登录会话</small></span></button>
         <button type="button" :disabled="!!systemActionLoading" @click="runSystemAction('cleanupExpiredCaptchas')"><Activity :size="18" /><span><strong>清理验证码</strong><small>删除过期/已用验证码</small></span></button>
+        <button type="button" :disabled="!!systemActionLoading" @click="runSystemAction('cleanupExpiredLogs')"><Trash2 :size="18" /><span><strong>清理过期日志</strong><small>按配置保留天数删除日志</small></span></button>
         <button type="button" :disabled="!!systemActionLoading" @click="runSystemAction('emptyTrash')"><Trash2 :size="18" /><span><strong>清理回收站</strong><small>永久删除回收站文档</small></span></button>
         <button type="button" :disabled="!!systemActionLoading" @click="runSystemAction('refreshStatus')"><Database :size="18" /><span><strong>刷新运行状态</strong><small>重新读取实时统计</small></span></button>
         <button type="button" :disabled="!!systemActionLoading" @click="exportConfig"><ExternalLink :size="18" /><span><strong>导出系统配置</strong><small>下载脱敏配置 JSON</small></span></button>
         <button type="button" :disabled="!!systemActionLoading" @click="runSystemAction('healthCheck')"><RefreshCw :size="18" /><span><strong>系统健康检测</strong><small>检查 API、DB、R2 配置</small></span></button>
       </div>
+      <div class="settings-page__storage-note">
+        <strong>最近成功备份</strong>
+        <span v-if="systemStatus?.backup">{{ formatLogDate(systemStatus.backup.createdAt) }} · {{ formatBytes(systemStatus.backup.size) }}</span>
+        <span v-else>尚无带校验和的成功备份记录</span>
+        <code v-if="systemStatus?.backup">SHA-256 {{ systemStatus.backup.sha256.slice(0, 16) }}…</code>
+      </div>
       <p v-if="systemMessage" class="settings-page__save-message">{{ systemMessage }}</p>
-    </section>
+    </MaintenanceSettingsSection>
 
     <section v-if="activePanel === 'version'" class="settings-page__version">
       <div class="settings-page__version-copy">

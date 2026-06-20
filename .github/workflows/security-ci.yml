@@ -8,6 +8,26 @@ on:
 jobs:
   audit-build-test:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: chendoc
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      NODE_ENV: test
+      DATABASE_PROVIDER: mysql
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/chendoc
+      JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
+      CONFIG_ENCRYPTION_KEY: ci-config-secret-ci-config-secret-ci-config
+      RSA_PRIVATE_KEY_ENCRYPTION_KEY: ci-rsa-secret-ci-rsa-secret-ci-rsa-secret
+      CHENDOC_DOCUMENT_ENCRYPTION_KEY: ci-doc-secret-ci-doc-secret-ci-doc-secret
+      PUBLIC_SITE_URL: https://ci.example.test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,6 +36,13 @@ jobs:
           cache: npm
       - run: npm ci --workspaces --include-workspace-root
       - run: npm audit --omit=dev
+      - run: npm --prefix apps/admin run lint
+      - run: npm --prefix apps/admin run typecheck
+      - run: npm run env:check
       - run: npm --prefix server run test
+      - run: npm --prefix server run db:migrate
+      - run: npm --prefix server run test:mysql-integrity
       - run: npm --prefix apps/admin run build
       - run: npm --prefix server run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

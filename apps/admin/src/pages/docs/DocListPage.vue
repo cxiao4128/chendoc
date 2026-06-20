@@ -7,9 +7,10 @@ import {
   FileText,
   FolderPlus,
   Grid3X3,
-  Import,
   ListFilter,
   MoreHorizontal,
+  PanelRightClose,
+  PanelRightOpen,
   Plus,
   RefreshCw,
   Search,
@@ -18,18 +19,19 @@ import {
   UploadCloud
 } from "lucide-vue-next";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
+import { normalizeError } from "../../utils/error";
 import EmptyState from "../../components/common/EmptyState.vue";
 import { createShareApi } from "../../api/shares";
-import { createSpaceApi } from "../../api/spaces";
-import { getSystemStatusApi, type SystemStatusView } from "../../api/settings";
+import { createSpaceApi, listSpacesApi } from "../../api/spaces";
+import { getSystemStatusApi, listManagedUsersApi, listOperationLogsApi, type OperationLogView, type SystemStatusView } from "../../api/settings";
 import { useAuth } from "../../composables/useAuth";
 import { useIsMobileViewport } from "../../composables/useViewport";
 import { useUpload } from "../../composables/useUpload";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import { nativePrompt } from "../../services/nativeDialog";
 import { useDocStore } from "../../stores/doc";
-import logoUrl from "../../assets/chendoc-logo.png";
-import "./doc-list.css";
+import { bundledLogoUrl as logoUrl } from "../../config/site-assets";
+import "./css/doc-list.css";
 
 type DocPreview = {
   title: string;
@@ -57,9 +59,21 @@ const { docsPath, trashPath, docPath } = useWorkspaceRoutes();
 
 const query = computed(() => String(route.query.q || "").trim());
 const activeView = ref<DocViewFilter>("all");
+const spaceFilter = ref("all");
+const tagFilter = ref("all");
+const updatedFilter = ref<"all" | "day" | "week" | "month">("all");
+const spaces = ref<Array<{ id: number; name: string }>>([]);
 const allDocs = computed(() => docs.docs);
+
+function docTags(doc: { tags?: string[] | string | null }) {
+  if (Array.isArray(doc.tags)) return doc.tags;
+  if (typeof doc.tags !== "string") return [];
+  try { return JSON.parse(doc.tags) as string[]; } catch { return []; }
+}
+
+const availableTags = computed(() => Array.from(new Set(allDocs.value.flatMap(docTags))).sort((a, b) => a.localeCompare(b, "zh-CN")));
 const visibleDocs = computed(() => {
-  const filtered = activeView.value === "published"
+  const viewFiltered = activeView.value === "published"
     ? allDocs.value.filter((doc) => doc.status === "published")
     : activeView.value === "shared"
       ? allDocs.value.filter((doc) => doc.shareCode && doc.shareEnabled)
@@ -70,6 +84,14 @@ const visibleDocs = computed(() => {
           : activeView.value === "unshared"
             ? allDocs.value.filter((doc) => !doc.shareCode || !doc.shareEnabled)
             : allDocs.value;
+  const cutoff = updatedFilter.value === "day" ? Date.now() - 86_400_000
+    : updatedFilter.value === "week" ? Date.now() - 7 * 86_400_000
+      : updatedFilter.value === "month" ? Date.now() - 30 * 86_400_000 : 0;
+  const filtered = viewFiltered.filter((doc) => {
+    if (spaceFilter.value !== "all" && String(doc.spaceId || "none") !== spaceFilter.value) return false;
+    if (tagFilter.value !== "all" && !docTags(doc).includes(tagFilter.value)) return false;
+    return !cutoff || new Date(doc.updatedAt).getTime() >= cutoff;
+  });
   return [...filtered].sort((left, right) => {
     if (sortMode.value === "titleAsc") return left.title.localeCompare(right.title, "zh-CN");
     if (sortMode.value === "createdDesc") return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
@@ -82,13 +104,17 @@ const bulkMode = ref(false);
 const selectedDocUids = ref<Set<string>>(new Set());
 const bulkDeleteOpen = ref(false);
 const bulkDeleting = ref(false);
-const sortMode = ref<SortMode>("updatedDesc");
+const sortMode = ref<SortMode>((route.query.sort as SortMode) || "updatedDesc");
 const compactMode = ref(false);
 const actionMessage = ref("");
 const uploading = ref(false);
 const uploadInput = ref<HTMLInputElement | null>(null);
 const systemStatus = ref<SystemStatusView | null>(null);
-let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
+const managedUserCount = ref(1);
+const recentActivity = ref<OperationLogView[]>([]);
+const toolboxCollapsed = ref(false);
+const recentSearches = ref<string[]>([]);
+let searchTimer: number | null = null;
 const listErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).listError) || localListError.value);
 const selectedCount = computed(() => selectedDocUids.value.size);
 const allVisibleSelected = computed(() => !!visibleDocs.value.length && visibleDocs.value.every((doc) => selectedDocUids.value.has(doc.docUid)));
@@ -99,7 +125,7 @@ const reviewCount = computed(() => allDocs.value.filter((doc) => doc.shareReview
 const draftCount = computed(() => allDocs.value.filter((doc) => doc.status !== "published").length);
 const unsharedCount = computed(() => allDocs.value.filter((doc) => !doc.shareCode || !doc.shareEnabled).length);
 const ownerName = computed(() => auth.user?.username || "xchen");
-const recentDocs = computed(() => visibleDocs.value.slice(0, 5));
+const showOwnerColumn = computed(() => managedUserCount.value > 1);
 const storageTotalBytes = computed(() => systemStatus.value?.storage.totalBytes || 0);
 const storageFileCount = computed(() => systemStatus.value?.storage.fileCount || 0);
 const storagePercent = computed(() => Math.min(100, Math.round((storageFileCount.value / Math.max(storageFileCount.value, 1)) * 100)));
@@ -111,6 +137,8 @@ const sortLabel = computed(() => {
 
 function cycleSortMode() {
   sortMode.value = sortMode.value === "updatedDesc" ? "createdDesc" : sortMode.value === "createdDesc" ? "titleAsc" : "updatedDesc";
+  // 排序状态 URL 持久化
+  router.replace({ path: route.path, query: { ...route.query, sort: sortMode.value } });
 }
 
 async function createDoc() {
@@ -156,6 +184,22 @@ function triggerUpload() {
   uploadInput.value?.click();
 }
 
+function rememberSearch(value: string) {
+  const next = value.trim();
+  if (!next) return;
+  recentSearches.value = [next, ...recentSearches.value.filter((item) => item !== next)].slice(0, 5);
+  localStorage.setItem("chendoc_recent_searches", JSON.stringify(recentSearches.value));
+}
+
+function toggleToolbox() {
+  toolboxCollapsed.value = !toolboxCollapsed.value;
+  localStorage.setItem("chendoc_docs_toolbox_collapsed", toolboxCollapsed.value ? "1" : "0");
+}
+
+function openActivity(log: OperationLogView) {
+  if (log.targetType === "doc" && /^[A-Za-z0-9_-]{16,32}$/.test(log.targetId)) router.push(docPath(log.targetId));
+}
+
 async function handleUpload(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -195,38 +239,45 @@ function resetFilters() {
   activeView.value = "all";
   sortMode.value = "updatedDesc";
   searchKeyword.value = "";
+  spaceFilter.value = "all";
+  tagFilter.value = "all";
+  updatedFilter.value = "all";
   router.replace({ path: docsPath.value });
 }
 
 async function loadSystemStatus() {
-  try {
-    systemStatus.value = (await getSystemStatusApi()).status;
-  } catch {
-    systemStatus.value = null;
-  }
+  const [statusResult, logsResult, usersResult, spacesResult] = await Promise.allSettled([
+    getSystemStatusApi(),
+    listOperationLogsApi(),
+    auth.canAccessAdmin ? listManagedUsersApi() : Promise.resolve({ users: [auth.user] }),
+    listSpacesApi()
+  ]);
+  systemStatus.value = statusResult.status === "fulfilled" ? statusResult.value.status : null;
+  recentActivity.value = logsResult.status === "fulfilled" ? logsResult.value.logs.slice(0, 5) : [];
+  managedUserCount.value = usersResult.status === "fulfilled" ? usersResult.value.users.length : 1;
+  spaces.value = spacesResult.status === "fulfilled" ? spacesResult.value.spaces : [];
 }
 
 function sharePath(doc: { shareCode?: number | null; customSlug?: string | null }) {
   return doc.shareCode ? `/r/${doc.shareCode}` : "未分享";
 }
 
-function shareStatusText(doc: { shareCode?: number | null; customSlug?: string | null; shareEnabled?: boolean | null; shareReviewStatus?: string | null }) {
-  if (!doc.shareCode) return "未分享";
-  if (doc.shareEnabled) return sharePath(doc);
-  if (doc.shareReviewStatus === "pending") return `审核中 · ${doc.shareCode}`;
-  if (doc.shareReviewStatus === "rejected") return `未通过 · ${doc.shareCode}`;
-  return sharePath(doc);
+function shareStatusText(doc: { status?: string; shareCode?: number | null; customSlug?: string | null; shareEnabled?: boolean | null; shareReviewStatus?: string | null }) {
+  if (doc.status !== "published") return "草稿";
+  if (!doc.shareCode) return "已发布 · 未公开";
+  if (doc.shareReviewStatus === "pending") return `已发布 → 待审核 · ${doc.shareCode}`;
+  if (doc.shareReviewStatus === "rejected") return `已发布 → 已拒绝 · ${doc.shareCode}`;
+  if (doc.shareEnabled) return `已发布 → 已公开 · ${doc.shareCode}`;
+  return `已发布 → 已关闭 · ${doc.shareCode}`;
 }
 
-function normalizeError(error: unknown) {
-  if (!error) return "";
-  if (typeof error === "string") return error;
-  if (typeof error === "object" && "value" in error) return normalizeError((error as { value: unknown }).value);
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string") {
-    return String((error as { message: string }).message);
-  }
-  return "文档列表加载失败，请稍后重试。";
+function activityText(log: OperationLogView) {
+  if (log.action === "doc.create") return "新建文档";
+  if (log.action.includes("restore")) return "恢复文档";
+  if (log.action.includes("delete")) return "删除文档";
+  if (log.action.includes("publish")) return "发布文档";
+  if (log.action.startsWith("share.")) return "更新分享";
+  return "更新文档";
 }
 
 function normalizePreview(value: string) {
@@ -260,6 +311,20 @@ function docPreviewText(doc: DocPreview) {
   const text = normalizePreview(source);
   if (!text) return "";
   return clampPreview(text, query.value);
+}
+
+function docPreviewParts(doc: DocPreview): Array<{ text: string; highlighted: boolean }> {
+  const source = doc.summary || doc.excerpt || doc.snippet || doc.contentText || doc.contentHtml || "";
+  const text = normalizePreview(source);
+  if (!text) return [];
+  const clamped = clampPreview(text, query.value);
+  if (!query.value) return [{ text: clamped, highlighted: false }];
+  const escaped = query.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+  return clamped.split(regex).filter(Boolean).map((part) => ({
+    text: part,
+    highlighted: part.toLowerCase() === query.value.toLowerCase()
+  }));
 }
 
 async function load() {
@@ -359,6 +424,7 @@ function formatDate(value: string) {
 
 function submitSearch() {
   const value = searchKeyword.value.trim();
+  rememberSearch(value);
   router.push({ path: docsPath.value, query: value ? { q: value } : {} });
 }
 
@@ -367,6 +433,7 @@ function queueSearch(value: string) {
   searchTimer = window.setTimeout(() => {
     const normalized = value.trim();
     if (normalized === query.value) return;
+    rememberSearch(normalized);
     router.replace({ path: docsPath.value, query: normalized ? { q: normalized } : {} });
   }, 280);
 }
@@ -376,6 +443,16 @@ function loadMore() {
 }
 
 onMounted(() => {
+  toolboxCollapsed.value = localStorage.getItem("chendoc_docs_toolbox_collapsed") === "1";
+  try { recentSearches.value = JSON.parse(localStorage.getItem("chendoc_recent_searches") || "[]"); } catch { recentSearches.value = []; }
+  try {
+    const saved = JSON.parse(localStorage.getItem("chendoc_doc_filters") || "{}") as { space?: string; tag?: string; updated?: "all" | "day" | "week" | "month" };
+    spaceFilter.value = saved.space || "all";
+    tagFilter.value = saved.tag || "all";
+    updatedFilter.value = ["all", "day", "week", "month"].includes(saved.updated || "") ? saved.updated! : "all";
+  } catch {
+    localStorage.removeItem("chendoc_doc_filters");
+  }
   void load();
   void loadSystemStatus();
 });
@@ -388,6 +465,9 @@ watch(query, (value) => {
   cancelBulkMode();
 });
 watch(searchKeyword, queueSearch);
+watch([spaceFilter, tagFilter, updatedFilter], ([space, tag, updated]) => {
+  localStorage.setItem("chendoc_doc_filters", JSON.stringify({ space, tag, updated }));
+});
 watch(visibleDocs, (items) => {
   const visibleUidSet = new Set(items.map((doc) => doc.docUid));
   setSelectedDocUids(Array.from(selectedDocUids.value).filter((uid) => visibleUidSet.has(uid)));
@@ -456,7 +536,7 @@ watch(visibleDocs, (items) => {
             <i><FileText :size="18" /></i>
             <div>
               <strong>{{ doc.title }}</strong>
-              <p v-if="query && docPreviewText(doc)" class="doc-list-page__mobile-preview">{{ docPreviewText(doc) }}</p>
+              <p v-if="query && docPreviewText(doc)" class="doc-list-page__mobile-preview"><template v-for="(part, index) in docPreviewParts(doc)" :key="index"><mark v-if="part.highlighted">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></p>
               <p>{{ formatDate(doc.updatedAt) }}</p>
               <code>{{ shareStatusText(doc) }}</code>
             </div>
@@ -476,6 +556,7 @@ watch(visibleDocs, (items) => {
           <p>{{ query ? `搜索：${query}` : "集中管理和知识沉淀，安全协作，高效流转" }}</p>
         </div>
         <div class="doc-list-page__actions">
+          <span v-if="bulkMode && selectedCount" class="doc-list-page__bulk-counter">已选 {{ selectedCount }} 篇</span>
           <button class="cd-button" type="button" :disabled="bulkMode && (!selectedCount || bulkDeleting)" @click="onBulkDeleteClick">
             <Trash2 :size="16" />{{ bulkMode && selectedCount ? `批量删除 ${selectedCount}` : "批量操作" }}
           </button>
@@ -497,12 +578,29 @@ watch(visibleDocs, (items) => {
         <button type="button" aria-label="新建文档" @click="createDoc"><Plus :size="15" /></button>
       </div>
 
-      <div class="doc-list-page__workspace">
+      <div class="doc-list-page__workspace" :class="{ 'is-toolbox-collapsed': toolboxCollapsed }">
         <div class="doc-list-page__ledger">
           <div class="doc-list-page__table-tools">
             <button class="cd-button" type="button" @click="cycleSortMode"><ArrowUpDown :size="15" />{{ sortLabel }}</button>
+            <select v-model="spaceFilter" class="cd-select" aria-label="按空间筛选">
+              <option value="all">全部空间</option>
+              <option value="none">未分空间</option>
+              <option v-for="space in spaces" :key="space.id" :value="String(space.id)">{{ space.name }}</option>
+            </select>
+            <select v-model="tagFilter" class="cd-select" aria-label="按标签筛选">
+              <option value="all">全部标签</option>
+              <option v-for="tag in availableTags" :key="tag" :value="tag">{{ tag }}</option>
+            </select>
+            <select v-model="updatedFilter" class="cd-select" aria-label="按更新时间筛选">
+              <option value="all">全部时间</option><option value="day">24 小时内</option><option value="week">7 天内</option><option value="month">30 天内</option>
+            </select>
             <button class="cd-button" type="button" @click="resetFilters"><ListFilter :size="15" />重置筛选</button>
             <button class="cd-button is-square" type="button" :class="{ 'is-active': compactMode }" aria-label="紧凑视图" @click="compactMode = !compactMode"><Grid3X3 :size="15" /></button>
+            <button class="cd-button is-square" type="button" :aria-label="toolboxCollapsed ? '展开侧栏' : '折叠侧栏'" @click="toggleToolbox"><component :is="toolboxCollapsed ? PanelRightOpen : PanelRightClose" :size="16" /></button>
+          </div>
+          <div v-if="recentSearches.length" class="doc-list-page__recent-searches">
+            <span>最近搜索</span>
+            <button v-for="item in recentSearches" :key="item" type="button" @click="searchKeyword = item">{{ item }}</button>
           </div>
 
           <div v-if="docs.loadingList" class="doc-list-page__skeleton">
@@ -515,16 +613,22 @@ watch(visibleDocs, (items) => {
             <button class="cd-button primary" type="button" @click="retryLoad"><RefreshCw :size="16" />重试</button>
           </div>
 
-          <EmptyState v-else-if="!visibleDocs.length" title="没有文档">
-            <button class="cd-button primary" type="button" @click="createDoc"><Plus :size="16" />新建文档</button>
+          <EmptyState v-else-if="!visibleDocs.length" :title="query ? '没有找到文档' : '没有文档'">
+            <template v-if="query">
+              <p>没有找到包含「{{ query }}」的文档</p>
+              <button class="cd-button" type="button" @click="searchKeyword = ''"><X :size="16" />清除搜索</button>
+            </template>
+            <template v-else>
+              <button class="cd-button primary" type="button" @click="createDoc"><Plus :size="16" />新建文档</button>
+            </template>
           </EmptyState>
 
-          <div v-else class="doc-list-page__table" :class="{ 'is-compact': compactMode }">
+          <div v-else class="doc-list-page__table" :class="{ 'is-compact': compactMode, 'has-owner': showOwnerColumn }">
             <div class="doc-list-page__table-head" aria-hidden="true">
               <span></span>
               <span>文档名称</span>
               <span>状态</span>
-              <span>所有者</span>
+              <span v-if="showOwnerColumn">所有者</span>
               <span>更新时间</span>
               <span>分享</span>
               <span>操作</span>
@@ -546,11 +650,11 @@ watch(visibleDocs, (items) => {
               <span class="doc-list-page__row-title">
                 <i><FileText :size="17" /></i>
                 <strong>{{ doc.title }}</strong>
-                <small v-if="query && docPreviewText(doc)">{{ docPreviewText(doc) }}</small>
+                <small v-if="query && docPreviewText(doc)"><template v-for="(part, index) in docPreviewParts(doc)" :key="index"><mark v-if="part.highlighted">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></small>
                 <small v-else>/ {{ doc.docUid }}</small>
               </span>
               <span>{{ statusText(doc.status) }}</span>
-              <span class="doc-list-page__owner"><img :src="logoUrl" alt="" />{{ ownerName }}</span>
+              <span v-if="showOwnerColumn" class="doc-list-page__owner"><img :src="logoUrl" alt="" />{{ doc.ownerUsername || ownerName }}</span>
               <span>{{ formatDate(doc.updatedAt) }}</span>
               <code>{{ shareStatusText(doc) }}</code>
               <span class="doc-list-page__ops" @click.stop>
@@ -564,7 +668,7 @@ watch(visibleDocs, (items) => {
           </button>
         </div>
 
-        <aside class="doc-list-page__toolbox" aria-label="文档概览">
+        <aside v-if="!toolboxCollapsed" class="doc-list-page__toolbox" aria-label="文档概览">
           <section class="doc-list-page__storage">
             <strong>存储概览</strong>
             <div class="doc-list-page__ring" :style="{ '--storage-percent': `${storagePercent}%` }"><span>{{ storageFileCount || "" }}</span></div>
@@ -575,19 +679,19 @@ watch(visibleDocs, (items) => {
           <section>
             <strong>快捷操作</strong>
             <input ref="uploadInput" class="doc-list-page__file-input" type="file" @change="handleUpload" />
-            <button class="doc-list-page__toolbox-action" type="button" :disabled="uploading" @click="triggerUpload"><UploadCloud :size="16" /><span>{{ uploading ? "上传中" : "上传文档" }}</span></button>
+            <button class="doc-list-page__toolbox-action" type="button" :disabled="uploading" @click="triggerUpload"><UploadCloud :size="16" /><span>{{ uploading ? "导入中" : "导入附件文档" }}</span></button>
             <button class="doc-list-page__toolbox-action" type="button" @click="createFolder"><FolderPlus :size="16" /><span>新建空间</span></button>
             <button class="doc-list-page__toolbox-action" type="button" @click="createTemplateDoc"><FilePlus2 :size="16" /><span>从模板新建</span></button>
-            <button class="doc-list-page__toolbox-action" type="button" :disabled="uploading" @click="triggerUpload"><Import :size="16" /><span>导入文档</span></button>
             <p v-if="actionMessage" class="doc-list-page__toolbox-message">{{ actionMessage }}</p>
           </section>
 
           <section>
             <strong>最近动态 <RouterLink :to="docsPath">查看全部</RouterLink></strong>
-            <article v-for="doc in recentDocs" :key="doc.docUid">
+            <button v-for="log in recentActivity" :key="log.id" class="doc-list-page__activity" type="button" @click="openActivity(log)">
               <FileText :size="16" />
-              <span><b>{{ doc.title }}</b><small>已更新 · {{ formatDate(doc.updatedAt) }}</small></span>
-            </article>
+              <span><b>{{ activityText(log) }}</b><small>{{ log.targetId }} · {{ formatDate(log.createdAt) }}</small></span>
+            </button>
+            <p v-if="!recentActivity.length">暂无真实操作记录</p>
           </section>
         </aside>
       </div>

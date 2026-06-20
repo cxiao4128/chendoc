@@ -1,6 +1,6 @@
 {
   "name": "@chendoc/server",
-  "version": "2.5.2",
+  "version": "2.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,7 +15,9 @@
     "html:resanitize": "tsx src/scripts/resanitize-html.ts",
     "r2:import": "tsx src/scripts/import-r2-config.ts",
     "docs:encrypt": "tsx src/scripts/encrypt-documents.ts",
+    "uploads:cleanup": "tsx src/scripts/cleanup-orphan-uploads.ts",
     "test": "vitest run",
+    "test:mysql-integrity": "tsx src/scripts/mysql-integrity-smoke.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { renderSharePage } from "./public.service.js";
+import { checkShareHtmlCache, renderSharePage } from "./public.service.js";
 
 function joinedHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value.join(",") : value;
@@ -28,10 +28,33 @@ function ifModifiedSinceHit(value: string | string[] | undefined, lastModified: 
   return Number.isFinite(since) && lastModified.getTime() <= since;
 }
 
+function parseIfModifiedSince(header: string | string[] | undefined): Date | undefined {
+  const value = joinedHeader(header);
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed) : undefined;
+}
+
 export async function publicRoutes(app: FastifyInstance) {
   app.get("/r/:shareKey", async (request, reply) => {
     const params = z.object({ shareKey: z.string().trim().min(1).max(64) }).parse(request.params);
     const nonce = randomBytes(16).toString("base64url");
+
+    // ===== 分享页秒开优化：检查缓存 ETag/Last-Modified =====
+    const ifNoneMatch = joinedHeader(request.headers["if-none-match"]);
+    const ifModifiedSince = parseIfModifiedSince(request.headers["if-modified-since"]);
+
+    // 尝试从缓存返回 304
+    const cacheResult = checkShareHtmlCache(params.shareKey, undefined, ifNoneMatch, ifModifiedSince);
+    if (cacheResult?.hit304) {
+      return reply
+        .header("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
+        .header("ETag", cacheResult.cached.etag)
+        .header("Last-Modified", cacheResult.cached.lastModified.toUTCString())
+        .code(304)
+        .send();
+    }
+
     const page = await renderSharePage(params.shareKey, undefined, nonce);
     const cacheControl = page.cacheControl || "no-store";
 
@@ -40,10 +63,11 @@ export async function publicRoutes(app: FastifyInstance) {
     if (page.contentHash) reply.header("X-Content-Hash", page.contentHash);
     if (page.lastModified) reply.header("Last-Modified", page.lastModified.toUTCString());
 
-    if (page.etag && ifNoneMatchHit(request.headers["if-none-match"], page.etag)) {
+    // 再次检查 ETag（渲染后可能已缓存）
+    if (page.etag && ifNoneMatchHit(ifNoneMatch, page.etag)) {
       return reply.code(304).send();
     }
-    if (!request.headers["if-none-match"] && page.lastModified && ifModifiedSinceHit(request.headers["if-modified-since"], page.lastModified)) {
+    if (!ifNoneMatch && page.lastModified && ifModifiedSinceHit(ifModifiedSince ? ifModifiedSince.toUTCString() : undefined, page.lastModified)) {
       return reply.code(304).send();
     }
 

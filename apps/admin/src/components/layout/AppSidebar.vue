@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { LogOut, Menu } from "lucide-vue-next";
 import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
-import logoUrl from "../../assets/chendoc-logo.png";
+import { bundledLogoUrl as logoUrl } from "../../config/site-assets";
 import { getWorkspaceNavItems } from "./admin-nav";
 import "./app-sidebar.css";
 

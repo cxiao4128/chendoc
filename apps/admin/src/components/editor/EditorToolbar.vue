@@ -86,13 +86,10 @@ function valueFromSelect(event: Event) {
         <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">系统字体</option>
         <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
         <option value="'PingFang SC', sans-serif">苹方</option>
-        <option value="'AlibabaPuHuiTi', sans-serif">阿里巴巴普惠体</option>
-        <option value="'SourceHanSans', sans-serif">思源黑体</option>
-        <option value="'SourceHanSerif', serif">思源宋体</option>
         <option value="'KaiTi', serif">楷体</option>
         <option value="'SimSun', serif">宋体</option>
         <option value="'FangSong', serif">仿宋</option>
-        <option value="'JetBrains Mono', monospace">等宽字体</option>
+        <option value="ui-monospace, SFMono-Regular, Consolas, monospace">等宽字体</option>
       </select>
       <select title="字号" aria-label="字号" @change="emit('styleChange', { fontSize: valueFromSelect($event) })">
         <option value="16px">16</option>

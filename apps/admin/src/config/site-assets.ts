@@ -1,7 +1,8 @@
 import type { SiteConfigView } from "../api/settings";
 
-export const bundledLogoUrl = "/site-assets/chendoc-logo.png";
+export const bundledLogoUrl = "/site-assets/chendoc-logo.webp";
 export const bundledWallpaperUrl = "/site-assets/login-wallpaper.webp";
+export const bundledWallpaperSmallUrl = "/site-assets/login-wallpaper-small.webp";
 export const defaultRemoteLogoUrl = "";
 export const defaultRemoteWallpaperUrl = "";
 
