@@ -44,7 +44,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  change: [payload: { contentJson: string; contentHtml: string }];
+  change: [payload: { contentJson: string; textLength: number }];
   toc: [items: TocItem[]];
 }>();
 
@@ -84,7 +84,7 @@ const editorContentComponent = shallowRef<Component | null>(null);
 const editor = shallowRef<Editor | null>(null);
 let editorLoadToken = 0;
 
-async function uploadFile(file: File, docUid?: string | null) {
+async function uploadFile(file: File, docUid: string) {
   const { useUpload } = await import("../../composables/useUpload");
   return useUpload().uploadFile(file, docUid);
 }
@@ -134,18 +134,29 @@ function fileFromDataUrl(dataUrl: string) {
   return new File([bytes], `pasted-image-${Date.now()}.${extension}`, { type: mimeType });
 }
 
-function emitContent(next: Editor) {
+let contentEmitTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushContent(next: Editor) {
   emit("change", {
     contentJson: JSON.stringify(next.getJSON()),
-    contentHtml: next.getHTML()
+    textLength: next.getText().replace(/\s+/g, "").length
   });
-  // ===== 编辑器性能优化：防抖 TOC 生成 =====
   debouncedCollectToc(next);
+}
+
+function emitContent(next: Editor) {
+  if (contentEmitTimer) clearTimeout(contentEmitTimer);
+  const contentSize = next.state.doc.content.size;
+  const delay = contentSize > 1_000_000 ? 1200 : contentSize > 200_000 ? 600 : 250;
+  contentEmitTimer = setTimeout(() => {
+    contentEmitTimer = null;
+    flushContent(next);
+  }, delay);
 }
 
 // 防抖 TOC 生成：避免大文档时频繁重算
 let tocTimer: ReturnType<typeof setTimeout> | null = null;
-const TOC_DEBOUNCE_MS = 150;
+const TOC_DEBOUNCE_MS = 400;
 
 function debouncedCollectToc(next: Editor | null = editor.value) {
   if (tocTimer) clearTimeout(tocTimer);
@@ -554,6 +565,11 @@ function startBlockDrag(event: DragEvent) {
 
 onBeforeUnmount(() => {
   editorLoadToken += 1;
+  if (contentEmitTimer && editor.value) {
+    clearTimeout(contentEmitTimer);
+    contentEmitTimer = null;
+    flushContent(editor.value);
+  }
   editor.value?.destroy();
   if (tocTimer) {
     clearTimeout(tocTimer);

@@ -21,6 +21,7 @@ const { closeDatabase } = await import("../db/client.js");
 const { GatewayPacketError, __testing, issueGatewayChallenge } = await import("./packet.js");
 const { env } = await import("../config/env.js");
 const { packGatewayReply, unpackGatewayRequest } = await import("./middleware.js");
+const { internalGatewayHeaders, isVerifiedInternalGatewayRequest } = await import("./internal-request.js");
 
 afterAll(async () => {
   await closeDatabase();
@@ -28,6 +29,10 @@ afterAll(async () => {
 });
 
 describe("gateway challenge replay protection", () => {
+  test("does not trust a forged internal marker", () => {
+    expect(isVerifiedInternalGatewayRequest({ headers: { "x-gateway-internal": "1" } } as never)).toBe(false);
+    expect(isVerifiedInternalGatewayRequest({ headers: internalGatewayHeaders() } as never)).toBe(true);
+  });
   test("accepts multi-letter form action codes", () => {
     expect(__testing.validGatewayActionShape("fm1")).toBe(true);
     expect(__testing.validGatewayActionShape("fm11")).toBe(true);

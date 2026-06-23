@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
-import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { requireSuperAdmin } from "../../middleware/requireSuperAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import {
@@ -23,8 +23,8 @@ import {
 } from "./settings.maintenance.service.js";
 
 export async function settingsRoutes(app: FastifyInstance) {
-  const adminOnly = [authenticate, requireAdmin];
-  const dangerousAdmin = [authenticate, requireAdmin, requireDangerVerification];
+  const adminOnly = [authenticate, requireSuperAdmin];
+  const dangerousAdmin = [authenticate, requireSuperAdmin, requireDangerVerification];
 
   app.get("/api/public/settings/site", async () => ({ config: await getSiteConfig() }));
 
@@ -50,7 +50,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const params = z.object({
       action: z.enum(["cleanupExpiredSessions", "cleanupExpiredCaptchas", "cleanupExpiredLogs", "emptyTrash", "refreshStatus", "healthCheck"])
     }).parse(request.params);
-    const result = await runSystemMaintenanceAction(params.action);
+    const result = await runSystemMaintenanceAction(params.action, request.user!);
     await writeAuditLog({
       userId: request.user!.id,
       action: `system.${params.action}`,

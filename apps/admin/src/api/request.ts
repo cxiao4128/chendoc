@@ -48,7 +48,7 @@ export function clearToken() {
 
 function shouldRedirectUnauthorized(url: string) {
   const path = resolveApiPath(url);
-  return path !== apiPaths.signIn() && path !== apiPaths.signUp();
+  return path !== apiPaths.signIn() && path !== apiPaths.signUp() && path !== "/api/auth/restore";
 }
 
 function authMessageFromCode(code: string) {

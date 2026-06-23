@@ -285,8 +285,6 @@ export async function packGatewayBody(body: unknown, action = "x0"): Promise<Pac
 
   const packet = {
     v: PACKET_VERSION,
-    keyId: encryptedKey.keyId,
-    key: encryptedKey.key,
     iv: encryptedBody.iv,
     challenge: challenge.nonce,
     timestamp,
@@ -297,9 +295,8 @@ export async function packGatewayBody(body: unknown, action = "x0"): Promise<Pac
     signature: await hmacSha256(key, signatureInput({ action, timestamp, nonce, body: encryptedBody.body, challenge: challenge.nonce }))
   };
 
-  const outerKey = crypto.getRandomValues(new Uint8Array(32));
-  const encryptedOuterKey = await encryptServerKey(bytesToBase64(outerKey), keyBox);
-  const encryptedPacket = await encryptAesGcm(outerKey, packet);
+  const encryptedOuterKey = encryptedKey;
+  const encryptedPacket = await encryptAesGcm(key, packet);
 
   return {
     envelope: {
@@ -418,6 +415,7 @@ function resolveGatewayAction(url: string, method: string, body: unknown): Gatew
   if (method === "GET" && path === "/api/docs/trash") return actionPayload("r1", { query });
   if (method === "POST" && path === "/api/docs/trash/batch-restore") return actionPayload("r2", { body });
   if (method === "POST" && path === "/api/docs/trash/batch-delete") return actionPayload("r3", { body });
+  if (method === "GET" && path === "/api/docs/trash/stats") return actionPayload("r4", {});
   if (method === "GET" && path === "/api/admin/docs/trash") return actionPayload("r1", { query, scope: "admin" });
   if (method === "POST" && path === "/api/admin/docs/trash/bulk-restore") return actionPayload("r2", { body, scope: "admin" });
   if (method === "POST" && path === "/api/admin/docs/trash/bulk-hard-delete") return actionPayload("r3", { body, scope: "admin" });
@@ -523,7 +521,7 @@ function resolveGatewayAction(url: string, method: string, body: unknown): Gatew
   if (method === "POST" && path === "/api/admin/security/totp/disable") return actionPayload("y4", { body });
   if (method === "POST" && path === "/api/admin/security/totp/recovery-codes") return actionPayload("y6", { body });
   if (method === "POST" && path === "/api/admin/security/totp/reset") return actionPayload("y7", { body });
-  if (method === "POST" && path === "/api/admin/security/danger-verify") return actionPayload("y8", { body });
+  if (method === "POST" && (path === "/api/admin/security/danger-verify" || path === "/api/security/danger-verify")) return actionPayload("y8", { body });
 
   throw new Error(`Gateway action is not mapped for ${method} ${path}`);
 }

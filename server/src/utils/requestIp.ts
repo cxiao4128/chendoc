@@ -1,4 +1,5 @@
 import type { FastifyRequest } from "fastify";
+import { isVerifiedInternalGatewayRequest } from "../gateway/internal-request.js";
 
 function headerValue(request: FastifyRequest, name: string) {
   const value = request.headers[name];
@@ -41,7 +42,7 @@ export function clientIpFromRequest(request: FastifyRequest) {
     || normalizeIp(headerValue(request, "cf-connecting-ip"))
     || forwardedHeaderIp(headerValue(request, "forwarded"));
 
-  if (request.headers["x-gateway-internal"] === "1") return forwardedIp || requestIp;
+  if (isVerifiedInternalGatewayRequest(request)) return forwardedIp || requestIp;
   if (Array.isArray(request.ips) && request.ips.length) return normalizeIp(request.ips[0] || "") || forwardedIp || requestIp;
   if (requestIp && isLocalProxyIp(requestIp)) return forwardedIp || requestIp;
   return requestIp || forwardedIp || "";

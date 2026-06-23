@@ -8,14 +8,14 @@
   --cd-text: #24304d;
   --cd-muted: #657191;
   --cd-faint: #9ea8c7;
-  --cd-primary: #7d6be8;
-  --cd-primary-hover: #6652d4;
-  --cd-primary-soft: #f2efff;
+  --cd-primary: #2563eb;
+  --cd-primary-hover: #1d4ed8;
+  --cd-primary-soft: #eff6ff;
   --cd-accent: #7d6be8;
   --cd-accent-hover: #6652d4;
   --cd-accent-soft: #f2efff;
-  --cd-shadow: 0 18px 42px rgba(82, 73, 146, 0.10);
-  --cd-shadow-soft: 0 10px 24px rgba(82, 73, 146, 0.07);
+  --cd-shadow: 0 4px 8px rgba(15, 23, 42, 0.10);
+  --cd-shadow-soft: 0 2px 6px rgba(15, 23, 42, 0.07);
   --cd-radius: 12px;
   --cd-header: 80px;
   position: relative;
@@ -43,7 +43,6 @@
   min-width: 0;
   min-height: 100dvh;
   margin-left: var(--cd-sidebar);
-  transition: margin-left 160ms ease-out;
 }
 
 .admin-layout.is-collapsed .admin-layout__main {

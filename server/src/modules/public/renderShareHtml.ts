@@ -1,5 +1,4 @@
 import { escapeHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
-import { sharePageStyle } from "./sharePageStyle.js";
 
 function renderShareLayout(input: {
   title: string;
@@ -37,7 +36,7 @@ function renderShareLayout(input: {
   <meta name="twitter:title" content="${title}">
   <meta name="twitter:description" content="${description}">
   ${input.imageMeta || ""}
-  <style>${sharePageStyle}</style>
+  <link rel="stylesheet" href="/share-page.css">
 </head>
 <body>
   <div class="topbar">
@@ -69,10 +68,14 @@ export function renderShareHtml(input: {
   logoUrl: string;
   updatedAt: Date;
   shareFooterText?: string;
+  scriptNonce?: string;
 }) {
   const title = escapeHtml(input.title);
   const coverUrl = input.coverUrl ? escapeHtml(input.coverUrl) : "";
   const contentHtml = input.contentHtml ? sanitizeDocumentHtml(input.contentHtml) : "";
+  const plainTextLength = contentHtml.replace(/<[^>]+>/g, " ").replace(/&[^;]+;/g, " ").replace(/\s+/g, "").length;
+  const readingMinutes = Math.max(1, Math.ceil(plainTextLength / 400));
+  const updatedText = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(input.updatedAt);
   const imageMeta = coverUrl
     ? `<meta property="og:image" content="${coverUrl}">
   <meta name="twitter:image" content="${coverUrl}">`
@@ -85,9 +88,10 @@ export function renderShareHtml(input: {
     logoUrl: input.logoUrl,
     canonicalUrl: input.shareUrl,
     imageMeta,
+    scriptNonce: input.scriptNonce,
     body: `<header>
-      <p class="share-kicker">ChenDoc</p>
       <h1>${title}</h1>
+      <p class="share-document-meta">更新于 ${escapeHtml(updatedText)} · 约 ${readingMinutes} 分钟阅读</p>
     </header>
     <article class="content">${contentHtml || '<div class="empty">这篇文档还没有内容。</div>'}</article>
     ${renderShareFooter(input.shareFooterText)}`
@@ -104,22 +108,22 @@ export function renderSharePasswordHtml(input: {
   scriptNonce?: string;
   errorMessage?: string;
 }) {
-  const title = escapeHtml(input.title);
+  const protectedTitle = "受保护的分享";
   const errorMessage = input.errorMessage ? escapeHtml(input.errorMessage) : "";
   const encodedShareKey = encodeURIComponent(input.shareKey);
   const shareUrl = escapeHtml(input.shareUrl);
   const scriptNonceAttr = input.scriptNonce ? ` nonce="${escapeHtml(input.scriptNonce)}"` : "";
+  const siteNameJson = JSON.stringify(input.siteName).replace(/</g, "\\u003c");
 
   return renderShareLayout({
-    title: input.title,
+    title: protectedTitle,
     description: "访问密码",
     siteName: input.siteName,
     logoUrl: input.logoUrl,
     canonicalUrl: input.shareUrl,
     scriptNonce: input.scriptNonce,
     body: `<header>
-      <p class="share-kicker">ChenDoc</p>
-      <h1>${title}</h1>
+      <h1 data-share-title>${protectedTitle}</h1>
       <p class="lead">访问密码</p>
     </header>
     <section class="share-card" data-share-card>
@@ -147,6 +151,7 @@ export function renderSharePasswordHtml(input: {
       const submitButton = form?.querySelector("button[type=\\"submit\\"]");
       const content = document.querySelector("[data-share-content]");
       const card = document.querySelector("[data-share-card]");
+      const pageTitle = document.querySelector("[data-share-title]");
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
       let fingerprintCache = "";
@@ -259,8 +264,6 @@ export function renderSharePasswordHtml(input: {
         const challengeNonce = challenge.nonce;
         const packet = {
           v: "xchen",
-          keyId: keyResponse.keyId,
-          key: encryptedKey,
           iv: encryptedBody.iv,
           challenge: challengeNonce,
           timestamp,
@@ -270,9 +273,8 @@ export function renderSharePasswordHtml(input: {
           body: encryptedBody.body,
           signature: await hmac(aesKeyBytes, [action, String(timestamp), nonce, encryptedBody.body, challengeNonce].join("\\n"))
         };
-        const outerKeyBytes = crypto.getRandomValues(new Uint8Array(32));
-        const encryptedOuterKey = await encryptBytes(publicKey, outerKeyBytes);
-        const encryptedPacket = await encryptAes(outerKeyBytes, packet);
+        const encryptedOuterKey = encryptedKey;
+        const encryptedPacket = await encryptAes(aesKeyBytes, packet);
         return {
           envelope: {
             data: ["chendoc", keyResponse.keyId, encryptedOuterKey, encryptedPacket.iv, encryptedPacket.body].join(".")
@@ -339,6 +341,8 @@ export function renderSharePasswordHtml(input: {
             content.innerHTML = unlocked.doc.contentHtml;
             content.hidden = false;
           }
+          if (pageTitle && unlocked.doc.title) pageTitle.textContent = unlocked.doc.title;
+          if (unlocked.doc.title) document.title = unlocked.doc.title + " - " + ${siteNameJson};
           if (card) card.remove();
         } catch (error) {
           status.textContent = error instanceof Error ? error.message : "密码校验失败，请稍后重试。";
@@ -360,6 +364,7 @@ export function renderShareUnavailableHtml(input: {
   message: string;
   siteName: string;
   logoUrl: string;
+  scriptNonce?: string;
 }) {
   const title = escapeHtml(input.title);
   const message = escapeHtml(input.message);
@@ -369,8 +374,8 @@ export function renderShareUnavailableHtml(input: {
     description: input.message,
     siteName: input.siteName,
     logoUrl: input.logoUrl,
+    scriptNonce: input.scriptNonce,
     body: `<header>
-      <p class="share-kicker">ChenDoc</p>
       <h1>${title}</h1>
       <p class="lead">无法打开</p>
     </header>

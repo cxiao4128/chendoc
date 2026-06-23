@@ -98,6 +98,19 @@ export async function dbRun(query: any): Promise<RunResult> {
   });
 }
 
+export async function dbHealthCheck() {
+  return await measureRequestPhase("db", async () => {
+    if (databaseProvider === "sqlite") {
+      const row = sqlite!.prepare("SELECT 1 AS ok").get() as { ok: number } | undefined;
+      return Number(row?.ok) === 1;
+    }
+
+    const [rows] = await mysqlPool!.query("SELECT 1 AS ok");
+    const row = (rows as Array<{ ok: number }>)[0];
+    return Number(row?.ok) === 1;
+  });
+}
+
 export async function dbTransaction<T>(callback: (tx: any) => Promise<T>): Promise<T> {
   if (databaseProvider === "sqlite") {
     sqlite!.exec("BEGIN IMMEDIATE");

@@ -40,32 +40,46 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
+function serializeInlineJson(value: unknown) {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
+
 // ===== 渲染字段 =====
-function renderField(field: FormField, index: number) {
-  const id = `field_${field.id}`;
+function renderField(field: FormField) {
+  const fieldName = escapeHtml(field.id);
+  const id = `field_${fieldName}`;
   const required = field.required ? ' required' : '';
   const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : '';
+  const maxLength = field.maxLength ? ` maxlength="${field.maxLength}"` : '';
 
   switch (field.type) {
     case "text":
+    case "name":
+    case "address":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="text" id="${id}" name="${field.id}"${required}${placeholder} class="form-input">
+          <input type="text" id="${id}" name="${fieldName}"${required}${placeholder}${maxLength} class="form-input">
         </div>`;
 
     case "textarea":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <textarea id="${id}" name="${field.id}"${required}${placeholder} class="form-textarea" rows="4"></textarea>
+          <textarea id="${id}" name="${fieldName}"${required}${placeholder}${maxLength} class="form-textarea" rows="4"></textarea>
         </div>`;
 
     case "number":
+    case "age":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="number" id="${id}" name="${field.id}"${required}${placeholder}${field.min !== undefined ? ` min="${field.min}"` : ""}${field.max !== undefined ? ` max="${field.max}"` : ""} class="form-input">
+          <input type="number" id="${id}" name="${fieldName}"${required}${placeholder}${field.min !== undefined ? ` min="${field.min}"` : ""}${field.max !== undefined ? ` max="${field.max}"` : ""} class="form-input">
         </div>`;
 
     case "select":
@@ -76,18 +90,18 @@ function renderField(field: FormField, index: number) {
       const inputType = field.type === "radio" ? "radio" : "select";
       if (inputType === "radio") {
         const radioOptions = (field.options || []).map(opt =>
-          `<label class="radio-label"><input type="radio" name="${field.id}" value="${escapeHtml(opt)}"> ${escapeHtml(opt)}</label>`
+          `<label class="radio-label"><input type="radio" name="${fieldName}" value="${escapeHtml(opt)}"${required}> ${escapeHtml(opt)}</label>`
         ).join('');
         return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label>${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <div class="radio-group">${radioOptions}</div>
         </div>`;
       }
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <select id="${id}" name="${field.id}"${required} class="form-select">
+          <select id="${id}" name="${fieldName}"${required} class="form-select">
             <option value="">请选择</option>
             ${selectOptions}
           </select>
@@ -95,63 +109,82 @@ function renderField(field: FormField, index: number) {
 
     case "multiselect":
       const checkboxOptions = (field.options || []).map((opt, i) =>
-        `<label class="checkbox-label"><input type="checkbox" name="${field.id}" value="${escapeHtml(opt)}"> ${escapeHtml(opt)}</label>`
+        `<label class="checkbox-label"><input type="checkbox" name="${fieldName}" value="${escapeHtml(opt)}"> ${escapeHtml(opt)}</label>`
       ).join('');
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label>${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <div class="checkbox-group">${checkboxOptions}</div>
         </div>`;
 
     case "date":
+    case "datetime":
+    case "time":
+      const dateInputType = field.type === "datetime" ? "datetime-local" : field.type;
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="date" id="${id}" name="${field.id}"${required} class="form-input">
+          <input type="${dateInputType}" id="${id}" name="${fieldName}"${required} class="form-input">
         </div>`;
 
     case "checkbox":
       return `
-        <div class="form-field form-field-checkbox" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field form-field-checkbox" data-field-id="${fieldName}">
           <label class="checkbox-single">
-            <input type="checkbox" id="${id}" name="${field.id}" value="true"${required}>
+            <input type="checkbox" id="${id}" name="${fieldName}" value="true"${required}>
             ${escapeHtml(field.label)}
           </label>
         </div>`;
 
     case "phone":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="tel" id="${id}" name="${field.id}"${required}${placeholder} pattern="1[3-9]\\d{9}" class="form-input">
+          <input type="tel" id="${id}" name="${fieldName}"${required}${placeholder}${maxLength} pattern="1[3-9]\\d{9}" class="form-input">
         </div>`;
 
     case "email":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="email" id="${id}" name="${field.id}"${required}${placeholder} class="form-input">
+          <input type="email" id="${id}" name="${fieldName}"${required}${placeholder}${maxLength} class="form-input">
+        </div>`;
+
+    case "idcard":
+      return `
+        <div class="form-field" data-field-id="${fieldName}">
+          <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
+          <input type="text" id="${id}" name="${fieldName}"${required}${placeholder}${maxLength} pattern="(?:\\d{15}|\\d{17}[\\dXx])" class="form-input">
+        </div>`;
+
+    case "gender":
+      return `
+        <div class="form-field" data-field-id="${fieldName}">
+          <label>${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
+          <div class="radio-group">
+            ${["男", "女", "其他"].map((option) => `<label class="radio-label"><input type="radio" name="${fieldName}" value="${option}"${required}> ${option}</label>`).join("")}
+          </div>
         </div>`;
 
     case "rating":
       const ratingStars = [1, 2, 3, 4, 5].map(n =>
-        `<label class="star-label"><input type="radio" name="${field.id}" value="${n}"> <span class="star">★</span></label>`
+        `<label class="star-label"><input type="radio" name="${fieldName}" value="${n}"${required}> <span class="star">★</span></label>`
       ).join('');
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label>${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <div class="rating-group">${ratingStars}</div>
         </div>`;
 
     case "city":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <div class="city-select">
-            <select name="${field.id}_province" class="form-select city-province" data-parent="${field.id}">
+            <select name="${fieldName}_province" class="form-select city-province" data-parent="${fieldName}"${required}>
               <option value="">请选择省份</option>
             </select>
-            <select name="${field.id}_city" class="form-select city-city" data-parent="${field.id}" disabled>
+            <select name="${fieldName}_city" class="form-select city-city" data-parent="${fieldName}" disabled>
               <option value="">请选择城市</option>
             </select>
           </div>
@@ -159,16 +192,23 @@ function renderField(field: FormField, index: number) {
 
     case "image":
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="url" id="${id}" name="${field.id}"${required}${placeholder} accept="image/*" class="form-input" placeholder="请输入图片URL">
+          <input type="url" id="${id}" name="${fieldName}"${required}${placeholder || ' placeholder="请输入图片链接"'} class="form-input">
         </div>`;
+
+    case "section":
+      return `
+        <section class="form-section" aria-labelledby="${id}">
+          <h2 id="${id}">${escapeHtml(field.label)}</h2>
+          ${field.placeholder ? `<p>${escapeHtml(field.placeholder)}</p>` : ""}
+        </section>`;
 
     default:
       return `
-        <div class="form-field" data-field-id="${escapeHtml(field.id)}">
+        <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
-          <input type="text" id="${id}" name="${field.id}"${required} class="form-input">
+          <input type="text" id="${id}" name="${fieldName}"${required}${placeholder}${maxLength} class="form-input">
         </div>`;
   }
 }
@@ -188,17 +228,21 @@ const formPageStyle = `
   }
   .form-textarea { resize: vertical; min-height: 100px; }
   .checkbox-group { display: flex; flex-direction: column; gap: 10px; }
-  .checkbox-label, .checkbox-single { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: normal; }
+  .checkbox-label, .checkbox-single { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: normal; }
   .checkbox-label input, .checkbox-single input { width: 18px; height: 18px; accent-color: var(--accent); }
   .radio-group { display: flex; flex-direction: column; gap: 10px; }
-  .radio-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: normal; }
+  .radio-label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: normal; }
   .radio-label input { width: 18px; height: 18px; accent-color: var(--accent); }
   .rating-group { display: flex; gap: 4px; }
-  .star-label { cursor: pointer; }
-  .star-label input { display: none; }
+  .star-label { display: grid; min-width: 44px; min-height: 44px; place-items: center; cursor: pointer; }
+  .star-label { position: relative; }
+  .star-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
   .star-label .star { font-size: 28px; color: var(--border-strong); transition: color 0.15s; }
   .star-label input:checked ~ .star, .star-label:hover .star { color: #f59e0b; }
   .city-select { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-section { margin: 30px 0 18px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .form-section h2 { margin: 0; color: var(--ink); font-size: 18px; }
+  .form-section p { margin: 6px 0 0; color: var(--ink-light); font-size: 14px; line-height: 1.6; }
   .form-submit {
     width: 100%; padding: 14px; background: var(--accent); color: white; border: none;
     border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: background 0.15s;
@@ -210,7 +254,7 @@ const formPageStyle = `
   .form-success h2 { color: #10b981; font-size: 24px; margin-bottom: 8px; }
   .form-success .success-desc { color: var(--ink-light); margin-bottom: 24px; }
   .success-data { text-align: left; background: #f9fafb; border-radius: 12px; padding: 20px; margin-top: 24px; }
-  .success-data h3 { font-size: 14px; color: var(--ink-light); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .success-data h3 { font-size: 14px; color: var(--ink-light); margin-bottom: 16px; }
   .data-item { display: flex; padding: 12px 0; border-bottom: 1px solid var(--border); }
   .data-item:last-child { border-bottom: none; }
   .data-item .data-label { width: 100px; color: var(--ink-light); font-size: 14px; flex-shrink: 0; }
@@ -218,8 +262,13 @@ const formPageStyle = `
   .form-error { background: rgba(220, 38, 38, 0.1); border: 1px solid var(--danger); border-radius: 8px; padding: 12px 16px; color: var(--danger); margin-bottom: 16px; }
   .form-privacy { margin: 8px 0 18px; border-top: 1px solid var(--border); padding-top: 14px; color: var(--ink-light); font-size: 13px; line-height: 1.65; }
   .share-card { background: var(--paper); border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  .exclusive-info-display { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #bae6fd; }
-  .exclusive-info-display h3 { font-size: 14px; color: var(--ink-light); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .exclusive-info-display { background: #eff6ff; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #bfdbfe; }
+  .exclusive-info-display h3 { font-size: 14px; color: var(--ink-light); margin-bottom: 16px; }
+  .form-input:focus-visible, .form-textarea:focus-visible, .form-select:focus-visible,
+  .checkbox-label input:focus-visible, .checkbox-single input:focus-visible, .radio-label input:focus-visible,
+  .star-label input:focus-visible + .star, .form-submit:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.24); outline-offset: 2px;
+  }
   @media (max-width: 480px) {
     .city-select { grid-template-columns: 1fr; }
     .data-item { flex-direction: column; }
@@ -253,13 +302,16 @@ export async function renderFormPage(formUid: string) {
   void incrementFormView(formUid).catch(() => undefined);
 
   const nonce = randomBytes(12).toString("base64url");
-  const fieldsHtml = form.fields.map((f, i) => renderField(f, i)).join("");
+  const fieldsHtml = form.fields.map((field) => renderField(field)).join("");
 
   // 专属信息：如果表单有自己的 exclusiveInfo 就用它，否则用全局的 shareFooterText
   const globalShareFooterText = siteConfig.shareFooterText?.trim() || "";
   const formExclusiveInfo = form.exclusiveInfo;
   // 将表单专属信息转为 JSON 字符串传给前端
-  const exclusiveInfoJson = formExclusiveInfo ? JSON.stringify(formExclusiveInfo) : "null";
+  const exclusiveInfoJson = serializeInlineJson(formExclusiveInfo ? Object.entries(formExclusiveInfo) : null);
+  const fieldLabelsJson = serializeInlineJson(Object.fromEntries(
+    form.fields.filter((field) => field.type !== "section").map((field) => [field.id, field.label])
+  ));
 
   const html = `<!doctype html>
 <html lang="zh-CN">
@@ -323,7 +375,8 @@ export async function renderFormPage(formUid: string) {
       }
       // 专属信息：优先使用表单专属信息，否则使用全局的
       var formExclusiveInfo = ${exclusiveInfoJson};
-      var globalShareFooterText = ${JSON.stringify(globalShareFooterText)};
+      var globalShareFooterText = ${serializeInlineJson(globalShareFooterText)};
+      var fieldLabels = ${fieldLabelsJson};
 
       var form = document.getElementById('form');
       var formContent = document.getElementById('form-content');
@@ -434,8 +487,9 @@ export async function renderFormPage(formUid: string) {
             var hasExclusiveInfo = false;
             // 如果表单有专属信息，显示它
             if (formExclusiveInfo) {
-              Object.keys(formExclusiveInfo).forEach(function(key) {
-                var value = formExclusiveInfo[key];
+              formExclusiveInfo.forEach(function(item) {
+                var key = item[0];
+                var value = item[1];
                 if (value && value.trim()) {
                   hasExclusiveInfo = true;
                   appendDataItem(exclusiveInfoList, key, value);
@@ -459,8 +513,8 @@ export async function renderFormPage(formUid: string) {
             Object.keys(data).forEach(function(key) {
               var value = data[key];
               if (Array.isArray(value)) value = value.join('、');
-              if (value) {
-                appendDataItem(dataList, '已填写', value);
+              if (value !== undefined && value !== null && value !== '') {
+                appendDataItem(dataList, fieldLabels[key] || '已填写', value === true ? '是' : value);
               }
             });
             submittedData.style.display = 'block';

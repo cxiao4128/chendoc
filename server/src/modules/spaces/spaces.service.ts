@@ -9,10 +9,10 @@ const spaceSchema = z.object({
   description: z.string().trim().max(500).optional().nullable()
 });
 
-type Actor = { id: number; role: "admin" | "user" };
+type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
 
 function accessWhere(actor: Actor, id?: number) {
-  const base = actor.role === "admin" ? undefined : eq(spaces.ownerId, actor.id);
+  const base = actor.isSuperAdmin ? undefined : eq(spaces.ownerId, actor.id);
   if (!id) return base;
   return base ? and(eq(spaces.id, id), base) : eq(spaces.id, id);
 }

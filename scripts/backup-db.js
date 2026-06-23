@@ -112,6 +112,9 @@ async function mysqlBackup(env) {
     throw new Error(`mysqldump exited with status ${result.status}.`);
   }
   const protectedPath = await protectAndRotateBackup(out, env);
+  const markerDir = resolve(root, "backups");
+  mkdirSync(markerDir, { recursive: true });
+  writeFileSync(resolve(markerDir, ".latest-db-backup"), `${protectedPath}\n`);
   console.log(`MySQL encrypted backup completed: ${protectedPath}`);
 }
 

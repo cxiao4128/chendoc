@@ -1,25 +1,26 @@
-import { DeleteObjectCommand, GetBucketCorsCommand, HeadObjectCommand, PutBucketCorsCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import type { CORSRule, HeadObjectCommandOutput } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import type { HeadObjectCommandOutput } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { extname } from "node:path";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { db, dbGet, dbRun } from "../../db/client.js";
 import { docs, uploads } from "../../db/schema.js";
-import { createR2Client, getR2CorsAllowedOrigins } from "../../config/r2.js";
+import { createR2Client } from "../../config/r2.js";
 import { env } from "../../config/env.js";
 import { assertR2Ready, type R2Config } from "../settings/settings.service.js";
 import { now } from "../../utils/date.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
+import { canAccessDocument } from "../docs/documentAccess.js";
 
 const presignSchema = z.object({
   fileName: z.string().min(1).max(220),
   mimeType: z.string().min(3).max(120),
   size: z.number().int().positive(),
   kind: z.enum(["image", "video", "file"]),
-  docUid: z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/).optional().nullable()
+  docUid: z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/)
 });
 
 const completeSchema = presignSchema.extend({
@@ -35,7 +36,7 @@ const uploadTokenSchema = z.object({
   mimeType: z.string().min(3).max(120),
   size: z.number().int().positive(),
   kind: z.enum(["image", "video", "file"]),
-  docUid: z.string().regex(/^[A-Za-z0-9]{16,32}$/).nullable()
+  docUid: z.string().regex(/^[A-Za-z0-9]{16,32}$/)
 });
 
 type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
@@ -46,7 +47,22 @@ type UploadPolicy = Record<UploadKind, {
 }>;
 
 const objectKeyPattern = /^docs\/(images|videos|files)\/\d{4}\/\d{2}\/\d+-[a-f0-9]{24}\.[A-Za-z0-9]+$/;
-const corsReadyBuckets = new Set<string>();
+const uploadUserLocks = new Map<number, Promise<void>>();
+
+async function withUploadUserLock<T>(userId: number, action: () => Promise<T>) {
+  const previous = uploadUserLocks.get(userId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  const queued = previous.then(() => current);
+  uploadUserLocks.set(userId, queued);
+  await previous;
+  try {
+    return await action();
+  } finally {
+    release();
+    if (uploadUserLocks.get(userId) === queued) uploadUserLocks.delete(userId);
+  }
+}
 
 const uploadPolicy: UploadPolicy = {
   image: {
@@ -87,17 +103,6 @@ const uploadPolicy: UploadPolicy = {
   }
 };
 
-function createUploadCorsRule(): CORSRule {
-  return {
-    ID: "chendoc-browser-upload",
-    AllowedHeaders: ["content-type", "content-length", "x-amz-*"],
-    AllowedMethods: ["GET", "HEAD", "PUT"],
-    AllowedOrigins: getR2CorsAllowedOrigins(),
-    ExposeHeaders: ["ETag"],
-    MaxAgeSeconds: 3600
-  };
-}
-
 function randomName(ext: string) {
   return `${Date.now()}-${randomBytes(12).toString("hex")}${ext}`;
 }
@@ -109,49 +114,6 @@ function objectKey(kind: "image" | "video" | "file", fileName: string) {
   const ext = extname(fileName).toLowerCase();
   const folder = kind === "image" ? "images" : kind === "video" ? "videos" : "files";
   return `docs/${folder}/${yyyy}/${mm}/${randomName(ext)}`;
-}
-
-function isCorsPermissionError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const maybe = error as { name?: string; Code?: string; code?: string; $metadata?: { httpStatusCode?: number } };
-  return (
-    maybe.name === "AccessDenied" ||
-    maybe.Code === "AccessDenied" ||
-    maybe.code === "AccessDenied" ||
-    maybe.$metadata?.httpStatusCode === 403
-  );
-}
-
-async function ensureBrowserUploadCors(config: R2Config, client: ReturnType<typeof createR2Client>) {
-  const uploadCorsRule = createUploadCorsRule();
-  const cacheKey = `${config.endpoint || config.accountId}/${config.bucket}/${uploadCorsRule.AllowedOrigins?.join(",")}`;
-  if (corsReadyBuckets.has(cacheKey)) return;
-  let existingRules: CORSRule[] = [];
-  try {
-    const existing = await client.send(new GetBucketCorsCommand({ Bucket: config.bucket }));
-    existingRules = existing.CORSRules ?? [];
-  } catch (error) {
-    if (isCorsPermissionError(error)) {
-      corsReadyBuckets.add(cacheKey);
-      return;
-    }
-    existingRules = [];
-  }
-
-  try {
-    await client.send(new PutBucketCorsCommand({
-      Bucket: config.bucket,
-      CORSConfiguration: {
-        CORSRules: [
-          ...existingRules.filter((rule) => rule.ID !== uploadCorsRule.ID),
-          uploadCorsRule
-        ]
-      }
-    }));
-  } catch (error) {
-    if (!isCorsPermissionError(error)) throw error;
-  }
-  corsReadyBuckets.add(cacheKey);
 }
 
 function unique(values: string[]) {
@@ -175,6 +137,7 @@ function policyMimeList(kind: UploadKind) {
 
 export function getUploadPolicy() {
   return {
+    security: { scanRequired: env.requireUploadScan, documentBindingRequired: true },
     image: {
       extensions: Object.keys(uploadPolicy.image.mimeByExtension),
       mime: policyMimeList("image"),
@@ -243,8 +206,48 @@ function verifyUploadToken(token: string) {
   return uploadTokenSchema.parse(decoded);
 }
 
+function startsWithBytes(bytes: Uint8Array, signature: number[]) {
+  return signature.every((value, index) => bytes[index] === value);
+}
+
+function contentMatchesExtension(fileName: string, bytes: Uint8Array) {
+  const ext = extname(fileName).toLowerCase();
+  const text = Buffer.from(bytes).toString("ascii");
+  if (ext === ".png") return startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47]);
+  if (ext === ".jpg" || ext === ".jpeg") return startsWithBytes(bytes, [0xff, 0xd8, 0xff]);
+  if (ext === ".gif") return text.startsWith("GIF87a") || text.startsWith("GIF89a");
+  if (ext === ".webp") return text.startsWith("RIFF") && text.slice(8, 12) === "WEBP";
+  if (ext === ".avif") return text.slice(4, 12) === "ftypavif" || text.slice(4, 12) === "ftypavis";
+  if (ext === ".pdf") return text.startsWith("%PDF-");
+  if ([".zip", ".docx", ".xlsx", ".pptx"].includes(ext)) {
+    return startsWithBytes(bytes, [0x50, 0x4b, 0x03, 0x04]) || startsWithBytes(bytes, [0x50, 0x4b, 0x05, 0x06]);
+  }
+  if ([".doc", ".xls", ".ppt"].includes(ext)) return startsWithBytes(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  if ([".mp4", ".mov", ".m4v"].includes(ext)) return text.slice(4, 8) === "ftyp";
+  if (ext === ".webm") return startsWithBytes(bytes, [0x1a, 0x45, 0xdf, 0xa3]);
+  if (ext === ".ogv") return text.startsWith("OggS");
+  if (ext === ".txt" || ext === ".md") return !bytes.includes(0);
+  return false;
+}
+
+async function validateObjectSignature(client: ReturnType<typeof createR2Client>, config: R2Config, expected: z.infer<typeof uploadTokenSchema>) {
+  const response = await client.send(new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: expected.objectKey,
+    Range: "bytes=0-4095"
+  }));
+  const body = response.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+  const bytes = body?.transformToByteArray ? await body.transformToByteArray() : new Uint8Array();
+  if (!bytes.length || !contentMatchesExtension(expected.fileName, bytes)) {
+    throw new BadRequestError("文件真实格式与后缀不匹配", "UPLOAD_SIGNATURE_MISMATCH");
+  }
+}
+
 async function scanCompletedUpload(input: { publicUrl: string; objectKey: string; mimeType: string; size: number }) {
-  if (!env.uploadScanWebhook) return;
+  if (!env.uploadScanWebhook) {
+    if (env.requireUploadScan) throw new BadRequestError("文件安全扫描未配置，上传已拒绝", "UPLOAD_SCAN_REQUIRED");
+    return;
+  }
   const response = await fetch(env.uploadScanWebhook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -256,26 +259,41 @@ async function scanCompletedUpload(input: { publicUrl: string; objectKey: string
   if (!result.clean) throw new BadRequestError("文件未通过安全扫描", "UPLOAD_SCAN_REJECTED");
 }
 
-async function uploadDocId(docUid: string | null | undefined, actor: Actor) {
-  if (!docUid) return null;
+async function uploadDocId(docUid: string, actor: Actor) {
   const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
     .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
     .from(docs)
     .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
     .limit(1));
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  if (!actor.isSuperAdmin && doc.isSuperAdminDoc) throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
-  if (actor.role !== "admin" && doc.ownerId !== actor.id) throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
+  if (!canAccessDocument(actor, doc, "update")) throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
   return doc.id;
+}
+
+async function assertUploadQuota(userId: number, incomingBytes: number) {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const [daily, stored] = await Promise.all([
+    dbGet<{ count: number; bytes: number }>(db.select({
+      count: sql<number>`COUNT(*)`,
+      bytes: sql<number>`COALESCE(SUM(${uploads.fileSize}), 0)`
+    }).from(uploads).where(and(eq(uploads.userId, userId), gte(uploads.createdAt, dayStart)))),
+    dbGet<{ bytes: number }>(db.select({
+      bytes: sql<number>`COALESCE(SUM(${uploads.fileSize}), 0)`
+    }).from(uploads).where(eq(uploads.userId, userId)))
+  ]);
+  if (Number(daily?.count ?? 0) >= env.uploadQuota.dailyFiles) throw new BadRequestError("今日上传文件数已达上限", "UPLOAD_DAILY_FILE_QUOTA");
+  if (Number(daily?.bytes ?? 0) + incomingBytes > env.uploadQuota.dailyBytes) throw new BadRequestError("今日上传流量已达上限", "UPLOAD_DAILY_BYTE_QUOTA");
+  if (Number(stored?.bytes ?? 0) + incomingBytes > env.uploadQuota.storedBytesPerUser) throw new BadRequestError("存储配额不足", "UPLOAD_STORAGE_QUOTA");
 }
 
 export async function createPresignedUpload(userId: number, actor: Actor, input: unknown) {
   const body = normalizeUploadInput(presignSchema.parse(input));
   validateFile(body);
-  await uploadDocId(body.docUid ?? null, actor);
+  await uploadDocId(body.docUid, actor);
+  await assertUploadQuota(userId, body.size);
   const config = await assertR2Ready();
   const client = createR2Client(config);
-  await ensureBrowserUploadCors(config, client);
   const key = objectKey(body.kind, body.fileName);
   const command = new PutObjectCommand({
     Bucket: config.bucket,
@@ -292,7 +310,7 @@ export async function createPresignedUpload(userId: number, actor: Actor, input:
     mimeType: body.mimeType,
     size: body.size,
     kind: body.kind,
-    docUid: body.docUid ?? null
+    docUid: body.docUid
   });
   return {
     uploadUrl,
@@ -319,12 +337,13 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     body.mimeType !== tokenPayload.mimeType ||
     body.size !== tokenPayload.size ||
     body.kind !== tokenPayload.kind ||
-    (body.docUid ?? null) !== tokenPayload.docUid
+    body.docUid !== tokenPayload.docUid
   ) {
     throw new BadRequestError("上传完成参数不匹配", "UPLOAD_COMPLETE_MISMATCH");
   }
 
   const docId = await uploadDocId(tokenPayload.docUid, actor);
+  await assertUploadQuota(userId, tokenPayload.size);
   validateFile(tokenPayload);
   const config = await assertR2Ready();
   const client = createR2Client(config);
@@ -333,39 +352,62 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     Key: tokenPayload.objectKey
   }));
   validateCompletedObject(tokenPayload, uploadedObject);
+  try {
+    await validateObjectSignature(client, config, tokenPayload);
+  } catch (error) {
+    await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
+    throw error;
+  }
   const publicUrl = publicUrlFromKey(config, tokenPayload.objectKey);
+  const existing = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.objectKey, tokenPayload.objectKey)).limit(1));
+  if (existing) {
+    if (existing.userId !== userId || existing.docId !== docId) throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
+    return { id: existing.id, publicUrl: existing.publicUrl };
+  }
   try {
     await scanCompletedUpload({ publicUrl, objectKey: tokenPayload.objectKey, mimeType: tokenPayload.mimeType, size: tokenPayload.size });
   } catch (error) {
     await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
     throw error;
   }
-  const result = await dbRun(db.insert(uploads).values({
-    userId,
-    docId,
-    objectKey: tokenPayload.objectKey,
-    publicUrl,
-    mimeType: tokenPayload.mimeType,
-    fileSize: tokenPayload.size,
-    kind: tokenPayload.kind,
-    originalName: tokenPayload.fileName,
-    createdAt: now()
-  }));
-  return { id: Number(result.lastInsertRowid), publicUrl };
+  return await withUploadUserLock(userId, async () => {
+    const raced = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.objectKey, tokenPayload.objectKey)).limit(1));
+    if (raced) {
+      if (raced.userId !== userId || raced.docId !== docId) throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
+      return { id: raced.id, publicUrl: raced.publicUrl };
+    }
+    await assertUploadQuota(userId, tokenPayload.size);
+    try {
+      const result = await dbRun(db.insert(uploads).values({
+        userId,
+        docId,
+        objectKey: tokenPayload.objectKey,
+        publicUrl,
+        mimeType: tokenPayload.mimeType,
+        fileSize: tokenPayload.size,
+        kind: tokenPayload.kind,
+        originalName: tokenPayload.fileName,
+        createdAt: now()
+      }));
+      return { id: Number(result.lastInsertRowid), publicUrl };
+    } catch (error) {
+      await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
+      throw error;
+    }
+  });
 }
 
 export async function deleteUpload(id: number, actor: Actor) {
   const upload = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.id, id)).limit(1));
   if (!upload) return { deleted: false };
-  if (actor.role !== "admin" && upload.userId !== actor.id) {
+  if (!actor.isSuperAdmin && upload.userId !== actor.id) {
     throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
   }
   if (upload.docId) {
     const doc = await dbGet<{ ownerId: number | null; isSuperAdminDoc: boolean }>(db
       .select({ ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
       .from(docs).where(eq(docs.id, upload.docId)).limit(1));
-    if (doc && !actor.isSuperAdmin && doc.isSuperAdminDoc) throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
-    if (actor.role !== "admin" && doc?.ownerId !== actor.id) throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
+    if (doc && !canAccessDocument(actor, doc, "delete")) throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
   }
 
   const config = await assertR2Ready();

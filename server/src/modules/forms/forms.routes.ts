@@ -21,11 +21,16 @@ import { renderFormPage, renderFormUnavailablePage } from "./forms.public.js";
 export async function formsRoutes(app: FastifyInstance) {
   // ===== 认证路由 =====
   const authHandler = [authenticate];
+  const actorFromRequest = (request: { user?: { id: number; role: "admin" | "user"; isSuperAdmin?: boolean } }) => ({
+    id: request.user!.id,
+    role: request.user!.role,
+    isSuperAdmin: request.user!.isSuperAdmin
+  });
 
   // 创建表单
   app.post("/api/forms", { preHandler: authHandler }, async (request) => {
     const user = request.user!;
-    const form = await createForm({ id: user.id, role: user.role }, request.body);
+    const form = await createForm(actorFromRequest(request), request.body);
     await writeAuditLog({
       userId: user.id,
       action: "form.create",
@@ -39,7 +44,7 @@ export async function formsRoutes(app: FastifyInstance) {
   // 表单列表
   app.get("/api/forms", { preHandler: authHandler }, async (request) => {
     const user = request.user!;
-    const forms = await listForms({ id: user.id, role: user.role });
+    const forms = await listForms(actorFromRequest(request));
     return { forms };
   });
 
@@ -47,7 +52,7 @@ export async function formsRoutes(app: FastifyInstance) {
   app.get("/api/forms/:id", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const user = request.user!;
-    const form = await getForm(params.id, { id: user.id, role: user.role });
+    const form = await getForm(params.id, actorFromRequest(request));
     return { form };
   });
 
@@ -55,7 +60,7 @@ export async function formsRoutes(app: FastifyInstance) {
   app.put("/api/forms/:id", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const user = request.user!;
-    const form = await updateForm(params.id, { id: user.id, role: user.role }, request.body);
+    const form = await updateForm(params.id, actorFromRequest(request), request.body);
     return { form };
   });
 
@@ -63,7 +68,7 @@ export async function formsRoutes(app: FastifyInstance) {
   app.delete("/api/forms/:id", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const user = request.user!;
-    const result = await deleteForm(params.id, { id: user.id, role: user.role });
+    const result = await deleteForm(params.id, actorFromRequest(request));
     await writeAuditLog({
       userId: user.id,
       action: "form.delete",
@@ -80,8 +85,8 @@ export async function formsRoutes(app: FastifyInstance) {
     const body = z.object({ action: z.enum(["publish", "close"]) }).parse(request.body ?? {});
     const user = request.user!;
     const form = body.action === "close"
-      ? await closeForm(params.id, { id: user.id, role: user.role })
-      : await publishForm(params.id, { id: user.id, role: user.role });
+      ? await closeForm(params.id, actorFromRequest(request))
+      : await publishForm(params.id, actorFromRequest(request));
     await writeAuditLog({
       userId: user.id,
       action: `form.${body.action}`,
@@ -100,7 +105,7 @@ export async function formsRoutes(app: FastifyInstance) {
       pageSize: z.coerce.number().int().positive().max(100).optional()
     }).parse(request.query);
     const user = request.user!;
-    const result = await listFormSubmissions(params.id, { id: user.id, role: user.role }, query);
+    const result = await listFormSubmissions(params.id, actorFromRequest(request), query);
     return result;
   });
 
@@ -109,7 +114,7 @@ export async function formsRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const query = z.object({ format: z.enum(["csv", "json", "xlsx"]).optional() }).parse(request.query);
     const user = request.user!;
-    const result = await exportFormSubmissions(params.id, { id: user.id, role: user.role }, query.format ?? "csv");
+    const result = await exportFormSubmissions(params.id, actorFromRequest(request), query.format ?? "csv");
     await writeAuditLog({
       userId: user.id,
       action: "form.submissions.export",
@@ -125,7 +130,7 @@ export async function formsRoutes(app: FastifyInstance) {
   app.get("/api/forms/:id/ip-stats", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const user = request.user!;
-    const stats = await getFormIpStats(params.id, { id: user.id, role: user.role });
+    const stats = await getFormIpStats(params.id, actorFromRequest(request));
     return { stats };
   });
 
@@ -136,7 +141,7 @@ export async function formsRoutes(app: FastifyInstance) {
       submissionId: z.coerce.number().int().positive()
     }).parse(request.params);
     const user = request.user!;
-    const result = await deleteSubmission(params.id, params.submissionId, { id: user.id, role: user.role });
+    const result = await deleteSubmission(params.id, params.submissionId, actorFromRequest(request));
     await writeAuditLog({ userId: user.id, action: "form.submission.delete", targetType: "form_submission", targetId: params.submissionId, riskLevel: "high", ...auditMetaFromRequest(request) });
     return result;
   });
@@ -144,7 +149,7 @@ export async function formsRoutes(app: FastifyInstance) {
   app.delete("/api/forms/:id/submissions", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const user = request.user!;
-    const result = await deleteAllFormSubmissions(params.id, { id: user.id, role: user.role });
+    const result = await deleteAllFormSubmissions(params.id, actorFromRequest(request));
     await writeAuditLog({ userId: user.id, action: "form.submissions.delete_all", targetType: "form", targetId: params.id, riskLevel: "high", detail: result, ...auditMetaFromRequest(request) });
     return result;
   });

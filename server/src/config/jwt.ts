@@ -18,13 +18,15 @@ export interface JwtUser {
 export function signJwt(user: Omit<JwtUser, "exp" | "iat" | "jti">, sessionId: string) {
   const options: SignOptions = {
     expiresIn: env.jwtExpiresIn as SignOptions["expiresIn"],
-    jwtid: sessionId
+    jwtid: sessionId,
+    audience: "chendoc-admin",
+    issuer: "chendoc"
   };
   return jwt.sign({ ...user, sessionId, tokenNonce: randomUUID() }, env.jwtSecret, options);
 }
 
 export function verifyJwt(token: string) {
-  const payload = jwt.verify(token, env.jwtSecret) as JwtUser;
+  const payload = jwt.verify(token, env.jwtSecret, { audience: "chendoc-admin", issuer: "chendoc" }) as JwtUser;
   const sessionId = payload.jti || payload.sessionId;
   if (!sessionId) throw new Error("Invalid JWT session.");
   return { ...payload, sessionId, jti: sessionId };

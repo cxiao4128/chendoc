@@ -212,12 +212,14 @@ describe("document identity and access boundaries", () => {
     await expect(getDocByUid(doc.docUid, otherUserActor)).rejects.toThrow("无权访问该文档");
   });
 
-  test("admin can manage normal docs but cannot see super admin docs", async () => {
+  test("ordinary admin only manages owned docs and cannot see user or super admin docs", async () => {
+    const adminDoc = await createDoc(adminId, { title: "Admin owned doc" }, adminActor);
     const userDoc = await createDoc(userId, { title: "Normal user doc" }, userActor);
     const superDoc = await createDoc(superAdminId, { title: "Super private needle" }, superAdminActor);
 
     expect(superDoc.isSuperAdminDoc).toBe(true);
-    expect((await listDocs(adminActor)).map((item) => item.docUid)).toEqual([userDoc.docUid]);
+    expect((await listDocs(adminActor)).map((item) => item.docUid)).toEqual([adminDoc.docUid]);
+    await expect(getDocByUid(userDoc.docUid, adminActor)).rejects.toThrow("无权访问该文档");
     expect((await listDocs(adminActor, "Super private needle"))).toHaveLength(0);
     await expect(getDocByUid(superDoc.docUid, adminActor)).rejects.toThrow("无权访问该文档");
   });
@@ -242,5 +244,12 @@ describe("document identity and access boundaries", () => {
     await softDeleteDoc(superDoc.id, superAdminId, superAdminActor);
 
     expect((await listTrashDocs(userActor)).map((item) => item.docUid)).not.toContain(superDoc.docUid);
+  });
+
+  test("rejects stale document revisions", async () => {
+    const doc = await createDoc(userId, { title: "Revision doc" }, userActor);
+    await updateDoc(doc.id, userId, { title: "First save", expectedRevision: doc.revision }, userActor);
+    await expect(updateDoc(doc.id, userId, { title: "Stale save", expectedRevision: doc.revision }, userActor))
+      .rejects.toMatchObject({ code: "DOC_REVISION_CONFLICT", statusCode: 409 });
   });
 });

@@ -142,7 +142,7 @@ function databaseUrl(provider: "sqlite" | "mysql") {
 
 function trustProxySetting(): boolean | string[] {
   const raw = (process.env.CHENDOC_TRUST_PROXY ?? process.env.TRUST_PROXY ?? "").trim();
-  if (!raw) return false;
+  if (!raw) return ["127.0.0.1", "::1"];
   if (raw === "0" || raw.toLowerCase() === "false" || raw.toLowerCase() === "no") return false;
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
 }
@@ -181,7 +181,17 @@ export const env = {
   cspConnectSources: (process.env.CHENDOC_CSP_CONNECT_SRC ?? "https://*.r2.cloudflarestorage.com")
     .split(",").map((item) => item.trim()).filter(Boolean),
   uploadScanWebhook: process.env.CHENDOC_UPLOAD_SCAN_WEBHOOK?.trim() || "",
-  uploadOrphanRetentionHours: optionalPositiveInt("CHENDOC_UPLOAD_ORPHAN_RETENTION_HOURS", 24),
+  requireUploadScan: process.env.CHENDOC_REQUIRE_UPLOAD_SCAN === undefined
+    ? (process.env.NODE_ENV ?? "development") === "production"
+    : flagEnabled("CHENDOC_REQUIRE_UPLOAD_SCAN"),
+  uploadOrphanRetentionHours: optionalPositiveInt("CHENDOC_UPLOAD_ORPHAN_RETENTION_HOURS", 1),
+  uploadQuota: {
+    dailyFiles: optionalPositiveInt("CHENDOC_UPLOAD_DAILY_FILES", 100),
+    dailyBytes: optionalPositiveInt("CHENDOC_UPLOAD_DAILY_MB", 2048) * 1024 * 1024,
+    storedBytesPerUser: optionalPositiveInt("CHENDOC_UPLOAD_STORED_MB", 10240) * 1024 * 1024
+  },
+  trashRetentionDays: optionalPositiveInt("CHENDOC_TRASH_RETENTION_DAYS", 7),
+  bodyLimitBytes: optionalPositiveInt("CHENDOC_BODY_LIMIT_MB", 8) * 1024 * 1024,
   logRetentionDays: optionalPositiveInt("CHENDOC_LOG_RETENTION_DAYS", 90),
   failedLogMaxMb: optionalPositiveInt("CHENDOC_FAILED_LOG_MAX_MB", 20),
   defaultAdminUsername,

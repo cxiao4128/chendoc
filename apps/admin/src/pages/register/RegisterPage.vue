@@ -137,7 +137,7 @@ onMounted(async () => {
           <span>密码</span>
           <div class="auth-input">
             <LockKeyhole :size="18" />
-            <input v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" placeholder="至少 8 位，包含大小写" required />
+            <input v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" placeholder="至少 12 位" required />
             <button type="button" aria-label="切换密码显示" @click="showPassword = !showPassword">
               <EyeOff v-if="showPassword" :size="18" />
               <Eye v-else :size="18" />

@@ -127,6 +127,10 @@ function messageForReason(reason: "missing" | "disabled" | "expired" | "deleted"
 }
 
 // ===== 分享页秒开优化：并行获取品牌配置 =====
+function unavailableShareMessage() {
+  return "分享暂不可用或不存在。";
+}
+
 async function sharePageBrand() {
   return await getCachedSiteBrand();
 }
@@ -167,12 +171,13 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
 
   if (!resolved.ok) {
     return {
-      statusCode: resolved.reason === "missing" || resolved.reason === "deleted" ? 404 : 403,
+      statusCode: 404,
       cacheControl: "no-store",
       html: renderShareUnavailableHtml({
         title: "分享暂不可用",
-        message: messageForReason(resolved.reason),
-        ...brand
+        message: unavailableShareMessage(),
+        ...brand,
+        scriptNonce
       })
     };
   }
@@ -186,7 +191,7 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
       statusCode: accessToken ? 401 : 200,
       cacheControl: "no-store",
       html: renderSharePasswordHtml({
-        title: resolved.doc.title,
+        title: "受保护文档",
         shareKey: String(shareKey),
         shareUrl,
         scriptNonce,
@@ -219,6 +224,7 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
     contentHtml: resolved.doc.contentHtml,
     shareUrl,
     ...brand,
+    scriptNonce,
     updatedAt: resolved.doc.updatedAt
   });
   const contentHash = hashShareHtml(html);
@@ -237,7 +243,7 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
 
   return {
     statusCode: 200,
-    cacheControl: "public, max-age=60, stale-while-revalidate=300",
+    cacheControl: accessToken ? "private, no-store" : "public, max-age=60, stale-while-revalidate=300",
     contentHash,
     etag,
     lastModified: resolved.doc.updatedAt,

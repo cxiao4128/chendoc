@@ -60,6 +60,13 @@
   display: none;
 }
 
+@media (min-width: 901px) {
+  .settings-page__tabs {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+}
+
 .settings-page__tab {
   position: relative;
   display: inline-flex;
@@ -323,8 +330,9 @@
 .settings-page__announcement-list li {
   display: grid;
   gap: 3px;
-  border-left: 2px solid var(--cd-primary-soft);
-  padding-left: 10px;
+  border-radius: 6px;
+  background: var(--cd-primary-soft);
+  padding: 8px 10px;
 }
 
 .settings-page__announcement-list b {

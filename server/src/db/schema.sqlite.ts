@@ -6,6 +6,7 @@ export const users = sqliteTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: text("role", { enum: ["admin", "user"] }).notNull().default("user"),
   status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
+  isSuperAdmin: integer("is_super_admin", { mode: "boolean" }).notNull().default(false),
   totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
   totpSecretEncrypted: text("totp_secret_encrypted"),
   totpRecoveryCodesEncrypted: text("totp_recovery_codes_encrypted"),
@@ -69,11 +70,11 @@ export const spaces = sqliteTable("spaces", {
 export const docs = sqliteTable("docs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   docUid: text("doc_uid").notNull(),
-  spaceId: integer("space_id").references(() => spaces.id),
+  spaceId: integer("space_id").references(() => spaces.id, { onDelete: "set null" }),
   parentId: integer("parent_id"),
   title: text("title").notNull(),
-  contentJson: text("content_json").notNull().default("{}"),
-  contentHtml: text("content_html").notNull().default(""),
+  contentJson: text("content_json").notNull(),
+  contentHtml: text("content_html").notNull(),
   contentJsonCiphertext: text("content_json_ciphertext"),
   contentJsonIv: text("content_json_iv"),
   contentJsonTag: text("content_json_tag"),
@@ -88,15 +89,17 @@ export const docs = sqliteTable("docs", {
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   sort: integer("sort").notNull().default(0),
-  ownerId: integer("owner_id").references(() => users.id),
+  ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   ownerRole: text("owner_role", { enum: ["user", "doc_admin", "super_admin"] }).notNull().default("user"),
-  createdBy: integer("created_by").references(() => users.id),
-  updatedBy: integer("updated_by").references(() => users.id),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  updatedBy: integer("updated_by").references(() => users.id, { onDelete: "set null" }),
   scope: text("scope", { enum: ["user", "admin", "system"] }).notNull().default("user"),
   isSuperAdminDoc: integer("is_super_admin_doc", { mode: "boolean" }).notNull().default(false),
   visibility: text("visibility", { enum: ["private", "shared", "public"] }).notNull().default("private"),
   tenantKey: text("tenant_key").notNull().default("default"),
   deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+  deletedBy: integer("deleted_by").references(() => users.id, { onDelete: "set null" }),
+  revision: integer("revision").notNull().default(1),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
@@ -111,7 +114,9 @@ export const docs = sqliteTable("docs", {
   docTenantOwnerDocIdx: index("idx_documents_tenant_owner_doc").on(table.tenantKey, table.ownerId, table.docUid),
   docCreatedByIdx: index("docs_created_by_idx").on(table.createdBy),
   docCreatedByDeletedAtIdx: index("docs_created_by_deleted_at_idx").on(table.createdBy, table.deletedAt),
-  docUpdatedIdx: index("docs_updated_idx").on(table.updatedAt)
+  docUpdatedIdx: index("docs_updated_idx").on(table.updatedAt),
+  docOwnerDeletedOrderIdx: index("docs_owner_deleted_order_idx").on(table.ownerId, table.deletedAt, table.pinned, table.updatedAt),
+  docAdminDeletedOrderIdx: index("docs_admin_deleted_order_idx").on(table.isSuperAdminDoc, table.deletedAt, table.pinned, table.updatedAt)
 }));
 
 export const shares = sqliteTable("shares", {
@@ -133,27 +138,31 @@ export const shares = sqliteTable("shares", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
-  shareDocIdx: index("shares_doc_idx").on(table.docId)
+  shareDocUnique: uniqueIndex("shares_doc_unique").on(table.docId)
 }));
 
 export const uploads = sqliteTable("uploads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id").references(() => users.id),
-  docId: integer("doc_id").references(() => docs.id),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+  docId: integer("doc_id").references(() => docs.id, { onDelete: "set null" }),
   objectKey: text("object_key").notNull().unique(),
   publicUrl: text("public_url").notNull(),
   mimeType: text("mime_type").notNull(),
   fileSize: integer("file_size").notNull(),
   kind: text("kind", { enum: ["image", "video", "file"] }).notNull(),
   originalName: text("original_name"),
+  detachedAt: integer("detached_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
-  uploadUserIdx: index("uploads_user_idx").on(table.userId)
+  uploadUserIdx: index("uploads_user_idx").on(table.userId),
+  uploadDocIdx: index("uploads_doc_idx").on(table.docId),
+  uploadUserCreatedIdx: index("uploads_user_created_idx").on(table.userId, table.createdAt),
+  uploadDetachedIdx: index("uploads_detached_idx").on(table.detachedAt)
 }));
 
 export const docVersions = sqliteTable("doc_versions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  docId: integer("doc_id").notNull().references(() => docs.id),
+  docId: integer("doc_id").notNull().references(() => docs.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   contentJson: text("content_json").notNull(),
   contentHtml: text("content_html").notNull(),
@@ -165,7 +174,7 @@ export const docVersions = sqliteTable("doc_versions", {
   contentHtmlIv: text("content_html_iv"),
   contentHtmlTag: text("content_html_tag"),
   contentHtmlKeyVersion: text("content_html_key_version"),
-  createdBy: integer("created_by").references(() => users.id),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
   docVersionsDocCreatedIdx: index("doc_versions_doc_created_idx").on(table.docId, table.createdAt)
@@ -277,7 +286,7 @@ export const forms = sqliteTable("forms", {
   formUid: text("form_uid").notNull().unique(),
   title: text("title").notNull(),
   description: text("description"),
-  fields: text("fields").notNull().default("[]"),  // JSON: FormField[]
+  fields: text("fields").notNull(),  // JSON: FormField[]
   ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: text("status", { enum: ["draft", "published", "closed"] }).notNull().default("draft"),
   maxSubmissions: integer("max_submissions"),

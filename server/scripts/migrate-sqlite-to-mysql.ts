@@ -27,9 +27,13 @@ const projectRoot = resolve(serverDir, "..");
 const tablePlans: TablePlan[] = [
   {
     name: "users",
-    columns: ["id", "username", "password_hash", "role", "status", "created_at", "updated_at"],
-    dateColumns: ["created_at", "updated_at"],
-    defaults: { role: "user", status: "active" }
+    columns: [
+      "id", "username", "password_hash", "role", "status", "is_super_admin", "totp_enabled",
+      "totp_secret_encrypted", "totp_recovery_codes_encrypted", "totp_updated_at", "created_at", "updated_at"
+    ],
+    dateColumns: ["totp_updated_at", "created_at", "updated_at"],
+    booleanColumns: ["is_super_admin", "totp_enabled"],
+    defaults: { role: "user", status: "active", is_super_admin: 0, totp_enabled: 0 }
   },
   {
     name: "spaces",
@@ -331,15 +335,16 @@ async function insertRows(connection: mysql.PoolConnection, plan: TablePlan, row
 
 async function validateAdmin(connection: mysql.PoolConnection, sqlite: Database.Database, defaultAdminUsername: string) {
   const sqliteAdmin = tableExists(sqlite, "users")
-    ? sqlite.prepare("SELECT id, username, role, status FROM users WHERE lower(username) = lower(?) LIMIT 1").get(defaultAdminUsername) as { role?: string } | undefined
+    ? sqlite.prepare("SELECT id, username, role, status, is_super_admin FROM users WHERE lower(username) = lower(?) LIMIT 1").get(defaultAdminUsername) as { role?: string; is_super_admin?: number } | undefined
     : undefined;
   const [rows] = await connection.query<mysql.RowDataPacket[]>(
-    "SELECT id, username, role, status FROM users WHERE lower(username) = lower(?) LIMIT 1",
+    "SELECT id, username, role, status, is_super_admin FROM users WHERE lower(username) = lower(?) LIMIT 1",
     [defaultAdminUsername]
   );
-  const mysqlAdmin = rows[0] as { role?: string } | undefined;
+  const mysqlAdmin = rows[0] as { role?: string; is_super_admin?: number } | undefined;
   const adminOk = !!sqliteAdmin && !!mysqlAdmin;
-  const roleOk = sqliteAdmin?.role === "admin" && mysqlAdmin?.role === "admin";
+  const roleOk = sqliteAdmin?.role === "admin" && mysqlAdmin?.role === "admin"
+    && Number(sqliteAdmin?.is_super_admin) === 1 && Number(mysqlAdmin?.is_super_admin) === 1;
   console.log(`admin: sqlite=${sqliteAdmin ? "present" : "missing"} mysql=${mysqlAdmin ? "present" : "missing"} ${adminOk ? "OK" : "FAIL"}`);
   console.log(`super_admin_role: sqlite=${sqliteAdmin?.role ?? "missing"} mysql=${mysqlAdmin?.role ?? "missing"} ${roleOk ? "OK" : "FAIL"}`);
 

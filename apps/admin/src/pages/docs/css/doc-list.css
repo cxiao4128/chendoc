@@ -159,6 +159,8 @@
 .doc-list-page__mobile-list {
   flex: 1;
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
   padding: 0 16px 24px;
   background: transparent;
@@ -894,7 +896,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin: -70px 0 26px;
+  margin: 0 0 18px;
 }
 
 .doc-list-page__table-tools .is-square {
@@ -1127,7 +1129,7 @@
   height: 64px;
   place-items: center;
   border-radius: 50%;
-  background: conic-gradient(#7d6be8 var(--storage-percent, 0%), #e8e1ff 0);
+  background: var(--cd-primary-soft);
 }
 
 .doc-list-page__ring span {
@@ -1161,6 +1163,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 1360px) {
+  .doc-list-page:not(.is-mobile) .doc-list-page__workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .doc-list-page:not(.is-mobile) .doc-list-page__toolbox {
+    display: none;
+  }
+
+  .doc-list-page:not(.is-mobile) .doc-list-page__table-head,
+  .doc-list-page:not(.is-mobile) .doc-list-page__row {
+    grid-template-columns: 32px minmax(220px, 1fr) 78px 130px 140px 72px;
+    gap: 12px;
+    padding-inline: 18px;
+  }
+
+  .doc-list-page:not(.is-mobile) .doc-list-page__table.has-owner .doc-list-page__table-head,
+  .doc-list-page:not(.is-mobile) .doc-list-page__table.has-owner .doc-list-page__row {
+    grid-template-columns: 32px minmax(220px, 1fr) 78px 96px 125px 135px 72px;
+  }
 }
 
 .doc-list-page__toolbox article b {

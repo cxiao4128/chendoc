@@ -31,6 +31,12 @@
   border-right: 0;
 }
 
+.doc-editor-page__left.is-toc-only .doc-editor-page__left-toc {
+  flex: 1 1 auto;
+  max-height: none;
+  border-top: 0;
+}
+
 .doc-editor-page__left-toc {
   flex: 0 0 auto;
   max-height: 32vh;
@@ -59,7 +65,7 @@
   top: var(--cd-header);
   z-index: 10;
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) repeat(5, auto);
+  grid-template-columns: minmax(160px, 1fr) auto minmax(0, auto) repeat(4, auto);
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -67,6 +73,56 @@
   border-bottom: 1px solid var(--cd-border);
   background: var(--cd-panel);
   padding: 8px 12px;
+}
+
+.doc-editor-page__desktop-more {
+  position: relative;
+}
+
+.doc-editor-page__desktop-more summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.doc-editor-page__desktop-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.doc-editor-page__desktop-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 156px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: var(--cd-panel);
+  box-shadow: var(--cd-shadow-soft);
+  padding: 6px;
+}
+
+.doc-editor-page__desktop-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cd-danger);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc-editor-page__desktop-menu button:hover,
+.doc-editor-page__desktop-menu button:focus-visible {
+  background: var(--cd-danger-soft);
+  outline: none;
 }
 
 .doc-editor-page__title {
@@ -364,7 +420,7 @@
   white-space: nowrap;
   font-size: 13px;
   scroll-margin-top: 80px;
-  transition: background 0.15s ease, color 0.15s ease, padding-left 0.2s ease;
+  transition: background 150ms ease-out, color 150ms ease-out;
 }
 
 .doc-editor-page__toc a:hover,
@@ -615,7 +671,7 @@
   border: 1px solid rgba(215, 92, 78, 0.24);
   border-radius: 8px;
   box-shadow: 0 10px 24px rgba(220, 38, 38, 0.07);
-  animation: saveErrorInMobile 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: saveErrorInMobile 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes saveErrorInMobile {
@@ -854,6 +910,14 @@
 }
 
 @media (max-width: 1180px) {
+  .doc-editor-page__bar {
+    grid-template-columns: minmax(160px, 1fr) auto repeat(4, auto);
+  }
+
+  .doc-editor-page__metrics {
+    display: none;
+  }
+
   .doc-editor-page__body,
   .doc-editor-page__body.has-aside {
     grid-template-columns: minmax(0, 1fr);

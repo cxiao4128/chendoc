@@ -24,7 +24,7 @@ const { db, sqlite } = await import("../../db/client.js");
 const { docVersions, operationLogs, shares, users } = await import("../../db/schema.js");
 const { decryptDocumentRecord } = await import("../../utils/documentCrypto.js");
 const { createDoc, getDoc, listDocs, publishDoc, restoreDocVersion, softDeleteDoc, updateDoc } = await import("../docs/docs.service.js");
-const { createOrGetShare, getPublicShare, reviewUserShare, updateShare, verifySharePassword } = await import("./shares.service.js");
+const { createOrGetShare, getPublicShare, publicDocPayload, reviewUserShare, updateShare, verifySharePassword } = await import("./shares.service.js");
 
 const adminId = 1;
 const userId = 2;
@@ -129,10 +129,13 @@ describe("share public access boundary", () => {
     const firstDoc = await createDocument();
     const firstShare = await createShare(firstDoc.id, { isEnabled: true });
     expect(firstShare.shareCode).toBe(111);
+    expect(firstShare.shareToken).not.toBe(String(firstShare.shareCode));
+    expect(firstShare.shareToken).toMatch(/^s_[A-Za-z0-9_-]{40,}$/);
 
     const customDoc = await createDocument();
     const customShare = await createShare(customDoc.id, { isEnabled: true, shareCode: 888 });
     expect(customShare.shareCode).toBe(888);
+    expect(customShare.shareToken).not.toBe(String(customShare.shareCode));
 
     const nextDoc = await createDocument();
     const nextShare = await createShare(nextDoc.id, { isEnabled: true });
@@ -240,6 +243,25 @@ describe("share public access boundary", () => {
     expect(restored.contentHtml).toBe("<p></p>");
     expect(versions.some((item) => decryptDocumentRecord(item).contentHtml === "<p>private content</p>")).toBe(true);
   });
+
+  test("public payload never exposes document or database identifiers", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true });
+    const data = await getPublicShare(share.shareCode);
+    expect(data).toBeTruthy();
+    const payload = publicDocPayload(data!, true);
+    expect(payload).not.toHaveProperty("id");
+    expect(payload).not.toHaveProperty("docId");
+    expect(payload).not.toHaveProperty("docUid");
+    expect(payload).not.toHaveProperty("ownerId");
+  });
+
+  test("disabled document owners cannot keep public shares online", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true });
+    db.update(users).set({ status: "disabled", updatedAt: new Date() }).where(eq(users.id, adminId)).run();
+    expect(await getPublicShare(share.shareCode)).toBeNull();
+  });
 });
 
 describe("audit log coverage", () => {
@@ -293,7 +315,7 @@ describe("document search", () => {
     expect(ids).not.toContain(deletedDoc.id);
   });
 
-  test("ordinary users only search their own documents", async () => {
+  test("ordinary users and ordinary admins only search their own documents", async () => {
     const ownDoc = await createDoc(userId, { title: "Own search needle" });
     await updateDoc(ownDoc.id, userId, {
       summary: "shared visibility search marker"
@@ -307,7 +329,7 @@ describe("document search", () => {
     const adminResults = (await listDocs({ id: adminId, role: "admin" }, "shared visibility")).map((doc) => doc.id).sort((a, b) => a - b);
 
     expect(ownResults).toEqual([ownDoc.id]);
-    expect(adminResults).toEqual([ownDoc.id, otherDoc.id].sort((a, b) => a - b));
+    expect(adminResults).toEqual([]);
   });
 });
 
@@ -371,8 +393,9 @@ describe("user document share review flow", () => {
     const adminDoc = await createDocument();
 
     expect((await listDocs({ id: userId, role: "user" })).map((doc) => doc.id)).toEqual([ownDoc.id]);
-    expect((await listDocs({ id: adminId, role: "admin" })).map((doc) => doc.id).sort((a, b) => a - b)).toEqual([adminDoc.id, ownDoc.id].sort((a, b) => a - b));
+    expect((await listDocs({ id: adminId, role: "admin" })).map((doc) => doc.id)).toEqual([adminDoc.id]);
     await expect(getDoc(adminDoc.id, { id: userId, role: "user" })).rejects.toThrow("无权访问该文档");
+    await expect(getDoc(ownDoc.id, { id: adminId, role: "admin" })).rejects.toThrow("无权访问该文档");
   });
 
   test("ordinary users cannot manage another user's share", async () => {

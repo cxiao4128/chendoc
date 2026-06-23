@@ -18,13 +18,13 @@ export interface TotpSetupView {
 
 async function promptDangerPayload() {
   const values = await nativeFormDialog({
-    title: "管理员二次验证",
+    title: "二次验证",
     message: "危险操作需要再次确认身份。5 分钟内不会重复要求。",
     confirmText: "验证",
     fields: [
       {
         key: "password",
-        label: "管理员密码",
+        label: "当前账号密码",
         type: "password",
         autocomplete: "current-password",
         required: true,
@@ -47,7 +47,7 @@ async function promptDangerPayload() {
 
 export async function ensureDangerVerified(force = false) {
   if (!force && Date.now() < dangerVerifiedUntil - 15_000) return;
-  const response = await request<{ ok: true; expireAt: string | number }>("/api/admin/security/danger-verify", {
+  const response = await request<{ ok: true; expireAt: string | number }>("/api/security/danger-verify", {
     method: "POST",
     body: JSON.stringify(await promptDangerPayload())
   });

@@ -75,11 +75,13 @@ export interface SubmissionRecord {
   submittedAt: Date;
 }
 
-type Actor = { id: number; role: "admin" | "user" };
+type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
 
 // ===== Schema 验证 =====
+const optionFieldTypes = new Set<FieldType>(["select", "radio", "multiselect"]);
+
 const fieldSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "字段 ID 格式无效"),
   type: z.enum([
     "text", "textarea", "number", "select", "radio", "checkbox", "multiselect",
     "date", "datetime", "time", "phone", "email", "rating",
@@ -96,12 +98,37 @@ const fieldSchema = z.object({
   max: z.number().optional(),
   maxLength: z.number().int().min(1).max(2000).optional(),
   order: z.number().int().min(0)
+}).superRefine((field, ctx) => {
+  if (optionFieldTypes.has(field.type) && (!field.options || field.options.length === 0)) {
+    ctx.addIssue({ code: "custom", path: ["options"], message: `“${field.label}”至少需要一个选项` });
+  }
+  if (field.options && new Set(field.options).size !== field.options.length) {
+    ctx.addIssue({ code: "custom", path: ["options"], message: `“${field.label}”的选项不能重复` });
+  }
+  if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+    ctx.addIssue({ code: "custom", path: ["max"], message: `“${field.label}”的最大值不能小于最小值` });
+  }
 });
+
+const fieldsSchema = z.array(fieldSchema).max(50).superRefine((fields, ctx) => {
+  const seen = new Set<string>();
+  fields.forEach((field, index) => {
+    if (seen.has(field.id)) {
+      ctx.addIssue({ code: "custom", path: [index, "id"], message: "字段 ID 不能重复" });
+    }
+    seen.add(field.id);
+  });
+});
+
+const exclusiveInfoSchema = z.record(
+  z.string().trim().min(1).max(64),
+  z.string().trim().max(1000)
+).nullable();
 
 const createFormSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().max(1000).optional().nullable(),
-  fields: z.array(fieldSchema).max(50),
+  fields: fieldsSchema,
   config: z.object({
     maxSubmissions: z.number().int().positive().nullable().optional(),
     allowMultiple: z.boolean().optional(),
@@ -109,13 +136,13 @@ const createFormSchema = z.object({
     retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
     storeUserAgent: z.boolean().optional()
   }).optional(),
-  exclusiveInfo: z.record(z.string(), z.string()).nullable().optional()
+  exclusiveInfo: exclusiveInfoSchema.optional()
 });
 
 const updateFormSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   description: z.string().max(1000).optional().nullable(),
-  fields: z.array(fieldSchema).max(50).optional(),
+  fields: fieldsSchema.optional(),
   config: z.object({
     maxSubmissions: z.number().int().positive().nullable().optional(),
     allowMultiple: z.boolean().optional(),
@@ -123,7 +150,7 @@ const updateFormSchema = z.object({
     retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
     storeUserAgent: z.boolean().optional()
   }).optional(),
-  exclusiveInfo: z.record(z.string(), z.string()).nullable().optional()
+  exclusiveInfo: exclusiveInfoSchema.optional()
 });
 
 const submitFormSchema = z.object({
@@ -164,7 +191,7 @@ function safeFormRecord(form: typeof forms.$inferSelect): FormRecord {
 }
 
 function assertCanManageForm(actor: Actor, form: FormRecord) {
-  if (actor.role === "admin") return;
+  if (actor.isSuperAdmin) return;
   if (form.ownerId !== actor.id) throw new ForbiddenError("无权管理此表单", "FORM_FORBIDDEN");
 }
 
@@ -185,12 +212,19 @@ function validateFieldValue(field: FormField, value: unknown): string | null {
   switch (field.type) {
     case "text":
     case "textarea":
+    case "name":
+    case "address":
+    case "idcard":
       if (field.maxLength && strValue.length > field.maxLength) {
         return `"${field.label}"不能超过${field.maxLength}个字符`;
+      }
+      if (field.type === "idcard" && strValue && !/^(?:\d{15}|\d{17}[\dXx])$/.test(strValue)) {
+        return `"${field.label}"格式不正确`;
       }
       break;
 
     case "number":
+    case "age":
       if (strValue) {
         const num = Number(value);
         if (isNaN(num)) return `"${field.label}"必须是数字`;
@@ -219,6 +253,28 @@ function validateFieldValue(field: FormField, value: unknown): string | null {
     case "radio":
       if (strValue && field.options && !field.options.includes(strValue)) {
         return `"${field.label}"选项无效`;
+      }
+      break;
+
+    case "gender":
+      if (strValue && !["男", "女", "其他"].includes(strValue)) {
+        return `"${field.label}"选项无效`;
+      }
+      break;
+
+    case "rating": {
+      const rating = Number(value);
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return `"${field.label}"必须是 1 到 5 星`;
+      }
+      break;
+    }
+
+    case "image":
+      try {
+        if (strValue) new URL(strValue);
+      } catch {
+        return `"${field.label}"必须是有效链接`;
       }
       break;
 
@@ -277,7 +333,7 @@ export async function createForm(actor: Actor, input: unknown) {
 }
 
 export async function listForms(actor: Actor) {
-  const where = actor.role === "admin"
+  const where = actor.isSuperAdmin
     ? undefined
     : eq(forms.ownerId, actor.id);
 
@@ -374,7 +430,7 @@ export async function deleteAllFormSubmissions(formId: number, actor: Actor) {
 
 export async function publishForm(id: number, actor: Actor) {
   const form = await getForm(id, actor);
-  if (form.fields.length === 0) {
+  if (!form.fields.some((field) => field.type !== "section")) {
     throw new BadRequestError("请先添加至少一个字段", "FORM_NO_FIELDS");
   }
 

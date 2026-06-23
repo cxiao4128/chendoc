@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { checkShareHtmlCache, renderSharePage } from "./public.service.js";
+import { sharePageStyle } from "./sharePageStyle.js";
+import { enqueueSecurityLog } from "../../utils/asyncLogQueue.js";
 
 function joinedHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value.join(",") : value;
@@ -36,7 +38,13 @@ function parseIfModifiedSince(header: string | string[] | undefined): Date | und
 }
 
 export async function publicRoutes(app: FastifyInstance) {
-  app.get("/r/:shareKey", async (request, reply) => {
+  const publicShareRateLimit = { max: 30, timeWindow: "1 minute" };
+  app.get("/share-page.css", async (_request, reply) => reply
+    .header("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400")
+    .type("text/css; charset=utf-8")
+    .send(sharePageStyle));
+
+  app.get("/r/:shareKey", { config: { rateLimit: publicShareRateLimit } }, async (request, reply) => {
     const params = z.object({ shareKey: z.string().trim().min(1).max(64) }).parse(request.params);
     const nonce = randomBytes(16).toString("base64url");
 
@@ -72,12 +80,20 @@ export async function publicRoutes(app: FastifyInstance) {
     }
 
     page.recordView?.();
+    enqueueSecurityLog({
+      action: page.statusCode === 200 ? "share.page.access" : "share.page.unavailable",
+      targetType: "share",
+      targetId: params.shareKey,
+      ip: request.ip,
+      statusCode: page.statusCode,
+      message: page.statusCode === 200 ? "share page access" : "share page unavailable"
+    });
     return reply
       .header("Content-Security-Policy", [
         "default-src 'self'",
         "img-src 'self' data: blob: https:",
         "media-src 'self' blob: https:",
-        "style-src 'self' 'unsafe-inline'",
+        "style-src 'self'",
         `script-src 'self' 'nonce-${nonce}'`,
         "connect-src 'self'",
         "frame-ancestors 'self'",

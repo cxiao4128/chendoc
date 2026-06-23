@@ -116,7 +116,11 @@ export const useDocStore = defineStore("doc", () => {
 
   async function saveDoc(docUid: string, patch: Partial<DocDetail>) {
     detailError.value = null;
-    const response = await updateDocApi(docUid, patch);
+    const cached = current.value?.docUid === docUid ? current.value : getDetailCache(docUid);
+    const response = await updateDocApi(docUid, {
+      ...patch,
+      expectedRevision: cached?.revision
+    });
     current.value = response.doc;
     setDetailCache(response.doc);
     const index = docs.value.findIndex((item) => item.docUid === docUid);

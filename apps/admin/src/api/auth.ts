@@ -35,4 +35,11 @@ function logoutApi() {
   return request<{ ok: true }>("/api/auth/logout", { method: "POST" });
 }
 
-export { submitSignIn as a0, submitSignUp as a1, fetchProfile as a2, logoutApi as a3 };
+function restoreSessionApi() {
+  return request<{ token: string; expiresAt?: string; user: UserProfile }>("/api/auth/restore", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+}
+
+export { submitSignIn as a0, submitSignUp as a1, fetchProfile as a2, logoutApi as a3, restoreSessionApi as a4 };

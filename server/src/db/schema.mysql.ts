@@ -9,6 +9,7 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   role: varchar("role", { length: 16 }).notNull().default("user"),
   status: varchar("status", { length: 16 }).notNull().default("active"),
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
   totpEnabled: boolean("totp_enabled").notNull().default(false),
   totpSecretEncrypted: text("totp_secret_encrypted"),
   totpRecoveryCodesEncrypted: mediumtext("totp_recovery_codes_encrypted"),
@@ -91,7 +92,7 @@ export const docs = mysqlTable("docs", {
   pinned: boolean("pinned").notNull().default(false),
   status: varchar("status", { length: 16 }).notNull().default("draft"),
   sort: int("sort").notNull().default(0),
-  ownerId: int("owner_id").references(() => users.id, { onDelete: "set null" }),
+  ownerId: int("owner_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   ownerRole: varchar("owner_role", { length: 16 }).notNull().default("user"),
   createdBy: int("created_by").references(() => users.id, { onDelete: "set null" }),
   updatedBy: int("updated_by").references(() => users.id, { onDelete: "set null" }),
@@ -100,6 +101,8 @@ export const docs = mysqlTable("docs", {
   visibility: varchar("visibility", { length: 16 }).notNull().default("private"),
   tenantKey: varchar("tenant_key", { length: 64 }).notNull().default("default"),
   deletedAt: ts("deleted_at"),
+  deletedBy: int("deleted_by").references(() => users.id, { onDelete: "set null" }),
+  revision: int("revision").notNull().default(1),
   createdAt: ts("created_at").notNull(),
   updatedAt: ts("updated_at").notNull()
 }, (table) => [
@@ -114,7 +117,9 @@ export const docs = mysqlTable("docs", {
   index("idx_documents_tenant_owner_doc").on(table.tenantKey, table.ownerId, table.docUid),
   index("docs_created_by_idx").on(table.createdBy),
   index("docs_created_by_deleted_at_idx").on(table.createdBy, table.deletedAt),
-  index("docs_updated_idx").on(table.updatedAt)
+  index("docs_updated_idx").on(table.updatedAt),
+  index("docs_owner_deleted_order_idx").on(table.ownerId, table.deletedAt, table.pinned, table.updatedAt),
+  index("docs_admin_deleted_order_idx").on(table.isSuperAdminDoc, table.deletedAt, table.pinned, table.updatedAt)
 ]);
 
 export const shares = mysqlTable("shares", {
@@ -136,7 +141,7 @@ export const shares = mysqlTable("shares", {
   createdAt: ts("created_at").notNull(),
   updatedAt: ts("updated_at").notNull()
 }, (table) => [
-  index("shares_doc_idx").on(table.docId)
+  uniqueIndex("shares_doc_unique").on(table.docId)
 ]);
 
 export const uploads = mysqlTable("uploads", {
@@ -149,9 +154,13 @@ export const uploads = mysqlTable("uploads", {
   fileSize: int("file_size").notNull(),
   kind: varchar("kind", { length: 16 }).notNull(),
   originalName: varchar("original_name", { length: 255 }),
+  detachedAt: ts("detached_at"),
   createdAt: ts("created_at").notNull()
 }, (table) => [
-  index("uploads_user_idx").on(table.userId)
+  index("uploads_user_idx").on(table.userId),
+  index("uploads_doc_idx").on(table.docId),
+  index("uploads_user_created_idx").on(table.userId, table.createdAt),
+  index("uploads_detached_idx").on(table.detachedAt)
 ]);
 
 export const docVersions = mysqlTable("doc_versions", {
@@ -280,7 +289,7 @@ export const forms = mysqlTable("forms", {
   formUid: varchar("form_uid", { length: 32 }).notNull().unique(),
   title: varchar("title", { length: 191 }).notNull(),
   description: text("description"),
-  fields: mediumtext("fields").notNull().default("[]"),
+  fields: mediumtext("fields").notNull(),
   ownerId: int("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: varchar("status", { length: 16 }).notNull().default("draft"),
   maxSubmissions: int("max_submissions"),

@@ -1,18 +1,20 @@
-import { HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { and, desc, eq, gte, inArray, isNotNull, lt, lte, ne, or } from "drizzle-orm";
+import { DeleteObjectCommand, GetBucketCorsCommand, HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { authSessions, captchas, docs, docVersions, invites, logs, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
+import { authSessions, captchas, docs, docVersions, forms, invites, logs, operationLogs, settings, shares, spaces, uploads, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
-import { createR2Client } from "../../config/r2.js";
+import { createR2Client, getR2CorsAllowedOrigins } from "../../config/r2.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { maskSecret } from "../../utils/maskSecret.js";
 import { now } from "../../utils/date.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { clearLoginFailuresForUsername } from "../auth/loginRisk.service.js";
 import { hashPassword, validatePassword } from "../../utils/password.js";
+import { ForbiddenError } from "../../utils/errors.js";
 
 const sensitiveKeys = new Set(["r2.access_key_id", "r2.secret_access_key"]);
 
@@ -64,7 +66,7 @@ type SystemAction =
 
 const defaultRemoteLogoUrl = "";
 const defaultRemoteWallpaperUrl = "";
-const APP_VERSION = "2.6.0";
+const APP_VERSION = "2.9.0";
 const DATABASE_SCHEMA_VERSION = "20260620.1";
 const REMOTE_ASSET_TIMEOUT_MS = 5000;
 const REMOTE_LOGO_MAX_BYTES = 1024 * 1024;
@@ -333,60 +335,60 @@ export async function getSystemOverview() {
   const todayStart = startOfLocalDay();
   const yesterdayStart = startOfLocalDay(-1);
   const processStartedAt = new Date(Date.now() - Math.floor(process.uptime() * 1000));
-  const [
-    docRows,
-    uploadRows,
-    shareRows,
-    sessionRows,
-    captchaRows,
-    recentLogRows,
-    r2Result
-  ] = await Promise.all([
-    dbAll<{ id: number; status: "draft" | "published" | "archived"; deletedAt: Date | null }>(db
-      .select({ id: docs.id, status: docs.status, deletedAt: docs.deletedAt })
-      .from(docs)),
-    dbAll<{ id: number; kind: "image" | "video" | "file"; fileSize: number }>(db
-      .select({ id: uploads.id, kind: uploads.kind, fileSize: uploads.fileSize })
-      .from(uploads)),
-    dbAll<{ id: number; isEnabled: boolean; reviewStatus: string; passwordHash: string | null; viewCount: number }>(db
-      .select({
-        id: shares.id,
-        isEnabled: shares.isEnabled,
-        reviewStatus: shares.reviewStatus,
-        passwordHash: shares.passwordHash,
-        viewCount: shares.viewCount
-      })
-      .from(shares)),
-    dbAll<{ id: string; expireAt: Date }>(db
-      .select({ id: authSessions.id, expireAt: authSessions.expireAt })
-      .from(authSessions)),
-    dbAll<{ id: string; expireAt: Date; usedAt: Date | null }>(db
-      .select({ id: captchas.id, expireAt: captchas.expireAt, usedAt: captchas.usedAt })
-      .from(captchas)),
-    dbAll<{ id: number; createdAt: Date }>(db
-      .select({ id: logs.id, createdAt: logs.createdAt })
-      .from(logs)
-      .where(gte(logs.createdAt, yesterdayStart))),
+  const timestamp = now();
+  const aggregateNow = env.databaseProvider === "sqlite" ? timestamp.getTime() : timestamp;
+  const aggregateTodayStart = env.databaseProvider === "sqlite" ? todayStart.getTime() : todayStart;
+  const aggregateYesterdayStart = env.databaseProvider === "sqlite" ? yesterdayStart.getTime() : yesterdayStart;
+  const [docStats, uploadStats, shareStats, sessionStats, captchaStats, logStats, r2Result] = await Promise.all([
+    dbGet<any>(db.select({
+      total: sql<number>`COUNT(*)`,
+      trash: sql<number>`SUM(CASE WHEN ${docs.deletedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+      published: sql<number>`SUM(CASE WHEN ${docs.status} = 'published' AND ${docs.deletedAt} IS NULL THEN 1 ELSE 0 END)`
+    }).from(docs)),
+    dbGet<any>(db.select({
+      total: sql<number>`COUNT(*)`,
+      bytes: sql<number>`COALESCE(SUM(${uploads.fileSize}), 0)`,
+      images: sql<number>`SUM(CASE WHEN ${uploads.kind} = 'image' THEN 1 ELSE 0 END)`,
+      videos: sql<number>`SUM(CASE WHEN ${uploads.kind} = 'video' THEN 1 ELSE 0 END)`,
+      files: sql<number>`SUM(CASE WHEN ${uploads.kind} = 'file' THEN 1 ELSE 0 END)`
+    }).from(uploads)),
+    dbGet<any>(db.select({
+      total: sql<number>`COUNT(*)`,
+      active: sql<number>`SUM(CASE WHEN ${shares.isEnabled} = 1 THEN 1 ELSE 0 END)`,
+      pending: sql<number>`SUM(CASE WHEN ${shares.reviewStatus} = 'pending' THEN 1 ELSE 0 END)`,
+      protected: sql<number>`SUM(CASE WHEN ${shares.passwordHash} IS NOT NULL THEN 1 ELSE 0 END)`,
+      views: sql<number>`COALESCE(SUM(${shares.viewCount}), 0)`
+    }).from(shares)),
+    dbGet<any>(db.select({
+      total: sql<number>`COUNT(*)`,
+      active: sql<number>`SUM(CASE WHEN ${authSessions.expireAt} > ${aggregateNow} THEN 1 ELSE 0 END)`
+    }).from(authSessions)),
+    dbGet<any>(db.select({
+      total: sql<number>`COUNT(*)`,
+      active: sql<number>`SUM(CASE WHEN ${captchas.usedAt} IS NULL AND ${captchas.expireAt} > ${aggregateNow} THEN 1 ELSE 0 END)`
+    }).from(captchas)),
+    dbGet<any>(db.select({
+      today: sql<number>`SUM(CASE WHEN ${logs.createdAt} >= ${aggregateTodayStart} THEN 1 ELSE 0 END)`,
+      yesterday: sql<number>`SUM(CASE WHEN ${logs.createdAt} >= ${aggregateYesterdayStart} AND ${logs.createdAt} < ${aggregateTodayStart} THEN 1 ELSE 0 END)`
+    }).from(logs).where(gte(logs.createdAt, yesterdayStart))),
     safeR2Config()
   ]);
 
-  const currentTime = Date.now();
-  const todayLogs = recentLogRows.filter((row) => row.createdAt >= todayStart).length;
-  const yesterdayLogs = recentLogRows.filter((row) => row.createdAt >= yesterdayStart && row.createdAt < todayStart).length;
-  const storageBytes = uploadRows.reduce((total, row) => total + Number(row.fileSize || 0), 0);
-  const uploadsByKind = uploadRows.reduce<Record<"image" | "video" | "file", number>>((current, row) => {
-    current[row.kind] += 1;
-    return current;
-  }, { image: 0, video: 0, file: 0 });
-  const docsInTrash = docRows.filter((doc) => !!doc.deletedAt).length;
-  const activeSessions = sessionRows.filter((session) => session.expireAt.getTime() > currentTime).length;
-  const expiredSessions = sessionRows.length - activeSessions;
-  const activeCaptchas = captchaRows.filter((captcha) => !captcha.usedAt && captcha.expireAt.getTime() > currentTime).length;
-  const staleCaptchas = captchaRows.length - activeCaptchas;
-  const activeShares = shareRows.filter((share) => share.isEnabled).length;
-  const pendingShares = shareRows.filter((share) => share.reviewStatus === "pending").length;
-  const protectedShares = shareRows.filter((share) => !!share.passwordHash).length;
-  const totalShareViews = shareRows.reduce((total, share) => total + Number(share.viewCount || 0), 0);
+  const totalDocs = Number(docStats?.total ?? 0);
+  const docsInTrash = Number(docStats?.trash ?? 0);
+  const totalUploads = Number(uploadStats?.total ?? 0);
+  const storageBytes = Number(uploadStats?.bytes ?? 0);
+  const uploadsByKind = {
+    image: Number(uploadStats?.images ?? 0),
+    video: Number(uploadStats?.videos ?? 0),
+    file: Number(uploadStats?.files ?? 0)
+  };
+  const activeSessions = Number(sessionStats?.active ?? 0);
+  const expiredSessions = Number(sessionStats?.total ?? 0) - activeSessions;
+  const activeCaptchas = Number(captchaStats?.active ?? 0);
+  const staleCaptchas = Number(captchaStats?.total ?? 0) - activeCaptchas;
+  const todayLogs = Number(logStats?.today ?? 0);
+  const yesterdayLogs = Number(logStats?.yesterday ?? 0);
 
   return {
     version: `v${APP_VERSION}`,
@@ -408,7 +410,7 @@ export async function getSystemOverview() {
     },
     backup: latestBackupStatus(),
     storage: {
-      fileCount: uploadRows.length,
+      fileCount: totalUploads,
       totalBytes: storageBytes,
       byKind: uploadsByKind
     },
@@ -419,17 +421,17 @@ export async function getSystemOverview() {
       deltaPercent: percentDelta(todayLogs, yesterdayLogs)
     },
     docs: {
-      total: docRows.length,
-      active: docRows.length - docsInTrash,
+      total: totalDocs,
+      active: totalDocs - docsInTrash,
       trash: docsInTrash,
-      published: docRows.filter((doc) => doc.status === "published" && !doc.deletedAt).length
+      published: Number(docStats?.published ?? 0)
     },
     shares: {
-      total: shareRows.length,
-      active: activeShares,
-      pendingReview: pendingShares,
-      passwordProtected: protectedShares,
-      totalViews: totalShareViews
+      total: Number(shareStats?.total ?? 0),
+      active: Number(shareStats?.active ?? 0),
+      pendingReview: Number(shareStats?.pending ?? 0),
+      passwordProtected: Number(shareStats?.protected ?? 0),
+      totalViews: Number(shareStats?.views ?? 0)
     },
     security: {
       activeSessions,
@@ -441,7 +443,8 @@ export async function getSystemOverview() {
   };
 }
 
-async function emptyTrashDocs() {
+async function emptyTrashDocs(actor: UserActor) {
+  if (!actor.isSuperAdmin) throw new ForbiddenError("只有超级管理员可以清空全站回收站", "SUPER_ADMIN_REQUIRED");
   const trashRows = await dbAll<{ id: number }>(db
     .select({ id: docs.id })
     .from(docs)
@@ -450,16 +453,17 @@ async function emptyTrashDocs() {
   if (!trashIds.length) return 0;
 
   await dbTransaction(async (tx) => {
+    await dbRun(tx.update(docs).set({ parentId: null }).where(inArray(docs.parentId, trashIds)));
     await dbRun(tx.delete(shares).where(inArray(shares.docId, trashIds)));
     await dbRun(tx.delete(docVersions).where(inArray(docVersions.docId, trashIds)));
-    await dbRun(tx.update(uploads).set({ docId: null }).where(inArray(uploads.docId, trashIds)));
+    await dbRun(tx.update(uploads).set({ docId: null, detachedAt: now() }).where(inArray(uploads.docId, trashIds)));
     await dbRun(tx.delete(docs).where(inArray(docs.id, trashIds)));
   });
 
   return trashIds.length;
 }
 
-export async function runSystemMaintenanceAction(action: SystemAction) {
+export async function runSystemMaintenanceAction(action: SystemAction, actor: UserActor) {
   const timestamp = now();
   if (action === "cleanupExpiredSessions") {
     const result = await dbRun(db.delete(authSessions).where(lte(authSessions.expireAt, timestamp)));
@@ -472,7 +476,7 @@ export async function runSystemMaintenanceAction(action: SystemAction) {
   }
 
   if (action === "emptyTrash") {
-    const changed = await emptyTrashDocs();
+    const changed = await emptyTrashDocs(actor);
     return { action, changed, message: `已永久清理 ${changed} 篇回收站文档` };
   }
 
@@ -549,13 +553,16 @@ async function recentUserActivity(userId: number) {
 }
 
 async function userDocStats(userId: number) {
-  const rows = await dbAll<{ deletedAt: Date | null }>(db
-    .select({ deletedAt: docs.deletedAt })
+  const result = await dbGet<{ docCount: number; deletedDocCount: number }>(db
+    .select({
+      docCount: sql<number>`COUNT(*)`,
+      deletedDocCount: sql<number>`SUM(CASE WHEN ${docs.deletedAt} IS NOT NULL THEN 1 ELSE 0 END)`
+    })
     .from(docs)
     .where(eq(docs.ownerId, userId)));
   return {
-    docCount: rows.length,
-    deletedDocCount: rows.filter((row) => !!row.deletedAt).length
+    docCount: Number(result?.docCount ?? 0),
+    deletedDocCount: Number(result?.deletedDocCount ?? 0)
   };
 }
 
@@ -564,17 +571,22 @@ async function userDocStatsMap(userIds: number[]) {
   for (const userId of userIds) stats.set(userId, { docCount: 0, deletedDocCount: 0 });
   if (!userIds.length) return stats;
 
-  const rows = await dbAll<{ ownerId: number | null; deletedAt: Date | null }>(db
-    .select({ ownerId: docs.ownerId, deletedAt: docs.deletedAt })
+  const rows = await dbAll<{ ownerId: number | null; docCount: number; deletedDocCount: number }>(db
+    .select({
+      ownerId: docs.ownerId,
+      docCount: sql<number>`COUNT(*)`,
+      deletedDocCount: sql<number>`SUM(CASE WHEN ${docs.deletedAt} IS NOT NULL THEN 1 ELSE 0 END)`
+    })
     .from(docs)
-    .where(inArray(docs.ownerId, userIds)));
+    .where(inArray(docs.ownerId, userIds))
+    .groupBy(docs.ownerId));
 
   for (const row of rows) {
     if (!row.ownerId) continue;
-    const current = stats.get(row.ownerId) ?? { docCount: 0, deletedDocCount: 0 };
-    current.docCount += 1;
-    if (row.deletedAt) current.deletedDocCount += 1;
-    stats.set(row.ownerId, current);
+    stats.set(row.ownerId, {
+      docCount: Number(row.docCount ?? 0),
+      deletedDocCount: Number(row.deletedDocCount ?? 0)
+    });
   }
 
   return stats;
@@ -656,9 +668,7 @@ async function activeAdminCount() {
 }
 
 function assertCanManageAdminUser(target: ManagedUser, actor: UserActor) {
-  if (target.role === "admin" && !actor.isSuperAdmin) {
-    throw new Error("只有超级管理员可以操作管理员账号");
-  }
+  if (!actor.isSuperAdmin) throw new Error("只有超级管理员可以管理用户账号");
 }
 
 function assertCanPromoteUser(target: ManagedUser, actor: UserActor) {
@@ -737,9 +747,9 @@ export async function deleteManagedUser(id: number, actor: UserActor) {
     await dbRun(tx.update(operationLogs).set({ userId: null }).where(eq(operationLogs.userId, id)));
     await dbRun(tx.update(logs).set({ userId: null }).where(eq(logs.userId, id)));
     await dbRun(tx.update(docs).set({
-      ownerId: null,
+      ownerId: actor.id,
       ownerRole: "super_admin",
-      scope: "system",
+      scope: "admin",
       isSuperAdminDoc: true,
       visibility: "private"
     }).where(eq(docs.ownerId, id)));
@@ -747,10 +757,11 @@ export async function deleteManagedUser(id: number, actor: UserActor) {
     await dbRun(tx.update(docs).set({ updatedBy: null }).where(eq(docs.updatedBy, id)));
     await dbRun(tx.update(invites).set({ createdBy: null }).where(eq(invites.createdBy, id)));
     await dbRun(tx.update(invites).set({ usedBy: null }).where(eq(invites.usedBy, id)));
-    await dbRun(tx.update(spaces).set({ ownerId: null }).where(eq(spaces.ownerId, id)));
+    await dbRun(tx.update(spaces).set({ ownerId: actor.id }).where(eq(spaces.ownerId, id)));
+    await dbRun(tx.update(forms).set({ ownerId: actor.id, updatedAt: now() }).where(eq(forms.ownerId, id)));
     await dbRun(tx.update(shares).set({ requestedBy: null }).where(eq(shares.requestedBy, id)));
     await dbRun(tx.update(shares).set({ reviewedBy: null }).where(eq(shares.reviewedBy, id)));
-    await dbRun(tx.update(uploads).set({ userId: null }).where(eq(uploads.userId, id)));
+    await dbRun(tx.update(uploads).set({ userId: actor.id }).where(eq(uploads.userId, id)));
     await dbRun(tx.update(docVersions).set({ createdBy: null }).where(eq(docVersions.createdBy, id)));
     await dbRun(tx.delete(users).where(eq(users.id, id)));
   });
@@ -879,12 +890,25 @@ export async function testR2Connection(upload = false) {
   const client = createR2Client(config);
   await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
   if (upload) {
-    await client.send(new PutObjectCommand({
-      Bucket: config.bucket,
-      Key: `chendoc-health/${Date.now()}.txt`,
-      Body: "ok",
-      ContentType: "text/plain; charset=utf-8"
-    }));
+    const cors = await client.send(new GetBucketCorsCommand({ Bucket: config.bucket }));
+    const expectedOrigins = getR2CorsAllowedOrigins();
+    const corsReady = (cors.CORSRules ?? []).some((rule) => (
+      expectedOrigins.every((origin) => rule.AllowedOrigins?.includes(origin))
+      && ["GET", "HEAD", "PUT"].every((method) => rule.AllowedMethods?.includes(method))
+      && !rule.AllowedOrigins?.includes("*")
+    ));
+    if (!corsReady) throw new Error("R2 CORS 未限制到本站来源，或缺少 GET/HEAD/PUT 方法");
+    const key = `chendoc-health/${Date.now()}-${randomUUID()}.txt`;
+    try {
+      await client.send(new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+        Body: "ok",
+        ContentType: "text/plain; charset=utf-8"
+      }));
+    } finally {
+      await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key })).catch(() => undefined);
+    }
   }
   return { ok: true, upload };
 }

@@ -38,7 +38,7 @@ export async function verifyDangerOperation(userId: number, sessionId: string, i
   const otp = body.dangerOtp ?? body.otp;
   const recoveryCode = body.dangerRecoveryCode ?? body.recoveryCode;
   const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, userId)).limit(1));
-  if (!user || user.status !== "active" || user.role !== "admin") throw new Error("Permission denied.");
+  if (!user || user.status !== "active") throw new Error("Permission denied.");
   if (!password || !(await verifyPassword(password, user.passwordHash))) throw new Error("Danger verification failed.");
   if (!(await verifyAdminSecondFactor(user, otp, recoveryCode))) throw new Error("Danger verification failed.");
 

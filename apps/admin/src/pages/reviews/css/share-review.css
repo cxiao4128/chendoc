@@ -288,7 +288,7 @@
 
 .share-review-page__search {
   display: grid;
-  grid-template-columns: repeat(4, minmax(126px, 1fr)) auto minmax(180px, 0.8fr);
+  grid-template-columns: repeat(3, minmax(126px, 1fr)) auto minmax(180px, 0.8fr);
   gap: 12px;
   max-width: none;
   border: 1px solid var(--cd-border);
@@ -331,7 +331,7 @@
 .share-review-page__table-head,
 .share-review-page__table article {
   display: grid;
-  grid-template-columns: 32px minmax(180px, 1.05fr) 118px 150px 150px 112px 110px minmax(128px, 0.75fr) minmax(220px, auto);
+  grid-template-columns: minmax(180px, 1.05fr) 118px 100px 150px 112px 110px minmax(128px, 0.75fr) minmax(220px, auto);
   gap: 12px;
   align-items: center;
   padding: 0 18px;

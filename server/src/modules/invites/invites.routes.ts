@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
-import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { requireSuperAdmin } from "../../middleware/requireSuperAdmin.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { createInvite, createInviteBatch, deleteInvite, disableInvite, listInvites } from "./invites.service.js";
 
 export async function invitesRoutes(app: FastifyInstance) {
-  const adminOnly = [authenticate, requireAdmin];
+  const adminOnly = [authenticate, requireSuperAdmin];
 
   app.get("/api/admin/invites", { preHandler: adminOnly }, async () => ({ invites: await listInvites() }));
 

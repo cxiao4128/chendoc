@@ -1,6 +1,5 @@
-import { defineConfig, type PluginOption } from "vite";
+import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-import bundleObfuscator from "vite-plugin-bundle-obfuscator";
 
 function cleanId(id: string) {
   return id.replace(/\\/g, "/");
@@ -92,38 +91,9 @@ function chunkFileNames(chunk: { name: string }) {
   return "assets/p-[hash].js";
 }
 
-const obfuscatorOptions = {
-  compact: true,
-  controlFlowFlattening: false,
-  deadCodeInjection: false,
-  stringArray: true,
-  stringArrayEncoding: ["base64"],
-  stringArrayThreshold: 0.25,
-  stringArrayRotate: true,
-  splitStrings: false,
-  identifierNamesGenerator: "hexadecimal",
-  selfDefending: false,
-  disableConsoleOutput: false
-} as const;
-
-export default defineConfig(({ command, mode }) => {
-  const isProductionBuild = command === "build" && mode === "production";
-  const plugins: PluginOption[] = [vue()];
-
-  if (isProductionBuild) {
-    plugins.push(bundleObfuscator({
-      apply: "build",
-      enable: true,
-      log: false,
-      autoExcludeNodeModules: false,
-      threadPool: false,
-      excludes: [/^(?!assets\/g-).*\.js$/],
-      options: obfuscatorOptions
-    }));
-  }
-
+export default defineConfig(() => {
   return {
-    plugins,
+    plugins: [vue()],
     server: {
       proxy: {
         "/api": "http://127.0.0.1:8985",

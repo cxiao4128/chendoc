@@ -88,7 +88,7 @@ function kindFromFile(file: File, policy: UploadPolicy): UploadKind {
 }
 
 export function useUpload() {
-  async function uploadFile(file: File, docUid?: string | null) {
+  async function uploadFile(file: File, docUid: string) {
     const policy = await loadUploadPolicy();
     const kind = kindFromFile(file, policy);
     const prepared = kind === "image" ? await convertImageToWebp(file, policy) : ensureUploadFile(file, kind, policy);

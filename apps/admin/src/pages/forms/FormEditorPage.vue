@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, toRaw, watch, type Component } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { onBeforeRouteLeave, useRouter, useRoute } from "vue-router";
 import {
-  ArrowLeft, Star, FolderInput, Check, Edit3, BarChart2,
-  Search, Plus, Trash2, Send, Copy, CheckCircle2, GripVertical,
+  ArrowLeft, Check, Edit3,
+  Search, Plus, Trash2, Send, Copy, GripVertical,
   ChevronUp, ChevronDown, X, ImageIcon, Calendar, List, FileText,
   Phone, Mail, User, MapPin, CreditCard, CircleDot, CheckSquare,
   Square, Type as TextIcon, Hash, Star as RatingIcon,
-  MoreVertical, Upload, MapPinned, PenTool, Grid3X3, SlidersHorizontal,
-  BarChart3, Table2, ListOrdered, QrCode, Heading1, ExternalLink
+  Upload, MapPinned, PenTool, Grid3X3, SlidersHorizontal,
+  Table2, ListOrdered, QrCode, ExternalLink, Save
 } from "lucide-vue-next";
 import {
   createFormApi, updateFormApi, publishFormApi, deleteFormApi, getFormApi, listSubmissionsApi, getIpStatsApi, type FormField, type FieldType
 } from "../../api/forms";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
+import { nativeConfirm } from "../../services/nativeDialog";
 import FieldInspector from "./components/FieldInspector.vue";
 import FieldPalette from "./components/FieldPalette.vue";
 import FormCanvas from "./components/FormCanvas.vue";
@@ -27,8 +28,9 @@ const isEditing = computed(() => route.params.id !== undefined);
 const formId = computed(() => route.params.id ? Number(route.params.id) : null);
 
 // 当前标签页
+const initialTab = route.query.tab;
 const activeTab = ref<'edit' | 'stats' | 'settings'>(
-  (route.query.tab as 'edit' | 'stats' | 'settings') || 'edit'
+  initialTab === "stats" || initialTab === "settings" ? initialTab : "edit"
 );
 
 // 生成唯一ID
@@ -51,18 +53,18 @@ const exclusiveInfo = ref<Record<string, string>>({});  // 专属信息
 
 // UI状态
 const loading = ref(false);
+const ready = ref(false);
+const skipLeaveGuard = ref(false);
 const saving = ref(false);
 const savedAt = ref("");
 const error = ref("");
 const selectedFieldId = ref<string | null>(null);
 const copied = ref(false);
-const isFavorited = ref(false);
 const mobileEditStep = ref<"fields" | "settings" | "preview">("fields");
 const mobileFieldPickerOpen = ref(false);
 
 // 设置面板状态
 const formStatus = ref<"draft" | "published" | "closed">("draft");
-const publicStats = ref(false);
 const urlCopied = ref(false);
 const deleteDialogOpen = ref(false);
 
@@ -71,6 +73,7 @@ const statsData = ref({
   submissionCount: 0,
   viewCount: 0,
   ipCount: 0,
+  sampleCount: 0,
   fieldStats: [] as { fieldId: string; label: string; count: number; percentage: number }[]
 });
 
@@ -82,32 +85,22 @@ type FieldCategory = {
 
 const fieldCategories: Record<"basic" | "advanced" | "preset", FieldCategory> = {
   basic: {
-    title: "基础题型",
+    title: "常用字段",
     items: [
-      { type: "text" as FieldType, name: "问答题", desc: "简答题", icon: TextIcon, color: "text" },
-      { type: "radio" as FieldType, name: "单选题", desc: "单选一个", icon: CircleDot, color: "radio" },
-      { type: "multiselect" as FieldType, name: "多选题", desc: "选多个", icon: CheckSquare, color: "checkbox" },
-      { type: "checkbox" as FieldType, name: "同意框", desc: "单项确认", icon: Square, color: "checkbox" },
-      { type: "date" as FieldType, name: "时间题", desc: "日期时间", icon: Calendar, color: "date" },
-      { type: "image" as FieldType, name: "图片题", desc: "上传图片", icon: ImageIcon, color: "image" },
-      { type: "file" as FieldType, name: "文件题", desc: "上传文件", icon: Upload, color: "file" },
+      { type: "text" as FieldType, name: "单行文本", desc: "短内容", icon: TextIcon, color: "text" },
+      { type: "textarea" as FieldType, name: "多行文本", desc: "长内容", icon: FileText, color: "text" },
+      { type: "number" as FieldType, name: "数字", desc: "数值范围", icon: Hash, color: "text" },
+      { type: "radio" as FieldType, name: "单选题", desc: "选择一项", icon: CircleDot, color: "radio" },
+      { type: "multiselect" as FieldType, name: "多选题", desc: "选择多项", icon: CheckSquare, color: "checkbox" },
+      { type: "checkbox" as FieldType, name: "同意确认", desc: "单项勾选", icon: Square, color: "checkbox" },
       { type: "select" as FieldType, name: "下拉选择", desc: "下拉菜单", icon: List, color: "select" },
-      { type: "location" as FieldType, name: "地理位置", desc: "位置定位", icon: MapPinned, color: "location" },
-      { type: "signature" as FieldType, name: "签名题", desc: "手写签名", icon: PenTool, color: "signature" }
+      { type: "date" as FieldType, name: "日期", desc: "选择日期", icon: Calendar, color: "date" },
+      { type: "rating" as FieldType, name: "评分", desc: "1 到 5 星", icon: RatingIcon, color: "rating" }
     ]
   },
   advanced: {
-    title: "高级题型",
-    items: [
-      { type: "matrix" as FieldType, name: "多级选项", desc: "矩阵选择", icon: Grid3X3, color: "matrix" },
-      { type: "scale" as FieldType, name: "量表题", desc: "滑动量表", icon: SlidersHorizontal, color: "scale" },
-      { type: "rating" as FieldType, name: "评分题", desc: "星级评分", icon: RatingIcon, color: "rating" },
-      { type: "table" as FieldType, name: "表格题", desc: "表格填写", icon: Table2, color: "table" },
-      { type: "matrix_text" as FieldType, name: "矩阵题", desc: "文本矩阵", icon: Grid3X3, color: "matrix" },
-      { type: "section" as FieldType, name: "分节标题", desc: "分节标记", icon: Heading1, color: "section" },
-      { type: "sort" as FieldType, name: "排序题", desc: "拖拽排序", icon: ListOrdered, color: "sort" },
-      { type: "qrcode" as FieldType, name: "扫码题", desc: "扫码填写", icon: QrCode, color: "qrcode" }
-    ]
+    title: "结构",
+    items: [{ type: "section" as FieldType, name: "分节标题", desc: "整理长表单", icon: FileText, color: "section" }]
   },
   preset: {
     title: "常用题库",
@@ -115,7 +108,7 @@ const fieldCategories: Record<"basic" | "advanced" | "preset", FieldCategory> = 
       { type: "name" as FieldType, name: "姓名", desc: "输入姓名", icon: User, color: "text", tag: "常用" },
       { type: "phone" as FieldType, name: "手机号", desc: "手机号码", icon: Phone, color: "text", tag: "常用" },
       { type: "idcard" as FieldType, name: "身份证号", desc: "身份证号", icon: CreditCard, color: "text", tag: "常用" },
-      { type: "gender" as FieldType, name: "性别", desc: "男/女", icon: CircleDot, color: "radio", tag: "常用" },
+      { type: "gender" as FieldType, name: "性别", desc: "男、女、其他", icon: CircleDot, color: "radio", tag: "常用" },
       { type: "age" as FieldType, name: "年龄", desc: "输入年龄", icon: Hash, color: "text", tag: "常用" },
       { type: "address" as FieldType, name: "地址", desc: "详细地址", icon: MapPin, color: "text", tag: "常用" },
       { type: "email" as FieldType, name: "邮箱", desc: "邮箱地址", icon: Mail, color: "text", tag: "常用" }
@@ -173,6 +166,7 @@ async function loadForm() {
     error.value = e instanceof Error ? e.message : "加载失败";
   } finally {
     loading.value = false;
+    ready.value = true;
   }
 }
 
@@ -181,7 +175,7 @@ async function loadStats() {
   if (!formId.value) return;
   try {
     const [subRes, ipRes] = await Promise.all([
-      listSubmissionsApi(formId.value, { pageSize: 1000 }),
+      listSubmissionsApi(formId.value, { pageSize: 100 }),
       getIpStatsApi(formId.value)
     ]);
 
@@ -189,6 +183,7 @@ async function loadStats() {
       submissionCount: subRes.form.submissionCount,
       viewCount: subRes.form.viewCount,
       ipCount: ipRes.stats.length,
+      sampleCount: subRes.submissions.length,
       fieldStats: calculateFieldStats(subRes.submissions, subRes.form.fields)
     };
   } catch (e) {
@@ -212,55 +207,82 @@ function calculateFieldStats(submissions: { data: Record<string, unknown> }[], f
     });
 }
 
+function normalizePositiveInteger(value: unknown, max?: number) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || (max !== undefined && number > max)) return null;
+  return number;
+}
+
 // 配置变更保存
 async function onConfigChange() {
-  if (!formId.value) return;
-  try {
-    await updateFormApi(formId.value, {
-      config: {
-        allowMultiple: config.value.allowMultiple,
-        maxSubmissions: config.value.maxSubmissions,
-        privacyNotice: config.value.privacyNotice || null,
-        retentionDays: config.value.retentionDays,
-        storeUserAgent: config.value.storeUserAgent
-      }
-    });
-    savedAt.value = new Date().toLocaleTimeString();
-    saveState.value = "saved";
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "保存失败";
+  const rawMaxSubmissions: unknown = config.value.maxSubmissions;
+  const maxSubmissions = normalizePositiveInteger(rawMaxSubmissions);
+  if (rawMaxSubmissions !== "" && rawMaxSubmissions !== null && rawMaxSubmissions !== undefined && maxSubmissions === null) {
+    error.value = "提交份数必须是正整数";
+    return;
   }
+  const rawRetentionDays: unknown = config.value.retentionDays;
+  const retentionDays = normalizePositiveInteger(rawRetentionDays, 3650);
+  if (rawRetentionDays !== "" && rawRetentionDays !== null && rawRetentionDays !== undefined && retentionDays === null) {
+    error.value = "数据保留天数必须是 1 到 3650 的整数";
+    return;
+  }
+  config.value.maxSubmissions = maxSubmissions;
+  config.value.retentionDays = retentionDays;
+  saveState.value = "pending";
+  if (formId.value) await save();
 }
 
 // 专属信息变更保存
 async function onExclusiveInfoChange() {
-  if (!formId.value) return;
-  try {
-    await updateFormApi(formId.value, {
-      exclusiveInfo: Object.keys(exclusiveInfo.value).length > 0 ? exclusiveInfo.value : null
-    });
-    savedAt.value = new Date().toLocaleTimeString();
-    saveState.value = "saved";
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "保存失败";
-  }
+  saveState.value = "pending";
+  if (formId.value) await save();
 }
 
 // 添加专属信息项
 function addExclusiveItem() {
-  const key = `item_${Date.now()}`;
-  exclusiveInfo.value[key] = "";
+  let index = Object.keys(exclusiveInfo.value).length + 1;
+  let label = index === 1 ? "说明" : `说明 ${index}`;
+  while (label in exclusiveInfo.value) {
+    index += 1;
+    label = `说明 ${index}`;
+  }
+  exclusiveInfo.value[label] = "";
+  saveState.value = "pending";
 }
 
 // 删除专属信息项
 function removeExclusiveItem(key: string) {
   delete exclusiveInfo.value[key];
-  onExclusiveInfoChange();
+  void onExclusiveInfoChange();
+}
+
+function renameExclusiveItem(oldKey: string, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const newKey = input.value.trim();
+  if (!newKey || newKey === oldKey) {
+    input.value = oldKey;
+    return;
+  }
+  if (newKey in exclusiveInfo.value) {
+    error.value = "专属信息名称不能重复";
+    input.value = oldKey;
+    return;
+  }
+  exclusiveInfo.value = Object.fromEntries(
+    Object.entries(exclusiveInfo.value).map(([key, value]) => [key === oldKey ? newKey : key, value])
+  );
+  void onExclusiveInfoChange();
 }
 
 // 切换表单状态
 async function toggleFormStatus() {
   if (!formId.value) return;
+  if (formStatus.value === "draft") {
+    error.value = "请先发布表单";
+    return;
+  }
   const action = formStatus.value === "closed" ? "publish" : "close";
   try {
     const res = await publishFormApi(formId.value, action);
@@ -295,6 +317,7 @@ async function doDeleteForm() {
   if (!formId.value) return;
   try {
     await deleteFormApi(formId.value);
+    skipLeaveGuard.value = true;
     router.push("/admin/forms");
   } catch (e) {
     error.value = e instanceof Error ? e.message : "删除失败";
@@ -383,13 +406,12 @@ function onDragEnd() {
 function switchTab(tab: 'edit' | 'stats' | 'settings') {
   activeTab.value = tab;
   router.replace({ query: { ...route.query, tab } });
+  if (tab === "stats") void loadStats();
 }
 
-// 复制表单链接
 function copyLink() {
-  if (!formId.value) return;
-  const url = formUrl.value || `${window.location.origin}/f/`;
-  navigator.clipboard.writeText(url).then(() => {
+  if (!formUrl.value) return;
+  navigator.clipboard.writeText(formUrl.value).then(() => {
     copied.value = true;
     setTimeout(() => copied.value = false, 2000);
   });
@@ -405,6 +427,36 @@ const saveStatusText = computed(() => {
   return "";
 });
 
+function optionalFiniteNumber(value: unknown) {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function fieldsForSave() {
+  return fields.value.map((field, index): FormField => {
+    const normalized: FormField = {
+      ...JSON.parse(JSON.stringify(toRaw(field))) as FormField,
+      label: field.label.trim(),
+      order: index
+    };
+    const min = optionalFiniteNumber(field.min);
+    const max = optionalFiniteNumber(field.max);
+    const maxLength = optionalFiniteNumber(field.maxLength);
+    if (min === undefined) delete normalized.min;
+    else normalized.min = min;
+    if (max === undefined) delete normalized.max;
+    else normalized.max = max;
+    if (maxLength === undefined || !Number.isInteger(maxLength)) delete normalized.maxLength;
+    else normalized.maxLength = maxLength;
+    if (normalized.options) normalized.options = normalized.options.map((option) => option.trim()).filter(Boolean);
+    if (normalized.placeholder !== undefined) {
+      normalized.placeholder = normalized.placeholder.trim() || undefined;
+    }
+    return normalized;
+  });
+}
+
 // 保存
 async function save(): Promise<number | null> {
   if (!title.value.trim()) {
@@ -418,7 +470,7 @@ async function save(): Promise<number | null> {
     const body = {
       title: title.value.trim(),
       description: description.value.trim() || undefined,
-      fields: JSON.parse(JSON.stringify(toRaw(fields.value))),
+      fields: fieldsForSave(),
       config: JSON.parse(JSON.stringify(toRaw(config.value))),
       exclusiveInfo: Object.keys(exclusiveInfo.value).length > 0 ? exclusiveInfo.value : null
     };
@@ -429,7 +481,12 @@ async function save(): Promise<number | null> {
     } else {
       const res = await createFormApi(body);
       savedFormId = res.form.id;
-      void router.replace(`/admin/forms/${savedFormId}`);
+      skipLeaveGuard.value = true;
+      try {
+        await router.replace(`/admin/forms/${savedFormId}`);
+      } finally {
+        skipLeaveGuard.value = false;
+      }
     }
     savedAt.value = new Date().toLocaleTimeString();
     saveState.value = "saved";
@@ -448,7 +505,7 @@ const published = ref(false);
 const formUrl = ref("");
 
 async function publish() {
-  if (fields.value.length === 0) {
+  if (!fields.value.some((field) => field.type !== "section")) {
     error.value = "请先添加至少一个问题";
     return;
   }
@@ -479,39 +536,58 @@ function addOption() {
   const field = selectedField.value;
   if (!field.options) field.options = [];
   field.options.push(`选项${field.options.length + 1}`);
+  saveState.value = "pending";
 }
 
 // 删除选项
 function removeOption(index: number) {
   if (!selectedField.value?.options) return;
+  if (selectedField.value.options.length <= 1) {
+    error.value = "选择题至少保留一个选项";
+    return;
+  }
   selectedField.value.options.splice(index, 1);
+  saveState.value = "pending";
 }
 
 // 监听变更
 watch([title, description, fields, config], () => {
-  if (saveState.value === "saved") {
+  if (ready.value && !saving.value && saveState.value !== "error") {
     saveState.value = "pending";
   }
 }, { deep: true });
 
 // 监听路由
 watch(() => route.query.tab, (tab) => {
-  if (tab === 'stats' || tab === 'settings') {
+  if (tab === 'edit' || tab === 'stats' || tab === 'settings') {
     activeTab.value = tab;
+  } else {
+    activeTab.value = 'edit';
   }
 });
 
 onMounted(() => {
-  if (isEditing.value) loadForm();
+  if (isEditing.value) void loadForm();
+  else ready.value = true;
+});
+
+onBeforeRouteLeave(async () => {
+  if (skipLeaveGuard.value || (saveState.value !== "pending" && saveState.value !== "error")) return true;
+  return await nativeConfirm({
+    title: "离开表单编辑",
+    message: "还有修改未保存，离开后这些修改会丢失。",
+    confirmText: "放弃修改",
+    danger: true
+  });
 });
 </script>
 
 <template>
-  <div class="form-editor-tencent">
+  <div class="form-editor">
     <!-- 顶部导航栏 -->
     <header class="form-header">
       <div class="form-header__left">
-        <button class="form-header__back" @click="router.push('/admin/forms')">
+        <button class="form-header__back" type="button" aria-label="返回收集表列表" @click="router.push('/admin/forms')">
           <ArrowLeft :size="18" />
         </button>
         <div class="form-header__title-area">
@@ -520,17 +596,9 @@ onMounted(() => {
             class="form-header__title"
             placeholder="空白收集表"
           />
-          <div class="form-header__icons">
-            <button class="form-header__icon-btn" :class="{ active: isFavorited }" @click="isFavorited = !isFavorited">
-              <Star :size="16" :fill="isFavorited ? 'currentColor' : 'none'" />
-            </button>
-            <button class="form-header__icon-btn">
-              <FolderInput :size="16" />
-            </button>
-            <button class="form-header__icon-btn">
-              <CheckCircle2 :size="16" />
-            </button>
-          </div>
+          <span class="form-header__status" :class="`is-${formStatus}`">
+            {{ formStatus === 'published' ? '收集中' : formStatus === 'closed' ? '已暂停' : '草稿' }}
+          </span>
         </div>
       </div>
 
@@ -551,13 +619,12 @@ onMounted(() => {
         <span v-if="saveStatusText" class="save-status" :class="{ 'is-error': saveState === 'error' }">
           {{ saveStatusText }}
         </span>
-        <button class="form-header__action" @click="copyLink" :disabled="!isEditing" :title="copied ? '已复制' : '复制链接'">
+        <button class="form-header__action" type="button" @click="save" :disabled="saving" title="保存表单" aria-label="保存表单">
+          <Save :size="16" />
+        </button>
+        <button class="form-header__action" type="button" @click="copyLink" :disabled="!formUrl" :title="copied ? '已复制' : '复制公开链接'" :aria-label="copied ? '已复制' : '复制公开链接'">
           <component :is="copied ? Check : Copy" :size="16" />
         </button>
-        <button class="form-header__action">
-          <MoreVertical :size="16" />
-        </button>
-        <div class="form-header__avatar">陈</div>
       </div>
     </header>
 
@@ -627,14 +694,6 @@ onMounted(() => {
       <!-- 中间表单画布 -->
       <FormCanvas :class="{ 'is-mobile-fields': mobileEditStep === 'fields', 'is-mobile-preview': mobileEditStep === 'preview' }">
         <div class="form-canvas__inner">
-          <!-- 封面区域 -->
-          <div class="form-canvas__cover">
-            <div class="form-canvas__cover-placeholder">
-              <ImageIcon :size="32" />
-              <span>添加封面</span>
-            </div>
-          </div>
-
           <!-- 表单头部 -->
           <div class="form-canvas__header">
             <input
@@ -648,22 +707,6 @@ onMounted(() => {
               placeholder="添加描述：文字、图片或链接"
               rows="2"
             ></textarea>
-
-            <!-- 功能按钮 -->
-            <div class="form-canvas__actions">
-              <button class="form-canvas__action-btn">
-                <Calendar :size="14" />
-                定时和重复
-              </button>
-              <button class="form-canvas__action-btn">
-                <User :size="14" />
-                填写名单
-              </button>
-              <button class="form-canvas__action-btn">
-                <FileText :size="14" />
-                结束页
-              </button>
-            </div>
           </div>
 
           <!-- 字段列表 -->
@@ -719,9 +762,9 @@ onMounted(() => {
                   </template>
                   <template v-else-if="field.type === 'checkbox'">
                     <div class="form-field-preview checkbox-group">
-                      <div v-for="opt in (field.options || ['选项1', '选项2'])" :key="opt" class="form-field-preview__option">
+                      <div class="form-field-preview__option">
                         <span class="form-field-preview__checkbox"></span>
-                        {{ opt }}
+                        {{ field.label }}
                       </div>
                     </div>
                   </template>
@@ -762,6 +805,7 @@ onMounted(() => {
                     <div class="form-field-preview radio-group">
                       <div class="form-field-preview__option"><span class="form-field-preview__radio"></span>男</div>
                       <div class="form-field-preview__option"><span class="form-field-preview__radio"></span>女</div>
+                      <div class="form-field-preview__option"><span class="form-field-preview__radio"></span>其他</div>
                     </div>
                   </template>
                   <template v-else-if="field.type === 'section'">
@@ -804,9 +848,11 @@ onMounted(() => {
                     </div>
                   </template>
                   <template v-else-if="field.type === 'multiselect'">
-                    <div class="form-field-preview radio">
-                      多选
-                      <ChevronDown :size="14" />
+                    <div class="form-field-preview checkbox-group">
+                      <div v-for="opt in (field.options || ['选项1', '选项2'])" :key="opt" class="form-field-preview__option">
+                        <span class="form-field-preview__checkbox"></span>
+                        {{ opt }}
+                      </div>
                     </div>
                   </template>
                   <template v-else>
@@ -848,22 +894,22 @@ onMounted(() => {
         <template v-if="selectedField">
           <div class="form-props-panel__header">
             <h3 class="form-props-panel__title">字段属性</h3>
-            <button class="form-props-panel__close" @click="selectedFieldId = null">
+            <button class="form-props-panel__close" type="button" aria-label="关闭字段设置" @click="selectedFieldId = null">
               <X :size="16" />
             </button>
           </div>
           <div class="form-props-panel__content">
             <div class="form-props-panel__section">
-              <label class="form-props-panel__label">问题标题</label>
+              <label class="form-props-panel__label">{{ selectedField.type === 'section' ? '分节标题' : '问题标题' }}</label>
               <input v-model="selectedField.label" type="text" class="form-props-panel__input" />
             </div>
 
             <div class="form-props-panel__section">
-              <label class="form-props-panel__label">描述文字</label>
+              <label class="form-props-panel__label">{{ selectedField.type === 'section' ? '分节说明' : '描述文字' }}</label>
               <input v-model="selectedField.placeholder" type="text" class="form-props-panel__input" placeholder="提示填写者..." />
             </div>
 
-            <div class="form-props-panel__section">
+            <div v-if="selectedField.type !== 'section'" class="form-props-panel__section">
               <label class="form-checkbox">
                 <input v-model="selectedField.required" type="checkbox" />
                 <span class="form-checkbox__box"></span>
@@ -872,18 +918,18 @@ onMounted(() => {
             </div>
 
             <!-- 选项编辑器 -->
-            <template v-if="selectedField.type === 'radio' || selectedField.type === 'checkbox' || selectedField.type === 'select'">
+            <template v-if="selectedField.type === 'radio' || selectedField.type === 'multiselect' || selectedField.type === 'select'">
               <div class="form-props-panel__divider"></div>
               <div class="form-props-panel__section">
                 <label class="form-props-panel__label">选项</label>
                 <div class="form-options-editor">
                   <div v-for="(opt, i) in selectedField.options" :key="i" class="form-option-row">
                     <input v-model="selectedField.options![i]" type="text" class="form-props-panel__input" />
-                    <button class="form-option-row__remove" @click="removeOption(i)">
+                    <button class="form-option-row__remove" type="button" :aria-label="`删除选项 ${i + 1}`" @click="removeOption(i)">
                       <X :size="12" />
                     </button>
                   </div>
-                  <button class="form-add-option-btn" @click="addOption">
+                  <button class="form-add-option-btn" type="button" @click="addOption">
                     <Plus :size="14" /> 添加选项
                   </button>
                 </div>
@@ -924,42 +970,6 @@ onMounted(() => {
 
     <!-- 统计页面 -->
     <FormStats v-else-if="activeTab === 'stats'">
-      <aside class="form-stats-sidebar">
-        <div class="form-stats-sidebar__section">
-          <div class="form-stats-sidebar__item active">
-            <BarChart2 :size="16" />
-            概览
-          </div>
-          <div class="form-stats-sidebar__item">
-            <BarChart2 :size="16" />
-            收集概览
-          </div>
-          <div class="form-stats-sidebar__item">
-            <User :size="16" />
-            人员名单
-          </div>
-          <div class="form-stats-sidebar__item">
-            <CheckCircle2 :size="16" />
-            已填写
-          </div>
-          <div class="form-stats-sidebar__item">
-            <CircleDot :size="16" />
-            未填写
-          </div>
-          <div class="form-stats-sidebar__item">
-            <BarChart3 :size="16" />
-            数据分析
-          </div>
-          <div class="form-stats-sidebar__item">
-            <BarChart2 :size="16" />
-            统计图表
-          </div>
-          <div class="form-stats-sidebar__item">
-            <Grid3X3 :size="16" />
-            交叉分析
-          </div>
-        </div>
-      </aside>
       <main class="form-stats-content">
         <div class="form-stats-status">
           <span v-if="formStatus === 'published'" class="form-stats-status__badge published">收集中</span>
@@ -986,13 +996,13 @@ onMounted(() => {
               </div>
               <div class="form-stats-metric">
                 <span class="form-stats-metric__value">{{ statsData.ipCount }}</span>
-                <span class="form-stats-metric__label">提交IP数</span>
+                <span class="form-stats-metric__label">来源数（最多 100）</span>
               </div>
             </div>
           </div>
           <div class="form-stats-card">
             <div class="form-stats-card__header">
-              <h3>字段统计</h3>
+              <h3>字段完成度{{ statsData.sampleCount ? `（最近 ${statsData.sampleCount} 份）` : '' }}</h3>
             </div>
             <div class="form-stats-card__body form-stats-chart">
               <div v-if="statsData.fieldStats.length === 0" class="form-stats-empty">暂无数据</div>
@@ -1022,11 +1032,11 @@ onMounted(() => {
               <span class="form-stats-metric__label">允许多份</span>
             </div>
             <div class="form-stats-metric">
-              <span class="form-stats-metric__value">{{ fields.length }}</span>
+              <span class="form-stats-metric__value">{{ fields.filter(f => f.type !== 'section').length }}</span>
               <span class="form-stats-metric__label">问题数量</span>
             </div>
             <div class="form-stats-metric">
-              <span class="form-stats-metric__value">{{ fields.filter(f => f.required).length }}</span>
+              <span class="form-stats-metric__value">{{ fields.filter(f => f.type !== 'section' && f.required).length }}</span>
               <span class="form-stats-metric__label">必填问题</span>
             </div>
           </div>
@@ -1041,29 +1051,32 @@ onMounted(() => {
         <div class="form-settings-card">
           <div class="form-settings-row">
             <div class="form-settings-row__info">
-              <span class="form-settings-row__label">暂停收集</span>
-              <span class="form-settings-row__desc">暂停后填写者将无法提交</span>
+              <span class="form-settings-row__label">收集状态</span>
+              <span class="form-settings-row__desc">
+                {{ formStatus === 'draft' ? '发布后填写者才能访问' : formStatus === 'closed' ? '当前已停止接收提交' : '公开链接正在接收提交' }}
+              </span>
             </div>
-            <button class="form-settings-link" :class="{ 'is-active': formStatus === 'closed' }" @click="toggleFormStatus">
-              {{ formStatus === 'closed' ? '已暂停' : '收集中' }}
-              <ChevronDown :size="14" />
+            <button v-if="formStatus !== 'draft'" class="form-settings-link" :class="{ 'is-active': formStatus === 'closed' }" type="button" @click="toggleFormStatus">
+              {{ formStatus === 'closed' ? '重新开放' : '暂停收集' }}
             </button>
+            <span v-else class="form-settings-state">草稿</span>
           </div>
           <div class="form-settings-row">
             <div class="form-settings-row__info">
-              <span class="form-settings-row__label">限制填写份数</span>
-              <span class="form-settings-row__desc">用于活动报名人数、商品限量售卖等</span>
+              <span class="form-settings-row__label">限制提交份数</span>
+              <span class="form-settings-row__desc">达到上限后停止接收新提交</span>
             </div>
             <div class="form-settings-limit-input">
               <input
                 v-model.number="config.maxSubmissions"
                 type="number"
                 min="1"
-                placeholder="不限制"
+                placeholder="不限"
+                aria-label="最多提交份数"
                 class="form-settings-input"
                 @change="onConfigChange"
               />
-              <span class="form-settings-limit-unit">人</span>
+              <span class="form-settings-limit-unit">份</span>
             </div>
           </div>
         </div>
@@ -1076,15 +1089,6 @@ onMounted(() => {
             </div>
             <label class="form-switch">
               <input v-model="config.allowMultiple" type="checkbox" @change="onConfigChange" />
-              <span class="form-switch__track"></span>
-            </label>
-          </div>
-          <div class="form-settings-row">
-            <div class="form-settings-row__info">
-              <span class="form-settings-row__label">对外公开收集总数</span>
-            </div>
-            <label class="form-switch">
-              <input v-model="publicStats" type="checkbox" @change="onConfigChange" />
               <span class="form-switch__track"></span>
             </label>
           </div>
@@ -1142,6 +1146,7 @@ onMounted(() => {
               min="1"
               max="3650"
               placeholder="不自动清理"
+              aria-label="数据保留天数"
               @change="onConfigChange"
             />
           </label>
@@ -1159,18 +1164,29 @@ onMounted(() => {
             <div class="form-exclusive-list">
               <div v-for="(value, key) in exclusiveInfo" :key="key" class="form-exclusive-item">
                 <input
+                  :value="key"
+                  type="text"
+                  class="form-exclusive-item__label"
+                  maxlength="64"
+                  aria-label="专属信息名称"
+                  placeholder="名称"
+                  @change="renameExclusiveItem(key as string, $event)"
+                />
+                <input
                   v-model="exclusiveInfo[key]"
                   type="text"
                   class="form-exclusive-item__input"
-                  placeholder="信息内容..."
+                  maxlength="1000"
+                  aria-label="专属信息内容"
+                  placeholder="内容"
                   @blur="onExclusiveInfoChange"
                 />
-                <button class="form-exclusive-item__remove" @click="removeExclusiveItem(key as string)">
+                <button class="form-exclusive-item__remove" type="button" aria-label="删除专属信息" @click="removeExclusiveItem(key as string)">
                   <X :size="14" />
                 </button>
               </div>
             </div>
-            <button class="form-exclusive-add-btn" @click="addExclusiveItem">
+            <button class="form-exclusive-add-btn" type="button" @click="addExclusiveItem">
               <Plus :size="14" />
               添加专属信息
             </button>
@@ -1178,7 +1194,7 @@ onMounted(() => {
         </div>
 
         <!-- 高级设置 -->
-        <div class="form-settings-card">
+        <div v-if="formId" class="form-settings-card">
           <div class="form-settings-row">
             <div class="form-settings-row__info">
               <span class="form-settings-row__label">删除表单</span>
@@ -1195,14 +1211,17 @@ onMounted(() => {
 
     <!-- 底部操作栏 - 仅编辑页面显示 -->
     <footer v-if="activeTab === 'edit'" class="form-footer">
-      <button class="form-footer__btn secondary">预览</button>
+      <button class="form-footer__btn secondary" type="button" :disabled="saving" @click="save">
+        <Save class="form-inline-icon" :size="16" />
+        {{ isEditing ? '保存修改' : '保存草稿' }}
+      </button>
       <button v-if="published" class="form-footer__btn secondary" @click="openForm">
         <ExternalLink class="form-inline-icon" :size="16" />
         查看表单
       </button>
-      <button class="form-footer__btn primary" @click="publish">
+      <button class="form-footer__btn primary" type="button" :disabled="saving" @click="publish">
         <Send class="form-inline-icon form-inline-icon--wide" :size="16" />
-        {{ published ? '更新' : '发布' }}
+        {{ published ? '保存并更新' : '发布表单' }}
       </button>
     </footer>
 

@@ -14,15 +14,16 @@ Object.assign(process.env, {
 const { migrate } = await import("../../db/migrate.js");
 await migrate();
 const { closeDatabase, db, sqlite } = await import("../../db/client.js");
-const { users } = await import("../../db/schema.js");
+const { uploads, users } = await import("../../db/schema.js");
 const { createDoc } = await import("../docs/docs.service.js");
-const { createPresignedUpload, getUploadPolicy } = await import("./uploads.service.js");
+const { createPresignedUpload, deleteUpload, getUploadPolicy } = await import("./uploads.service.js");
 
 beforeEach(() => {
   sqlite.exec("DELETE FROM uploads; DELETE FROM docs; DELETE FROM users; DELETE FROM sqlite_sequence WHERE name IN ('uploads', 'docs', 'users');");
   db.insert(users).values([
     { username: "owner", passwordHash: "hash", role: "user", status: "active", createdAt: new Date(), updatedAt: new Date() },
-    { username: "other", passwordHash: "hash", role: "user", status: "active", createdAt: new Date(), updatedAt: new Date() }
+    { username: "other", passwordHash: "hash", role: "user", status: "active", createdAt: new Date(), updatedAt: new Date() },
+    { username: "admin", passwordHash: "hash", role: "admin", status: "active", createdAt: new Date(), updatedAt: new Date() }
   ]).run();
 });
 
@@ -40,7 +41,7 @@ describe("upload policy and ownership", () => {
 
   test("rejects extension/MIME mismatch before contacting R2", async () => {
     await expect(createPresignedUpload(1, { id: 1, role: "user" }, {
-      fileName: "payload.exe", mimeType: "application/octet-stream", size: 10, kind: "file"
+      fileName: "payload.exe", mimeType: "application/octet-stream", size: 10, kind: "file", docUid: "XCHENabcdefghijklmnopq"
     })).rejects.toMatchObject({ code: "UPLOAD_EXTENSION_NOT_ALLOWED" });
   });
 
@@ -49,5 +50,22 @@ describe("upload policy and ownership", () => {
     await expect(createPresignedUpload(2, { id: 2, role: "user" }, {
       fileName: "note.pdf", mimeType: "application/pdf", size: 10, kind: "file", docUid: doc.docUid
     })).rejects.toMatchObject({ code: "DOC_FORBIDDEN" });
+  });
+
+  test("ordinary admin cannot delete a detached upload owned by another account", async () => {
+    db.insert(uploads).values({
+      userId: 1,
+      docId: null,
+      objectKey: "docs/files/2026/06/1-aaaaaaaaaaaaaaaaaaaaaaaa.pdf",
+      publicUrl: "https://example.test/file.pdf",
+      mimeType: "application/pdf",
+      fileSize: 10,
+      kind: "file",
+      originalName: "file.pdf",
+      detachedAt: new Date(),
+      createdAt: new Date()
+    }).run();
+
+    await expect(deleteUpload(1, { id: 3, role: "admin" })).rejects.toMatchObject({ code: "UPLOAD_FORBIDDEN" });
   });
 });

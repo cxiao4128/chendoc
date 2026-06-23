@@ -3,6 +3,7 @@ import { getTableConfig as getSqliteTableConfig } from "drizzle-orm/sqlite-core"
 import { describe, expect, test } from "vitest";
 import * as mysqlSchema from "./schema.mysql.js";
 import * as sqliteSchema from "./schema.sqlite.js";
+import { MYSQL_CREATE_TABLES } from "./mysql-ddl.js";
 
 type AnyConfig = ReturnType<typeof getMysqlTableConfig> | ReturnType<typeof getSqliteTableConfig>;
 
@@ -31,7 +32,7 @@ function normalize(config: AnyConfig) {
 }
 
 describe("SQLite/MySQL schema contract", () => {
-  for (const tableName of ["forms", "formSubmissions", "shares"] as const) {
+  for (const tableName of ["docs", "shares", "uploads", "docVersions", "forms", "formSubmissions"] as const) {
     test(`${tableName} keeps columns, defaults, indexes and foreign keys aligned`, () => {
       expect(normalize(getMysqlTableConfig(mysqlSchema[tableName])))
         .toEqual(normalize(getSqliteTableConfig(sqliteSchema[tableName])));
@@ -43,5 +44,11 @@ describe("SQLite/MySQL schema contract", () => {
     const mysqlColumn = getMysqlTableConfig(mysqlSchema.forms).columns.find((column) => column.name === "max_submissions");
     expect(sqliteColumn).toMatchObject({ dataType: "number", notNull: false });
     expect(mysqlColumn).toMatchObject({ dataType: "number", notNull: false });
+  });
+
+  test("forms fields avoids TEXT defaults unsupported across MySQL variants", () => {
+    const formsDdl = MYSQL_CREATE_TABLES.find((statement) => statement.includes("CREATE TABLE IF NOT EXISTS forms"));
+    expect(formsDdl).toContain("fields TEXT NOT NULL,");
+    expect(formsDdl).not.toMatch(/fields TEXT NOT NULL DEFAULT/i);
   });
 });

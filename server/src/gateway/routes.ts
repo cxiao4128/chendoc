@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { BadRequestError } from "../utils/errors.js";
 import { clientIpFromRequest } from "../utils/requestIp.js";
 import { isGatewayActionCode, type GatewayActionCode } from "./action-registry.js";
+import { internalGatewayHeaders } from "./internal-request.js";
 
 // Gateway 调试模式
 const GATEWAY_DEBUG = process.env.NODE_ENV !== "production";
@@ -140,6 +141,8 @@ function actionTarget(actionCode: GatewayActionCode, payload: GatewayPayload): G
         url: payload.scope === "admin" ? "/api/admin/docs/trash/bulk-hard-delete" : "/api/docs/trash/batch-delete",
         body: bodyOf(payload)
       };
+    case "r4":
+      return { method: "GET", url: "/api/docs/trash/stats" };
 
     case "h1":
       return { method: "POST", url: `/api/docs/${param(payload, "docUid")}/share`, body: bodyOf(payload) };
@@ -260,7 +263,7 @@ function actionTarget(actionCode: GatewayActionCode, payload: GatewayPayload): G
     case "y7":
       return { method: "POST", url: "/api/admin/security/totp/reset", body: bodyOf(payload) };
     case "y8":
-      return { method: "POST", url: "/api/admin/security/danger-verify", body: bodyOf(payload) };
+      return { method: "POST", url: "/api/security/danger-verify", body: bodyOf(payload) };
   }
 
   throw new BadRequestError("Unknown gateway action.", "INVALID_GATEWAY_ACTION");
@@ -274,7 +277,7 @@ function headerValue(request: FastifyRequest, name: string) {
 function internalHeaders(request: FastifyRequest) {
   const clientIp = clientIpFromRequest(request);
   const headers: Record<string, string> = {
-    "x-gateway-internal": "1",
+    ...internalGatewayHeaders(),
     "x-forwarded-for": clientIp || request.ip,
     "x-real-ip": clientIp || request.ip
   };
@@ -332,6 +335,8 @@ export async function gatewayRoutes(app: FastifyInstance) {
       const contentType = Array.isArray(response.headers["content-type"])
         ? response.headers["content-type"][0]
         : response.headers["content-type"];
+      const setCookie = response.headers["set-cookie"];
+      if (setCookie) reply.header("Set-Cookie", setCookie);
       return reply
         .code(response.statusCode)
         .send(parseInjectedPayload(response.body, contentType));
@@ -340,7 +345,7 @@ export async function gatewayRoutes(app: FastifyInstance) {
       if (GATEWAY_DEBUG) {
         console.error("[gateway] error:", error.message);
       }
-      return reply.code(500).send({ code: "GATEWAY_ERROR", message: error.message });
+      return reply.code(500).send({ code: "GATEWAY_ERROR", message: "Gateway request failed." });
     }
   });
 }

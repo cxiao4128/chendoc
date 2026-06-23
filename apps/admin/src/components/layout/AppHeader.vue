@@ -84,7 +84,7 @@ async function quickLogout() {
     </button>
     <form class="app-header__search" @submit.prevent="search">
       <Search :size="16" />
-      <input v-model="keyword" aria-label="搜索文档" placeholder="搜索文档、关键词、标签或 / 快捷命令" />
+      <input v-model="keyword" aria-label="搜索文档" placeholder="搜索标题、摘要或分享编号" />
     </form>
     <div class="app-header__actions" aria-label="快捷入口">
       <button class="app-header__icon is-primary" type="button" aria-label="模板中心" @click="openTemplates">

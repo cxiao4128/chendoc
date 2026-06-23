@@ -92,7 +92,7 @@ async function createDoc() {
         <RouterView />
       </main>
 
-      <button class="mobile-shell__fab" type="button" aria-label="新建文档" @click="createDoc">
+      <button v-if="!isDocsHomeRoute" class="mobile-shell__fab" type="button" aria-label="新建文档" @click="createDoc">
         <Plus :size="24" />
       </button>
 
@@ -116,7 +116,7 @@ async function createDoc() {
 
       <button v-if="drawerOpen" class="mobile-shell__scrim" type="button" aria-label="关闭面板" @click="drawerOpen = false" />
 
-      <aside class="mobile-shell__drawer" :class="{ 'is-open': drawerOpen }" aria-label="移动端账号与导航面板">
+      <aside v-if="drawerOpen" class="mobile-shell__drawer is-open" role="dialog" aria-modal="true" aria-label="移动端账号与导航面板">
         <div class="mobile-shell__drawer-head">
           <div class="mobile-shell__drawer-brand">
             <span class="mobile-shell__drawer-logo">

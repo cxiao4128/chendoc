@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
-import { gatewayActionCodes, gatewayExemptApiPaths } from "./action-registry.js";
+import { gatewayActionCodes, gatewayExemptApiPaths, isGatewayExemptPath } from "./action-registry.js";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 
@@ -19,5 +19,11 @@ describe("gateway action registry", () => {
 
   test("forms are not gateway-exempt", () => {
     expect(gatewayExemptApiPaths.some((path) => path.startsWith("/api/forms"))).toBe(false);
+  });
+
+  test("public share reads and password verification remain directly reachable", () => {
+    expect(isGatewayExemptPath("/api/public/r/112")).toBe(true);
+    expect(isGatewayExemptPath("/api/public/r/112/verify-password")).toBe(true);
+    expect(isGatewayExemptPath("/api/docs/112")).toBe(false);
   });
 });

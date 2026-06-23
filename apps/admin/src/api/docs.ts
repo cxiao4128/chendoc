@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { ensureDangerVerified } from "./security";
 
 export interface DocSummary {
   docUid: string;
@@ -22,6 +23,8 @@ export interface DocSummary {
   updatedAt: string;
   createdAt: string;
   deletedAt?: string | null;
+  deletedBy?: number | null;
+  revision: number;
   shareCode?: number | null;
   customSlug?: string | null;
   shareEnabled?: boolean | null;
@@ -37,7 +40,9 @@ export interface DocDetail extends DocSummary {
   share?: Record<string, unknown> | null;
 }
 
-export type DocUpdateInput = Partial<Pick<DocDetail, "title" | "contentJson" | "contentHtml" | "coverUrl" | "summary" | "tags" | "pinned" | "status" | "sort">>;
+export type DocUpdateInput = Partial<Pick<DocDetail, "title" | "contentJson" | "contentHtml" | "coverUrl" | "summary" | "tags" | "pinned" | "status" | "sort">> & {
+  expectedRevision?: number;
+};
 
 export interface DocVersion {
   id: number;
@@ -92,10 +97,11 @@ export interface TrashStats {
   oldestDeletedAt: string | null;
   oldestDeletedDocUid: string | null;
   oldestDeletedTitle: string | null;
+  retentionDays: number;
 }
 
 export function getTrashStatsApi() {
-  return request<TrashStats>("/api/admin/docs/trash/stats");
+  return request<TrashStats>("/api/docs/trash/stats");
 }
 
 export function createDocApi(title: string) {
@@ -135,14 +141,16 @@ export function bulkRestoreTrashDocsApi(docUids: string[]) {
   });
 }
 
-export function hardDeleteDocApi(docUid: string) {
+export async function hardDeleteDocApi(docUid: string) {
+  await ensureDangerVerified();
   return request<{ success: true; deleted: number; deletedDocUids: string[] }>("/api/docs/trash/batch-delete", {
     method: "POST",
     body: JSON.stringify({ docUids: [docUid] })
   });
 }
 
-export function bulkHardDeleteTrashDocsApi(docUids: string[]) {
+export async function bulkHardDeleteTrashDocsApi(docUids: string[]) {
+  await ensureDangerVerified();
   return request<{ success: true; deleted: number; deletedDocUids: string[] }>("/api/docs/trash/batch-delete", {
     method: "POST",
     body: JSON.stringify({ docUids })

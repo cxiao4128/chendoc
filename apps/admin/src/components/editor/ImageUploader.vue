@@ -4,7 +4,7 @@ import { ImageUp } from "lucide-vue-next";
 import { useUpload } from "../../composables/useUpload";
 import "./image-uploader.css";
 
-const props = defineProps<{ docUid?: string | null }>();
+const props = defineProps<{ docUid: string }>();
 const emit = defineEmits<{ uploaded: [url: string] }>();
 const input = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);

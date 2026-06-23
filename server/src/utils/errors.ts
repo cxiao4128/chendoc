@@ -41,3 +41,9 @@ export class NotFoundError extends AppError {
     super(404, code, message, options);
   }
 }
+
+export class ConflictError extends AppError {
+  constructor(message = "资源已被其他操作修改", code = "CONFLICT", options?: AppErrorOptions) {
+    super(409, code, message, options);
+  }
+}

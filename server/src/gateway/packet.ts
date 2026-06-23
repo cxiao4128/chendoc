@@ -7,6 +7,8 @@ const PACKET_VERSION = "xchen";
 const REQUEST_PREFIX = "chendoc";
 const RESPONSE_PREFIX = "XCHEN";
 const PACKET_TTL_MS = 5 * 60 * 1000;
+const MAX_NONCES = 10_000;
+const MAX_CHALLENGES = 5_000;
 
 const nonceStore = new Map<string, number>();
 const challengeStore = new Map<string, ChallengeRecord>();
@@ -59,6 +61,7 @@ function cleanupNonceMap(store: Map<string, number>, now = Date.now()) {
   for (const [key, expireAt] of store) {
     if (expireAt <= now) store.delete(key);
   }
+  while (store.size >= MAX_NONCES) store.delete(store.keys().next().value!);
 }
 
 function cleanupChallengeMap(now = Date.now()) {
@@ -66,6 +69,7 @@ function cleanupChallengeMap(now = Date.now()) {
   for (const [key, value] of challengeStore) {
     if (value.expireAt <= now || value.used) challengeStore.delete(key);
   }
+  while (challengeStore.size >= MAX_CHALLENGES) challengeStore.delete(challengeStore.keys().next().value!);
 }
 
 function base64urlToBase64(value: string) {
@@ -116,7 +120,7 @@ async function decryptOuterEnvelope(input: string) {
 
   const plaintext = decryptAesGcmBody(key, iv, encryptedBody);
   try {
-    return JSON.parse(plaintext) as unknown;
+    return { packet: JSON.parse(plaintext) as unknown, key };
   } catch {
     throw new GatewayPacketError("INVALID_PACKET");
   }
@@ -128,8 +132,9 @@ function packetObject(input: unknown) {
   }
   const row = input as Record<string, unknown>;
   if (row.v !== PACKET_VERSION) throw new GatewayPacketError("INVALID_PACKET_VERSION");
-  if (typeof row.keyId !== "string" || row.keyId.length < 8) throw new GatewayPacketError("INVALID_PACKET");
-  if (typeof row.key !== "string" || row.key.length < 40) throw new GatewayPacketError("INVALID_PACKET");
+  if (row.keyId !== undefined && (typeof row.keyId !== "string" || row.keyId.length < 8)) throw new GatewayPacketError("INVALID_PACKET");
+  if (row.key !== undefined && (typeof row.key !== "string" || row.key.length < 40)) throw new GatewayPacketError("INVALID_PACKET");
+  if ((row.keyId === undefined) !== (row.key === undefined)) throw new GatewayPacketError("INVALID_PACKET");
   if (typeof row.iv !== "string" || row.iv.length < 12) throw new GatewayPacketError("INVALID_PACKET");
   if (typeof row.body !== "string" || row.body.length < 16) throw new GatewayPacketError("INVALID_PACKET");
   if (typeof row.nonce !== "string" || row.nonce.length < 16) throw new GatewayPacketError("INVALID_NONCE");
@@ -293,14 +298,16 @@ function validateSignature(aesKey: Buffer, packet: { action: string; timestamp: 
 export async function unpackGatewayPacket(input: unknown, context: GatewayRequestContext = {}): Promise<GatewayUnpackedPacket> {
   const encoded = encryptedRoot(input);
   if (!encoded) throw new GatewayPacketError("INVALID_PACKET");
-  const packet = packetObject(await decryptOuterEnvelope(encoded));
+  const outer = await decryptOuterEnvelope(encoded);
+  const packet = packetObject(outer.packet);
 
   validateTimestamp(packet.timestamp);
   validateNonce(packet.nonce);
   validateChallenge(packet.challenge, packet, context);
 
-  const aesKeyBase64 = await decryptSubmittedValue(packet.keyId, decodeTransportKey(packet.key));
-  const aesKey = Buffer.from(aesKeyBase64, "base64");
+  const aesKey = packet.keyId && packet.key
+    ? Buffer.from(await decryptSubmittedValue(packet.keyId, decodeTransportKey(packet.key)), "base64")
+    : outer.key;
   if (aesKey.length !== 32) throw new GatewayPacketError("INVALID_PACKET");
   validateSignature(aesKey, packet);
 
