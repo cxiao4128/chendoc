@@ -1,4 +1,4 @@
-import { createPublicKey, generateKeyPairSync, randomUUID } from "node:crypto";
+import { createPublicKey, generateKeyPair, randomUUID } from "node:crypto";
 import { and, desc, eq, gt, lt } from "drizzle-orm";
 import { db, dbGet, dbRun } from "../../db/client.js";
 import { cryptoKeys } from "../../db/schema.js";
@@ -19,6 +19,7 @@ type ActivePublicKey = {
 };
 
 let activePublicKeyCache: ActivePublicKey | null = null;
+const privateKeyCache = new Map<string, { privateKey: string; expireAt: number }>();
 
 function publicKeyCacheUsable(key: ActivePublicKey | null) {
   return !!key && key.expireAt.getTime() - Date.now() > PUBLIC_KEY_CACHE_SKEW_MS;
@@ -47,10 +48,15 @@ function canReadStoredPrivateKey(privateKeyEncrypted: string) {
 }
 
 async function createAndStorePublicKey() {
-  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
-    modulusLength: minimumRsaModulusLength,
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs8", format: "pem" }
+  const { publicKey, privateKey } = await new Promise<{ publicKey: string; privateKey: string }>((resolve, reject) => {
+    generateKeyPair("rsa", {
+      modulusLength: minimumRsaModulusLength,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" }
+    }, (error, nextPublicKey, nextPrivateKey) => {
+      if (error) reject(error);
+      else resolve({ publicKey: nextPublicKey, privateKey: nextPrivateKey });
+    });
   });
 
   const keyId = randomUUID();
@@ -64,6 +70,8 @@ async function createAndStorePublicKey() {
     expireAt: new Date(Date.now() + KEY_RETENTION_MS),
     createdAt
   }));
+
+  privateKeyCache.set(keyId, { privateKey, expireAt: createdAt.getTime() + KEY_RETENTION_MS });
 
   return cacheActivePublicKey({ keyId, publicKey, expireAt: new Date(createdAt.getTime() + KEY_ROTATE_MS) });
 }
@@ -100,6 +108,19 @@ export async function getActivePublicKey() {
 
 export async function cleanupExpiredCryptoKeys() {
   await dbRun(db.delete(cryptoKeys).where(lt(cryptoKeys.expireAt, now())));
+  const nowMs = Date.now();
+  for (const [keyId, cached] of privateKeyCache) {
+    if (cached.expireAt <= nowMs) privateKeyCache.delete(keyId);
+  }
+}
+
+function privateKeyForRecord(record: typeof cryptoKeys.$inferSelect) {
+  const cached = privateKeyCache.get(record.keyId);
+  if (cached && cached.expireAt > Date.now()) return cached.privateKey;
+  const privateKey = decryptValue(record.privateKeyEncrypted, env.rsaPrivateKeyEncryptionKey);
+  if (privateKeyCache.size >= 16) privateKeyCache.delete(privateKeyCache.keys().next().value!);
+  privateKeyCache.set(record.keyId, { privateKey, expireAt: record.expireAt.getTime() });
+  return privateKey;
 }
 
 export async function decryptSubmittedValue(keyId: string, encryptedValue: string) {
@@ -113,7 +134,7 @@ export async function decryptSubmittedValue(keyId: string, encryptedValue: strin
     throw new Error("加密密钥已失效，请刷新页面重试");
   }
 
-  const privateKey = decryptValue(record.privateKeyEncrypted, env.rsaPrivateKeyEncryptionKey);
+  const privateKey = privateKeyForRecord(record);
   return decryptRsaOaepBase64(privateKey, encryptedValue);
 }
 
@@ -126,7 +147,7 @@ export async function decryptSubmittedValueWithActiveKey(encryptedValue: string)
 
   for (const record of records) {
     try {
-      const privateKey = decryptValue(record.privateKeyEncrypted, env.rsaPrivateKeyEncryptionKey);
+      const privateKey = privateKeyForRecord(record);
       return decryptRsaOaepBase64(privateKey, encryptedValue);
     } catch {
       // Try the next active key. The gateway keeps key identifiers inside the encrypted packet.

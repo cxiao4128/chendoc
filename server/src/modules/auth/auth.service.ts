@@ -29,7 +29,6 @@ export class AuthError extends AppError {
 const loginPayloadSchema = z.object({
   username: z.string().trim().min(1).max(64),
   password: z.string().min(1).max(128),
-  remember: z.boolean().optional(),
   captchaId: z.string().min(8).optional(),
   captchaCode: z.string().trim().min(1).max(8).optional(),
   otp: z.string().trim().min(4).max(16).optional(),
@@ -93,10 +92,11 @@ export async function login(input: unknown, meta: {
   }
   if (!user) {
     await recordLoginFailure(riskInput);
-    throw new AuthError("USER_NOT_FOUND", "账号不存在或已被注销", 404);
+    throw invalidCredentials();
   }
   if (user.status !== "active") {
-    throw new AuthError("USER_DISABLED", "你已被管理员禁止登录", 403);
+    await recordLoginFailure(riskInput);
+    throw invalidCredentials();
   }
 
   if (risk.captchaRequired) {

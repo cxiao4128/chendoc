@@ -28,6 +28,7 @@ export const MYSQL_CREATE_TABLES = [
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(16) NOT NULL DEFAULT 'user',
     status VARCHAR(16) NOT NULL DEFAULT 'active',
+    is_super_admin TINYINT(1) NOT NULL DEFAULT 0,
     totp_enabled TINYINT(1) NOT NULL DEFAULT 0,
     totp_secret_encrypted TEXT NULL,
     totp_recovery_codes_encrypted MEDIUMTEXT NULL,
@@ -118,7 +119,7 @@ export const MYSQL_CREATE_TABLES = [
     pinned TINYINT(1) NOT NULL DEFAULT 0,
     status VARCHAR(16) NOT NULL DEFAULT 'draft',
     sort INT NOT NULL DEFAULT 0,
-    owner_id INT NULL,
+    owner_id INT NOT NULL,
     owner_role VARCHAR(16) NOT NULL DEFAULT 'user',
     created_by INT NULL,
     updated_by INT NULL,
@@ -127,6 +128,8 @@ export const MYSQL_CREATE_TABLES = [
     visibility VARCHAR(16) NOT NULL DEFAULT 'private',
     tenant_key VARCHAR(64) NOT NULL DEFAULT 'default',
     deleted_at DATETIME(3) NULL,
+    deleted_by INT NULL,
+    revision INT NOT NULL DEFAULT 1,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
@@ -135,7 +138,9 @@ export const MYSQL_CREATE_TABLES = [
     KEY docs_deleted_idx (deleted_at),
     KEY docs_space_idx (space_id),
     KEY docs_pinned_idx (pinned),
-    KEY docs_updated_idx (updated_at)
+    KEY docs_updated_idx (updated_at),
+    KEY docs_owner_deleted_order_idx (owner_id, deleted_at, pinned, updated_at),
+    KEY docs_admin_deleted_order_idx (is_super_admin_doc, deleted_at, pinned, updated_at)
   ) ${tableOptions}`,
 
   `CREATE TABLE IF NOT EXISTS shares (
@@ -160,7 +165,7 @@ export const MYSQL_CREATE_TABLES = [
     UNIQUE KEY shares_share_code_unique (share_code),
     UNIQUE KEY shares_share_token_unique (share_token),
     UNIQUE KEY shares_custom_slug_unique (custom_slug),
-    KEY shares_doc_idx (doc_id),
+    UNIQUE KEY shares_doc_unique (doc_id),
     CONSTRAINT fk_shares_doc FOREIGN KEY (doc_id) REFERENCES docs(id) ON DELETE CASCADE,
     CONSTRAINT fk_shares_requested_by FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_shares_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
@@ -171,7 +176,7 @@ export const MYSQL_CREATE_TABLES = [
     form_uid VARCHAR(32) NOT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NULL,
-    fields TEXT NOT NULL DEFAULT ('[]'),
+    fields TEXT NOT NULL,
     owner_id INT NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'draft',
     max_submissions INT NULL,
@@ -217,9 +222,14 @@ export const MYSQL_CREATE_TABLES = [
     file_size INT NOT NULL,
     kind VARCHAR(16) NOT NULL,
     original_name VARCHAR(255) NULL,
+    detached_at DATETIME(3) NULL,
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uploads_object_key_unique (object_key)
+    UNIQUE KEY uploads_object_key_unique (object_key),
+    KEY uploads_user_idx (user_id),
+    KEY uploads_doc_idx (doc_id),
+    KEY uploads_user_created_idx (user_id, created_at),
+    KEY uploads_detached_idx (detached_at)
   ) ${tableOptions}`,
 
   `CREATE TABLE IF NOT EXISTS doc_versions (
@@ -350,12 +360,17 @@ export const MYSQL_INDEXES = [
   { table: "docs", name: "docs_created_by_idx", columns: "`created_by`" },
   { table: "docs", name: "docs_status_idx", columns: "`status`" },
   { table: "docs", name: "docs_list_admin_idx", columns: "`deleted_at`, `pinned`, `updated_at`" },
-  { table: "docs", name: "docs_list_user_idx", columns: "`created_by`, `deleted_at`, `pinned`, `updated_at`" },
+  { table: "docs", name: "docs_list_user_idx", columns: "`owner_id`, `deleted_at`, `pinned`, `updated_at`" },
+  { table: "docs", name: "docs_owner_deleted_order_idx", columns: "`owner_id`, `deleted_at`, `pinned`, `updated_at`" },
+  { table: "docs", name: "docs_admin_deleted_order_idx", columns: "`is_super_admin_doc`, `deleted_at`, `pinned`, `updated_at`" },
   { table: "docs", name: "docs_trash_idx", columns: "`deleted_at`, `updated_at`" },
   { table: "users", name: "users_role_idx", columns: "`role`" },
   { table: "users", name: "users_status_idx", columns: "`status`" },
   { table: "shares", name: "shares_review_idx", columns: "`review_status`, `created_at`" },
   { table: "shares", name: "shares_doc_review_idx", columns: "`doc_id`, `review_status`" },
+  { table: "uploads", name: "uploads_doc_idx", columns: "`doc_id`" },
+  { table: "uploads", name: "uploads_user_created_idx", columns: "`user_id`, `created_at`" },
+  { table: "uploads", name: "uploads_detached_idx", columns: "`detached_at`" },
   { table: "operation_logs", name: "operation_logs_created_idx", columns: "`created_at`" },
   { table: "operation_logs", name: "operation_logs_user_created_idx", columns: "`user_id`, `created_at`" },
   { table: "shares", name: "shares_public_lookup_idx", columns: "`share_code`, `is_enabled`, `review_status`" },
@@ -366,4 +381,8 @@ export const MYSQL_INDEXES = [
   { table: "logs", name: "logs_action_created_idx", columns: "`action`, `created_at`" },
   { table: "logs", name: "logs_doc_uid_idx", columns: "`doc_uid`" },
   { table: "logs", name: "logs_created_idx", columns: "`created_at`" }
+] as const;
+
+export const MYSQL_FULLTEXT_INDEXES = [
+  { table: "docs", name: "docs_search_fulltext_idx", columns: "`title`, `summary`, `tags`" }
 ] as const;

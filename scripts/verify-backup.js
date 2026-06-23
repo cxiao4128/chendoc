@@ -3,7 +3,27 @@ import { createDecipheriv, createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function readEnvFile(path) {
+  if (!existsSync(path)) return {};
+  const env = {};
+  for (const rawLine of readFileSync(path, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+    if (!match) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    else value = value.replace(/\s+#.*$/, "");
+    env[match[1]] = value;
+  }
+  return env;
+}
 
 const expectedTables = [
   "users",
@@ -68,8 +88,13 @@ function dumpRowCounts(sql) {
 }
 
 const [backupPath] = process.argv.slice(2);
-const databaseUrl = process.env.CHENDOC_BACKUP_VERIFY_DATABASE_URL;
-const secret = process.env.CHENDOC_BACKUP_ENCRYPTION_KEY || "";
+const runtimeEnv = {
+  ...readEnvFile(resolve(root, "server/.env")),
+  ...readEnvFile(resolve(root, ".env")),
+  ...process.env
+};
+const databaseUrl = runtimeEnv.CHENDOC_BACKUP_VERIFY_DATABASE_URL;
+const secret = runtimeEnv.CHENDOC_BACKUP_ENCRYPTION_KEY || "";
 if (!backupPath || !databaseUrl) throw new Error("Usage: CHENDOC_BACKUP_VERIFY_DATABASE_URL=mysql://... npm run db:backup:verify -- backup.sql.gz.enc");
 if (Buffer.byteLength(secret, "utf8") < 32) throw new Error("CHENDOC_BACKUP_ENCRYPTION_KEY must be at least 32 bytes.");
 const url = new URL(databaseUrl);
@@ -90,6 +115,20 @@ const decipher = createDecipheriv("aes-256-gcm", createHash("sha256").update(sec
 decipher.setAuthTag(tag);
 const sql = gunzipSync(Buffer.concat([decipher.update(input.subarray(17, -16)), decipher.final()]));
 const expectedRowCounts = dumpRowCounts(sql.toString("utf8"));
+const resetConnection = await mysql.createConnection(databaseUrl);
+try {
+  const [existingTables] = await resetConnection.query(
+    "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+  );
+  await resetConnection.query("SET FOREIGN_KEY_CHECKS=0");
+  for (const row of existingTables) {
+    const table = String(row.TABLE_NAME ?? row.table_name).replace(/`/g, "``");
+    await resetConnection.query(`DROP TABLE IF EXISTS \`${table}\``);
+  }
+  await resetConnection.query("SET FOREIGN_KEY_CHECKS=1");
+} finally {
+  await resetConnection.end();
+}
 const imported = spawnSync("mysql", ["--host", url.hostname, "--port", url.port || "3306", "--user", decodeURIComponent(url.username), database], {
   input: sql,
   stdio: ["pipe", "inherit", "inherit"],

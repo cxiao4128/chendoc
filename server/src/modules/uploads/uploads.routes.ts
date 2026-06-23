@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
-import { requireAdmin } from "../../middleware/requireAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { completeUpload, createPresignedUpload, deleteUpload, getUploadPolicy } from "./uploads.service.js";
@@ -15,7 +14,7 @@ export async function uploadsRoutes(app: FastifyInstance) {
     upload: await completeUpload(request.user!.id, request.user!, request.body)
   }));
 
-  app.delete("/api/uploads/:id", { preHandler: [authenticate, requireAdmin, requireDangerVerification] }, async (request) => {
+  app.delete("/api/uploads/:id", { preHandler: [authenticate, requireDangerVerification] }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const result = await deleteUpload(params.id, request.user!);
     await writeAuditLog({

@@ -35,6 +35,5 @@ export function canAccessDocument(
   if (!user || !document) return false;
   if (user.isSuperAdmin) return true;
   if (isSuperAdminDoc(document)) return false;
-  if (user.role === "admin") return true;
   return document.ownerId === user.id;
 }

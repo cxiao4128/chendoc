@@ -2,7 +2,7 @@
 
 > 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
 
-当前版本 / Current version: `v2.6.0`
+当前版本 / Current version: `v2.9.0`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -58,6 +58,8 @@ JWT_SECRET=replace_with_32_bytes_or_more
 CONFIG_ENCRYPTION_KEY=replace_with_32_bytes_or_more
 RSA_PRIVATE_KEY_ENCRYPTION_KEY=replace_with_32_bytes_or_more
 CHENDOC_DOCUMENT_ENCRYPTION_KEY=replace_with_32_bytes_or_more
+CHENDOC_FORCE_HTTPS=true
+CHENDOC_TRUST_PROXY=127.0.0.1,::1
 DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=replace_with_strong_password
 ```
@@ -94,9 +96,25 @@ bash ./stop.sh           # 停止服务
 - 不要提交 `.env`、数据库、日志、部署密钥或备份文件。
 - 首次部署后请确认管理员密码、JWT 密钥、配置加密密钥、RSA 私钥加密密钥和文档加密密钥均已替换。
 - R2 Access Key 和 Secret 只保存在服务端配置中，前端不会直接暴露密钥。
+- R2 运行密钥只需对象读写权限，不应授予桶 CORS 管理权限。CORS 在 Cloudflare 控制台限定为 `PUBLIC_SITE_URL`，方法仅 `GET`、`HEAD`、`PUT`。
+- 生产环境默认要求 `CHENDOC_UPLOAD_SCAN_WEBHOOK`。配置 `R2_BACKUP_BUCKET` 后，维护任务每日复制上传对象到独立备份桶。
 - 上线前建议测试登录、公开分享、分享审核、注册卡密、R2 上传和管理员安全中心。
 
 ### 更新日志
+
+#### 2.6.2
+
+- 修复收集表编辑器样式变量失效、列表列错位、草稿无效链接和提交记录编号错误。
+- 收敛到真实可用题型和操作，补齐保存、发布状态、移动编辑、分节、专属信息与字段校验。
+- 公开页加强必填、成功回显和内联 JSON 编码；提交记录统一显示匿名来源摘要。
+- 文档编辑器自动收起无内容的左栏，删除文档改放“更多”菜单，避免横向危险按钮误触。
+
+#### 2.6.1
+
+- 修复 MariaDB/旧版 MySQL 不支持 `TEXT DEFAULT ('[]')` 导致收集表迁移失败。
+- `forms.fields` 改为无默认值的非空字段，创建表单时仍显式写入 JSON。
+- 增加跨 MySQL 变体 DDL 回归测试，并强制 Shell 脚本在发布包中保持 LF。
+- 修复宝塔/Nginx 本机反向代理下 HTTPS 请求被误判为 HTTP，登录返回 `HTTPS is required`。
 
 #### 2.6.0
 
@@ -145,7 +163,7 @@ bash ./stop.sh           # 停止服务
 
 - 架构更新版本，根项目、管理端、服务端、锁文件和系统展示版本已同步到 `2.5.0`。
 - 强化 Gateway Packet Layer：动态 `keyId`、挑战绑定、HMAC-SHA256 签名、nonce/timestamp 防重放和加密响应链路。
-- 强化登录安全：登录风险跟踪、TOTP、危险操作二次验证、单次恢复码和安全中心管理页。
+- 强化登录安全：登录风险跟踪、TOTP 风险挑战、危险操作二次验证、单次恢复码和安全中心管理页。
 - 新增文档内容 AES-256-GCM 静态加密，支持历史文档加密迁移脚本。
 - 优化公开分享首屏、ETag / Last-Modified 缓存、密码分享页和分享审核链路。
 - 更新部署预检和 `deploy.sh`，生产部署强制使用 `DATABASE_PROVIDER=mysql` 与 `mysql://` 连接串。
@@ -237,6 +255,20 @@ http://127.0.0.1:8985
 
 ### Changelog
 
+#### 2.6.2
+
+- Fixed broken form-editor tokens, list alignment, invalid draft links, and submission numbering.
+- Kept only working field and action paths; improved saving, publishing state, mobile editing, sections, exclusive info, and validation.
+- Hardened required public fields, success summaries, inline JSON encoding, and anonymous source-digest wording.
+- Collapsed empty editor sidebars and moved document deletion into the More menu to prevent wide accidental-click targets.
+
+#### 2.6.1
+
+- Fixed form migration on MariaDB and older MySQL variants that reject `TEXT DEFAULT ('[]')`.
+- Kept `forms.fields` required without a database default; form creation still writes JSON explicitly.
+- Added a cross-variant DDL regression test and forced LF line endings for packaged shell scripts.
+- Fixed HTTPS requests being misclassified behind a local BT/Nginx reverse proxy, which blocked login with `HTTPS is required`.
+
 #### 2.6.0
 
 - Hardened form CSP, session rotation, dynamic output, and form abuse controls.
@@ -267,7 +299,7 @@ Documentation: [https://d.w92.pw/](https://d.w92.pw/)
 
 - Architecture update release. Root, admin, server, lockfile, and displayed version are synchronized to `2.5.0`.
 - Hardened Gateway Packet Layer with dynamic `keyId`, challenge binding, HMAC-SHA256 signing, nonce/timestamp replay protection, and encrypted responses.
-- Added login risk tracking, TOTP, dangerous-operation re-verification, recovery codes, and the admin security center.
+- Added login risk tracking, TOTP risk challenges, dangerous-operation re-verification, recovery codes, and the admin security center.
 - Added AES-256-GCM document encryption at rest and migration scripts for existing documents.
 - Improved public share first paint, ETag / Last-Modified caching, password-protected share pages, and share review.
 - Updated deployment preflight and `deploy.sh` to require `DATABASE_PROVIDER=mysql` and a `mysql://` `DATABASE_URL`.

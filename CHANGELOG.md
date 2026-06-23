@@ -4,6 +4,86 @@
 
 ## 中文
 
+### 2.9.0
+
+版本号：`2.9.0`
+
+展示版本：`v2.9.0`
+
+- 修复 `share_token` 等于分享数字的问题；新分享使用随机 token，旧弱 token 会在迁移和分享更新时自动轮换。
+- 分享页不可用状态统一返回 404 和通用文案，减少 disabled/expired/deleted/missing 的枚举信号。
+- MySQL 文档搜索增加 `docs_search_fulltext_idx` 全文索引，并在 MySQL 查询中优先使用 `MATCH ... AGAINST`。
+- 明确 Gateway Packet Layer 只负责传输加固，不替代 `authenticate`、`requireSuperAdmin`、`canAccessDocument`，并加入架构检查。
+- R2 上传场景下部署预检强制要求 `R2_BACKUP_BUCKET`；维护 cron 缺失会使部署失败，避免对象清理/备份被静默跳过。
+
+更新时间：2026-06-23 +08:00
+
+### 2.8.0
+
+版本号：`2.8.0`
+
+展示版本：`v2.8.0`
+
+- 保留 `shareId=111–9999` 业务短编号，公开接口不再返回文档标识、所有者或数据库主键；分享访问增加独立限流、访问日志、所有者状态和完整发布状态校验。
+- 普通管理员改为仅管理自己文档；超级管理员改为数据库显式标记，不再依赖配置用户名推断。
+- 修复脱离文档后的上传越权删除；上传完成增加真实文件签名检查，R2 测试校验受限 CORS 并删除探测对象。
+- 登录会话增加 HttpOnly、SameSite=Strict 恢复凭据，刷新页面可恢复会话；禁用账号仍立即拒绝恢复。
+- 修复每日备份校验缺少路径、验证库重复恢复、部署前未验证备份及健康检查不探测数据库的问题。
+- 修复模板正文 JSON 丢失、知识库只读取第一页、移动文档卡片拉伸、桌面表格截断、设置页签截断和回收站保留期误导。
+- 系统概览和用户文档统计改为 SQL 聚合；大文档增加 4MB 限制和自适应编辑器防抖；孤儿对象扫描改为有游标的分批任务。
+- TOTP 明确定位为失败风险挑战和危险操作验证，不宣称每次登录强制双因素认证。
+
+更新时间：2026-06-22 +08:00
+
+### 2.7.0
+
+版本号：`2.7.0`
+
+展示版本：`v2.7.0`
+
+- 收紧超级管理员、普通管理员、普通用户的服务端权限边界，永久删除统一要求二次验证。
+- 增加文档修订号、删除者、唯一分享关系、上传配额、文档绑定、生产扫描和数据库复合索引。
+- 文档、历史版本、分享审核和可见性更新改为事务提交；编辑器增加 IndexedDB 本地草稿和冲突检测。
+- 修复草稿被自动发布、回收站虚假容量与倒计时、登录账号枚举、Gateway 内部头伪造和双重 RSA 开销。
+- 部署增加 PM2 健康检查、失败回滚、维护计划、数据库校验和 R2 备份任务。
+
+更新时间：2026-06-21 +08:00
+
+### 2.6.2
+
+版本号：`2.6.2`
+
+展示版本：`v2.6.2`
+
+本次更新内容：
+
+- 修复收集表编辑器变量作用域失效、列表列错位、草稿复制无效链接和提交记录翻页编号错误。
+- 删除无实际能力的题型与伪操作入口；补齐草稿保存、发布状态、移动端三步编辑和真实字段预览。
+- 修复分节标题被当作提交字段、仅含分节也能发布、空提交上限无法保存、专属信息名称不可编辑等问题。
+- 加强公开表单字段契约、预设字段校验、必填单选、成功页字段名称和内联 JSON 编码。
+- 提交记录统一使用来源摘要，不再把匿名摘要误称为原始 IP；导出和详情跳过分节字段。
+- 文档编辑器不再为单文档保留空白切换区；只有目录时直接顶置目录，无内容时收起整块左栏。
+- 删除文档移入“更多”菜单，避免危险按钮换行成横向误触区；修正编辑器工具栏列数和窄屏收缩。
+
+更新时间：2026-06-21 +08:00
+
+### 2.6.1
+
+版本号：`2.6.1`
+
+展示版本：`v2.6.1`
+
+本次更新内容：
+
+- 修复 MariaDB/旧版 MySQL 不支持 `TEXT DEFAULT ('[]')` 导致收集表建表失败。
+- `forms.fields` 改为无默认值的非空字段；应用创建表单时继续显式写入字段 JSON。
+- 增加跨 MySQL 变体 DDL 回归测试。
+- 新增 `.gitattributes`，强制 Linux 部署脚本使用 LF，避免 `pipefail\r` 错误。
+- 修复宝塔/Nginx 本机反向代理未传或未被信任 `X-Forwarded-Proto` 时，HTTPS 登录被误判并返回 `HTTPS is required`。
+- 默认仅信任 `127.0.0.1`、`::1` 代理；显式 HTTP 转发仍会拒绝，远程伪造头不会被信任。
+
+更新时间：2026-06-21 +08:00
+
 ### 2.6.0
 
 版本号：`2.6.0`
@@ -241,6 +321,86 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 2.9.0
+
+Version: `2.9.0`
+
+Display version: `v2.9.0`
+
+- Fixed `share_token` values that mirrored share codes; new shares use random tokens, and old weak tokens rotate during migration or share updates.
+- Unified unavailable public share pages to a generic 404 response to reduce disabled/expired/deleted/missing enumeration signals.
+- Added a MySQL full-text index for document search and switched MySQL document queries to `MATCH ... AGAINST`.
+- Documented Gateway Packet Layer as transport hardening only, not authorization, and added architecture checks for the required server-side guards.
+- Made R2 deployments require `R2_BACKUP_BUCKET` when uploads are configured, and made missing maintenance cron fail instead of silently skipping cleanup and backups.
+
+Updated: 2026-06-23 +08:00
+
+### 2.8.0
+
+Version: `2.8.0`
+
+Display version: `v2.8.0`
+
+- Kept the memorable `shareId=111–9999` business identifier while removing document and database identifiers from public responses; added dedicated rate limits, access logs, owner-state checks, and full publication checks.
+- Restricted ordinary administrators to their own documents and replaced username-derived super-admin identity with an explicit database flag.
+- Closed detached-upload deletion authorization gaps, added file-signature checks, validated restricted R2 CORS, and removed probe objects.
+- Added HttpOnly SameSite session restoration without weakening disabled-account revocation.
+- Fixed backup verification arguments, repeatable restore verification, pre-deploy backup validation, and database-aware health checks.
+- Fixed template JSON loss, first-page-only knowledge loading, responsive document layouts, settings tabs, and recycle-bin retention copy.
+- Replaced full-table overview aggregation with SQL aggregates, bounded large documents, adapted editor debounce, and paged orphan-object scans.
+- Documented TOTP as a risk challenge and dangerous-operation verification, not mandatory MFA on every login.
+
+Updated: 2026-06-22 +08:00
+
+### 2.7.0
+
+Version: `2.7.0`
+
+Display version: `v2.7.0`
+
+- Enforced server-side super-admin, administrator, and user boundaries; permanent deletion now requires fresh verification.
+- Added document revisions, deletion actors, one-share-per-document constraints, upload quotas, document binding, production scanning, and query indexes.
+- Made document/version/share visibility updates transactional; added durable IndexedDB drafts and stale-write conflict detection.
+- Fixed silent draft publishing, fake trash metrics, login account enumeration, forged Gateway internal headers, and duplicate RSA work.
+- Added PM2 health checks, failed-build rollback, scheduled maintenance, log rotation, and R2 backup support.
+
+Updated: 2026-06-21 +08:00
+
+### 2.6.2
+
+Version: `2.6.2`
+
+Display version: `v2.6.2`
+
+Changes:
+
+- Fixed form-editor token scope, list column alignment, invalid draft-link copying, and paginated submission numbering.
+- Removed nonfunctional field types and placeholder actions; added explicit draft saving, honest publishing state, mobile step editing, and faithful previews.
+- Fixed section fields being submitted, section-only forms being publishable, cleared limits failing validation, and uneditable exclusive-info labels.
+- Hardened public field contracts, preset validation, required radio groups, success-page labels, and inline JSON encoding.
+- Renamed anonymous source digests consistently and excluded section fields from exports and submission details.
+- Removed the empty document-switching region for single-document editing and promoted the outline when it is the only useful left-side content.
+- Moved document deletion into the More menu and fixed toolbar columns so the danger action cannot wrap into a wide accidental-click target.
+
+Updated at: 2026-06-21 +08:00
+
+### 2.6.1
+
+Version: `2.6.1`
+
+Display version: `v2.6.1`
+
+Changes:
+
+- Fixed form table creation on MariaDB and older MySQL variants that reject `TEXT DEFAULT ('[]')`.
+- Kept `forms.fields` required without a database default; form creation still writes the JSON explicitly.
+- Added a cross-variant DDL regression test.
+- Added `.gitattributes` to keep Linux deployment scripts on LF and prevent `pipefail\r` failures.
+- Fixed HTTPS login being rejected with `HTTPS is required` behind a local BT/Nginx reverse proxy when `X-Forwarded-Proto` was absent or not trusted.
+- Trusts only `127.0.0.1` and `::1` by default; explicit HTTP forwarding and spoofed remote headers remain rejected.
+
+Updated at: 2026-06-21 +08:00
 
 ### 2.6.0
 

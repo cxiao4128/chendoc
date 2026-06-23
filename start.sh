@@ -33,10 +33,19 @@ if [ ! -x "$PM2" ]; then
   exit 1
 fi
 
-"$PM2" delete chendoc >/dev/null 2>&1 || true
-"$PM2" start server/dist/server.js --name chendoc --cwd "$(pwd)" --interpreter "$NODE_EXEC" --update-env --time
+mkdir -p logs
+"$PM2" startOrReload ecosystem.config.cjs --only chendoc --update-env
 "$PM2" save
 
-sleep 1
 "$PM2" list
-curl -I http://127.0.0.1:8985/login || true
+PORT_VALUE="$(grep -E '^[[:space:]]*PORT=' .env | tail -n 1 | cut -d= -f2- | tr -d '[:space:]\r\"' || true)"
+PORT_VALUE="${PORT_VALUE:-8985}"
+for attempt in $(seq 1 20); do
+  if curl --fail --silent --show-error --max-time 3 "http://127.0.0.1:${PORT_VALUE}/api/health" >/dev/null; then
+    echo "Health check passed on port ${PORT_VALUE}."
+    exit 0
+  fi
+  sleep 1
+done
+echo "Health check failed on port ${PORT_VALUE}."
+exit 1

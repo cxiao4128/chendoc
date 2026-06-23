@@ -145,7 +145,7 @@ onMounted(() => {
     <header class="security-center__head">
       <div>
         <small>安全中心</small>
-        <h1>管理员双因素认证</h1>
+        <h1>管理员风险验证</h1>
       </div>
       <button class="cd-button" type="button" :disabled="loading" @click="loadStatus">
         <RefreshCw :size="16" />刷新
@@ -156,7 +156,7 @@ onMounted(() => {
       <div class="security-center__status">
         <ShieldCheck :size="22" />
         <div>
-          <strong>{{ status?.enabled ? "TOTP 已开启" : "TOTP 未开启" }}</strong>
+          <strong>{{ status?.enabled ? "TOTP 风险验证已开启" : "TOTP 风险验证未开启" }}</strong>
           <span>{{ status?.enabled ? "危险操作必验；登录密码连续错误 5 次后才要求 OTP" : "支持 Google Authenticator / Microsoft Authenticator" }}</span>
         </div>
         <em>{{ status?.recoveryCodesRemaining ?? 0 }} 个恢复码可用</em>

@@ -30,7 +30,6 @@ const captchaCode = ref("");
 const captchaId = ref("");
 const captchaInput = ref<{ refresh: () => Promise<void> } | null>(null);
 const captchaRequired = ref(false);
-const remember = ref(true);
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref("");
@@ -85,8 +84,7 @@ function errorCode(err: unknown) {
 
 function loginErrorMessage(err: unknown, captchaWasRequired: boolean) {
   const code = errorCode(err);
-  if (code === "USER_DISABLED") return "这个入口已被暂停，请联系管理员。";
-  if (code === "USER_NOT_FOUND" || code === "USER_DELETED") return "没有找到这个账号。";
+  if (code === "USER_DISABLED" || code === "USER_NOT_FOUND" || code === "USER_DELETED") return "账号或密码不正确。";
   if (code === "INVALID_CREDENTIALS") return "账号或密码不正确。";
   if (code === "CAPTCHA_REQUIRED") {
     const message = err instanceof Error ? err.message : "";
@@ -153,7 +151,6 @@ async function signIn(secondFactor: Record<string, unknown> = {}) {
   const response = await submitCredential({
     username: username.value,
     password: password.value,
-    remember: remember.value,
     ...captcha,
     ...secondFactor
   });
@@ -330,10 +327,6 @@ onMounted(() => {
             />
 
             <div class="auth-actions">
-              <label class="auth-remember">
-                <input v-model="remember" type="checkbox" />
-                <span>记住登录状态</span>
-              </label>
               <span class="auth-links">
                 <RouterLink to="/forgot-password">忘记密码?</RouterLink>
                 <i></i>

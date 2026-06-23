@@ -11,7 +11,8 @@ import { clientIpFromRequest } from "../../utils/requestIp.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { AuthError, changePassword, login, register } from "./auth.service.js";
 import { requireDangerVerification, verifyDangerOperation } from "./dangerVerification.service.js";
-import { renewAuthSession, revokeAuthSession } from "./session.service.js";
+import { renewAuthSession, revokeAuthSession, verifyAuthSessionToken } from "./session.service.js";
+import { env } from "../../config/env.js";
 import {
   beginTotpSetup,
   disableTotp,
@@ -38,6 +39,25 @@ export async function authRoutes(app: FastifyInstance) {
         currentIp: clientIpFromRequest(request)
       }
     };
+  }
+
+  function cookieToken(request: FastifyRequest) {
+    const cookie = request.headers.cookie || "";
+    const match = cookie.split(";").map((value) => value.trim()).find((value) => value.startsWith("chendoc_session="));
+    if (!match) return "";
+    try { return decodeURIComponent(match.slice("chendoc_session=".length)); } catch { return ""; }
+  }
+
+  function sessionCookie(token: string, expiresAt: Date | string) {
+    const expireAt = new Date(expiresAt);
+    const maxAge = Math.max(0, Math.floor((expireAt.getTime() - Date.now()) / 1000));
+    const secure = new URL(env.publicSiteUrl).protocol === "https:" ? "; Secure" : "";
+    return `chendoc_session=${encodeURIComponent(token)}; Path=/api/auth; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`;
+  }
+
+  function clearSessionCookie() {
+    const secure = new URL(env.publicSiteUrl).protocol === "https:" ? "; Secure" : "";
+    return `chendoc_session=; Path=/api/auth; HttpOnly; SameSite=Strict; Max-Age=0${secure}`;
   }
 
   app.post("/api/auth/login", { config: { rateLimit: loginRateLimit } }, async (request, reply) => {
@@ -69,6 +89,7 @@ export async function authRoutes(app: FastifyInstance) {
         ...auditMetaFromRequest(request),
         role: result.user.role
       });
+      reply.header("Set-Cookie", sessionCookie(result.token, result.expiresAt));
       return { token: result.token, user: result.user, expiresAt: result.expiresAt };
     } catch (error) {
       await writeAuditLog({
@@ -114,6 +135,31 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post("/api/auth/me", { preHandler: authenticate }, async (request) => currentUser(request));
 
+  app.post("/api/auth/restore", async (request, reply) => {
+    const token = cookieToken(request);
+    if (!token) return reply.code(401).send({ code: "SESSION_NOT_FOUND", message: "登录状态不存在" });
+    try {
+      const session = await verifyAuthSessionToken(token);
+      const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, session.userId)).limit(1));
+      if (!user || user.status !== "active") throw new Error("User is unavailable.");
+      return {
+        token,
+        expiresAt: session.tokenExpiresAt,
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          status: user.status,
+          isSuperAdmin: isSuperAdminUser(user),
+          currentIp: clientIpFromRequest(request)
+        }
+      };
+    } catch {
+      reply.header("Set-Cookie", clearSessionCookie());
+      return reply.code(401).send({ code: "SESSION_EXPIRED", message: "登录状态已失效" });
+    }
+  });
+
   app.post("/api/auth/refresh", { preHandler: authenticate }, async (request, reply) => {
     const current = await currentUser(request);
     if (!current.user) return current;
@@ -123,6 +169,7 @@ export async function authRoutes(app: FastifyInstance) {
       sessionUser,
       request.user!.sessionTokenDigest ?? ""
     );
+    reply.header("Set-Cookie", sessionCookie(session.token, session.expiresAt));
     return { token: session.token, user: current.user, expiresAt: session.expiresAt };
   });
 
@@ -135,6 +182,7 @@ export async function authRoutes(app: FastifyInstance) {
       targetId: "logout",
       ...auditMetaFromRequest(request)
     });
+    reply.header("Set-Cookie", clearSessionCookie());
     return { ok: true };
   });
 
@@ -208,6 +256,22 @@ export async function authRoutes(app: FastifyInstance) {
       await writeAuditLog({
         userId: request.user!.id,
         action: "admin.danger.verify",
+        targetType: "auth",
+        targetId: "danger",
+        ...auditMetaFromRequest(request)
+      });
+      return result;
+    } catch {
+      return reply.code(403).send({ code: "DANGER_VERIFICATION_REQUIRED", message: "Danger verification required." });
+    }
+  });
+
+  app.post("/api/security/danger-verify", { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const result = await verifyDangerOperation(request.user!.id, request.user!.sessionId!, request.body);
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: "security.danger.verify",
         targetType: "auth",
         targetId: "danger",
         ...auditMetaFromRequest(request)

@@ -125,10 +125,9 @@ const reviewCount = computed(() => allDocs.value.filter((doc) => doc.shareReview
 const draftCount = computed(() => allDocs.value.filter((doc) => doc.status !== "published").length);
 const unsharedCount = computed(() => allDocs.value.filter((doc) => !doc.shareCode || !doc.shareEnabled).length);
 const ownerName = computed(() => auth.user?.username || "xchen");
-const showOwnerColumn = computed(() => managedUserCount.value > 1);
+const showOwnerColumn = computed(() => managedUserCount.value > 1 || allDocs.value.some((doc) => doc.ownerId !== auth.user?.id));
 const storageTotalBytes = computed(() => systemStatus.value?.storage.totalBytes || 0);
 const storageFileCount = computed(() => systemStatus.value?.storage.fileCount || 0);
-const storagePercent = computed(() => Math.min(100, Math.round((storageFileCount.value / Math.max(storageFileCount.value, 1)) * 100)));
 const sortLabel = computed(() => {
   if (sortMode.value === "createdDesc") return "按创建时间";
   if (sortMode.value === "titleAsc") return "按标题";
@@ -208,8 +207,8 @@ async function handleUpload(event: Event) {
   uploading.value = true;
   actionMessage.value = "";
   try {
-    const url = await uploader.uploadFile(file);
     const doc = await docs.createDoc(file.name.replace(/\.[^.]+$/, "") || "导入文档");
+    const url = await uploader.uploadFile(file, doc.docUid);
     await docs.saveDoc(doc.docUid, {
       summary: `上传文件：${file.name}`,
       contentHtml: `<p><a href="${url}" target="_blank" rel="noopener noreferrer">${file.name}</a></p>`
@@ -247,13 +246,13 @@ function resetFilters() {
 
 async function loadSystemStatus() {
   const [statusResult, logsResult, usersResult, spacesResult] = await Promise.allSettled([
-    getSystemStatusApi(),
-    listOperationLogsApi(),
+    auth.canAccessAdmin ? getSystemStatusApi() : Promise.resolve(null),
+    auth.canAccessAdmin ? listOperationLogsApi() : Promise.resolve(null),
     auth.canAccessAdmin ? listManagedUsersApi() : Promise.resolve({ users: [auth.user] }),
     listSpacesApi()
   ]);
-  systemStatus.value = statusResult.status === "fulfilled" ? statusResult.value.status : null;
-  recentActivity.value = logsResult.status === "fulfilled" ? logsResult.value.logs.slice(0, 5) : [];
+  systemStatus.value = statusResult.status === "fulfilled" ? statusResult.value?.status ?? null : null;
+  recentActivity.value = logsResult.status === "fulfilled" ? logsResult.value?.logs.slice(0, 5) ?? [] : [];
   managedUserCount.value = usersResult.status === "fulfilled" ? usersResult.value.users.length : 1;
   spaces.value = spacesResult.status === "fulfilled" ? spacesResult.value.spaces : [];
 }
@@ -493,7 +492,7 @@ watch(visibleDocs, (items) => {
 
       <div class="doc-list-page__mobile-actions">
         <button class="cd-button" type="button" :disabled="bulkMode && (!selectedCount || bulkDeleting)" @click="onBulkDeleteClick">
-          <Trash2 :size="16" />{{ bulkMode && selectedCount ? `批量删除 ${selectedCount}` : "批量删除" }}
+          <Trash2 v-if="bulkMode" :size="16" /><ListFilter v-else :size="16" />{{ bulkMode && selectedCount ? `批量删除 ${selectedCount}` : "选择文档" }}
         </button>
         <button v-if="bulkMode" class="cd-button" type="button" @click="toggleAllVisibleDocs">
           {{ allVisibleSelected ? "取消全选" : "全选" }}
@@ -552,8 +551,8 @@ watch(visibleDocs, (items) => {
     <template v-else>
       <div class="doc-list-page__head">
         <div>
-          <h1>文档 <span aria-hidden="true">✦</span></h1>
-          <p>{{ query ? `搜索：${query}` : "集中管理和知识沉淀，安全协作，高效流转" }}</p>
+          <h1>文档</h1>
+          <p>{{ query ? `搜索：${query}` : "整理、检索、编辑和发布你的文档" }}</p>
         </div>
         <div class="doc-list-page__actions">
           <span v-if="bulkMode && selectedCount" class="doc-list-page__bulk-counter">已选 {{ selectedCount }} 篇</span>
@@ -669,9 +668,9 @@ watch(visibleDocs, (items) => {
         </div>
 
         <aside v-if="!toolboxCollapsed" class="doc-list-page__toolbox" aria-label="文档概览">
-          <section class="doc-list-page__storage">
+          <section v-if="auth.canAccessAdmin" class="doc-list-page__storage">
             <strong>存储概览</strong>
-            <div class="doc-list-page__ring" :style="{ '--storage-percent': `${storagePercent}%` }"><span>{{ storageFileCount || "" }}</span></div>
+            <div class="doc-list-page__ring"><span>{{ storageFileCount }}</span></div>
             <p>{{ formatBytes(storageTotalBytes) }} · {{ storageFileCount }} 个上传记录</p>
             <RouterLink v-if="auth.canAccessAdmin" class="cd-button" to="/admin/settings/storage">管理存储</RouterLink>
           </section>

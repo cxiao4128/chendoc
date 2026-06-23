@@ -9,6 +9,7 @@ import {
 } from "./packet.js";
 import { isGatewayExemptPath } from "./action-registry.js";
 import { measureRequestPhase } from "../utils/requestTiming.js";
+import { isVerifiedInternalGatewayRequest } from "./internal-request.js";
 
 const GATEWAY_DEBUG = env.nodeEnv !== "production";
 
@@ -24,7 +25,7 @@ function isApiRequest(request: FastifyRequest) {
 }
 
 function isInternalGatewayRequest(request: FastifyRequest) {
-  return request.headers["x-gateway-internal"] === "1";
+  return isVerifiedInternalGatewayRequest(request);
 }
 
 function requestPath(request: FastifyRequest) {
@@ -44,6 +45,7 @@ function hasRequestBody(request: FastifyRequest) {
 }
 
 function requirePacket(request: FastifyRequest) {
+  // Gateway validates packet integrity/replay only. Route preHandlers still own authz.
   return env.nodeEnv === "production"
     && isApiRequest(request)
     && !isInternalGatewayRequest(request)

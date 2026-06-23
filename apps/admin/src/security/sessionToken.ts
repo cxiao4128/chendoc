@@ -15,8 +15,8 @@ function parseExpireAt(expireAt?: string | number | Date) {
   return 0;
 }
 
-// Token 只保存在当前页面内存。刷新/关闭页面后必须重新登录，避免同源 XSS
-// 从 sessionStorage 直接窃取长期有效的认证令牌。
+// 业务 Token 只保存在当前页面内存。刷新后由服务端 HttpOnly 恢复凭据换回，
+// 不写入 JavaScript 可读的 localStorage/sessionStorage。
 let session: AuthJwtSession | null = null;
 
 export function saveAuthSession(token: string, expireAt?: string | number | Date) {

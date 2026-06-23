@@ -47,8 +47,11 @@ describe("public form routes", () => {
       title: "调查",
       fields: [
         { id: "choices", type: "multiselect", label: "选择", required: false, options: ["A", "B"], order: 0 },
-        { id: "agree", type: "checkbox", label: "同意", required: true, order: 1 }
-      ]
+        { id: "agree", type: "checkbox", label: "同意", required: true, order: 1 },
+        { id: "contact", type: "radio", label: "联系方式", required: true, options: ["电话", "邮箱"], order: 2 },
+        { id: "section", type: "section", label: "补充说明", required: false, order: 3 }
+      ],
+      exclusiveInfo: { "领取说明": "</script><img src=x>" }
     });
     await publishForm(form.id, actor);
     const response = await app.inject({ method: "GET", url: `/f/${form.formUid}` });
@@ -58,6 +61,11 @@ describe("public form routes", () => {
     expect(response.headers["content-security-policy"]).toContain(`'nonce-${nonce}'`);
     expect(response.body.match(/name="choices"/g)).toHaveLength(2);
     expect(response.body.match(/name="agree"/g)).toHaveLength(1);
+    expect(response.body).toContain('name="contact" value="电话" required');
+    expect(response.body).toContain('<h2 id="field_section">补充说明</h2>');
+    expect(response.body).not.toContain('name="section"');
+    expect(response.body).toContain("\\u003c/script\\u003e\\u003cimg src=x\\u003e");
+    expect(response.body).toContain('"choices":"选择"');
   });
 
   test("rejects fields outside the published contract", async () => {

@@ -149,6 +149,17 @@ checkSecret(env, "CHENDOC_DOCUMENT_ENCRYPTION_KEY", 32);
 checkSecret(env, "CHENDOC_BACKUP_ENCRYPTION_KEY", 32);
 checkAdminPassword(env);
 requireValue(env, "PUBLIC_SITE_URL");
+requireValue(env, "CHENDOC_BACKUP_VERIFY_DATABASE_URL");
+requireValue(env, "CHENDOC_BACKUP_OFFSITE_DIR");
+
+if (env.CHENDOC_REQUIRE_UPLOAD_SCAN === undefined || flagEnabled(env.CHENDOC_REQUIRE_UPLOAD_SCAN)) {
+  requireValue(env, "CHENDOC_UPLOAD_SCAN_WEBHOOK");
+}
+const r2Configured = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]
+  .some((name) => String(env[name] || "").trim());
+if (r2Configured && !String(env.R2_BACKUP_BUCKET || "").trim()) {
+  fail("R2_BACKUP_BUCKET is required when R2 uploads are configured. Database backups alone do not protect uploaded objects.");
+}
 
 if (!String(env.PUBLIC_SITE_URL || "").startsWith("https://")) {
   fail("PUBLIC_SITE_URL must use https:// in production.");

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Search } from "lucide-vue-next";
-import { useDocStore } from "../../stores/doc";
+import { listDocsApi, type DocSummary } from "../../api/docs";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import "./css/utility-pages.css";
 
-const docs = useDocStore();
 const { docPath } = useWorkspaceRoutes();
 const keyword = ref("");
 const activeTag = ref("all");
+const knowledgeDocs = ref<DocSummary[]>([]);
 
 function tagsOf(doc: { tags?: string[] | string | null }) {
   if (Array.isArray(doc.tags)) return doc.tags;
@@ -16,26 +16,25 @@ function tagsOf(doc: { tags?: string[] | string | null }) {
   try { return JSON.parse(doc.tags) as string[]; } catch { return []; }
 }
 
-const tagDirectory = computed(() => Array.from(new Set(docs.docs.flatMap(tagsOf))).sort((a, b) => a.localeCompare(b, "zh-CN")));
+const tagDirectory = computed(() => Array.from(new Set(knowledgeDocs.value.flatMap(tagsOf))).sort((a, b) => a.localeCompare(b, "zh-CN")));
 
 const filteredDocs = computed(() => {
   const q = keyword.value.trim().toLowerCase();
-  const source = docs.docs.filter((doc) => (doc.status === "published" || doc.shareEnabled) && (activeTag.value === "all" || tagsOf(doc).includes(activeTag.value)));
+  const source = knowledgeDocs.value.filter((doc) => (doc.status === "published" || doc.shareEnabled) && (activeTag.value === "all" || tagsOf(doc).includes(activeTag.value)));
   if (!q) return source;
   return source.filter((doc) => doc.title.toLowerCase().includes(q) || String(doc.shareCode || "").includes(q));
 });
 
 const sharedDocs = computed(() => filteredDocs.value.filter((doc) => doc.shareCode && doc.shareEnabled));
 const privateDocs = computed(() => filteredDocs.value.filter((doc) => !doc.shareEnabled));
-const relatedDocs = computed(() => {
-  const current = filteredDocs.value[0];
-  if (!current) return [];
-  const currentTags = new Set(tagsOf(current));
-  return docs.docs.filter((doc) => doc.docUid !== current.docUid && tagsOf(doc).some((tag) => currentTags.has(tag))).slice(0, 6);
-});
-
-onMounted(() => {
-  void docs.loadList();
+onMounted(async () => {
+  const collected: DocSummary[] = [];
+  for (let page = 1; page <= 200; page += 1) {
+    const response = await listDocsApi({ page, pageSize: 50 });
+    collected.push(...response.docs);
+    if (!response.pagination?.hasMore) break;
+  }
+  knowledgeDocs.value = collected;
 });
 </script>
 
@@ -43,7 +42,7 @@ onMounted(() => {
   <section class="utility-page">
     <header>
       <div>
-        <h1>知识库 <span aria-hidden="true">✦</span></h1>
+        <h1>知识库</h1>
         <p>按已发布和已分享文档生成真实知识入口。</p>
       </div>
     </header>
@@ -75,10 +74,5 @@ onMounted(() => {
       </section>
     </div>
 
-    <section class="utility-page__panel">
-      <strong>相关文档</strong>
-      <RouterLink v-for="doc in relatedDocs" :key="doc.docUid" :to="docPath(doc.docUid)">{{ doc.title }}</RouterLink>
-      <p v-if="!relatedDocs.length">当前目录暂无相关文档。</p>
-    </section>
   </section>
 </template>

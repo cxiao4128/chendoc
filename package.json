@@ -1,6 +1,6 @@
 {
   "name": "chendoc",
-  "version": "2.6.0",
+  "version": "2.9.0",
   "private": true,
   "type": "module",
   "description": "ChenDoc / Chen Shu commercial document management and knowledge publishing platform.",
@@ -19,10 +19,11 @@
     "start": "npm --prefix server run start",
     "test": "npm --workspace @chendoc/server run test",
     "test:server": "npm --workspace @chendoc/server run test",
-    "test:e2e": "playwright test",
+    "test:e2e": "node node_modules/playwright/cli.js test",
     "typecheck": "npm --prefix apps/admin run typecheck && npm --prefix server run build",
     "lint": "npm --prefix apps/admin run lint",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run security:audit",
+    "check": "npm run check:architecture && npm run lint && npm run typecheck && npm run test && npm run build && npm run security:audit",
+    "check:architecture": "node scripts/check-architecture.js",
     "env:sync": "node --import tsx scripts/sync-env-example.js",
     "env:check": "node --import tsx scripts/sync-env-example.js --check",
     "db:migrate": "npm --prefix server run db:migrate",
@@ -35,6 +36,7 @@
     "html:resanitize": "npm --prefix server run html:resanitize",
     "admin:init": "npm --prefix server run admin:init",
     "r2:import": "npm --prefix server run r2:import",
+    "r2:backup": "node scripts/backup-r2.js",
     "uploads:cleanup": "npm --prefix server run uploads:cleanup"
   },
   "devDependencies": {

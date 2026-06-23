@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/auth.js";
-import { requireAdmin } from "../../middleware/requireAdmin.js";
+import { requireSuperAdmin } from "../../middleware/requireSuperAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { enqueueDocumentLog } from "../../utils/asyncLogQueue.js";
@@ -28,8 +28,8 @@ import {
 } from "./docs.service.js";
 
 export async function docsRoutes(app: FastifyInstance) {
-  const adminOnly = [authenticate, requireAdmin];
-  const dangerousAdmin = [authenticate, requireAdmin, requireDangerVerification];
+  const superAdminOnly = [authenticate, requireSuperAdmin];
+  const dangerousSuperAdmin = [authenticate, requireSuperAdmin, requireDangerVerification];
   const listQuerySchema = z.object({
     q: z.string().optional(),
     page: z.coerce.number().int().positive().default(1),
@@ -96,12 +96,12 @@ export async function docsRoutes(app: FastifyInstance) {
     const result = await listTrashDocsPage(request.user!, query);
     return { ...result, docs: safeDocListPayload(result.docs) };
   });
-  app.get("/api/admin/docs/trash", { preHandler: adminOnly }, async (request) => {
+  app.get("/api/admin/docs/trash", { preHandler: superAdminOnly }, async (request) => {
     const query = listQuerySchema.parse(request.query);
     const result = await listTrashDocsPage(request.user!, query);
     return { ...result, docs: safeDocListPayload(result.docs) };
   });
-  app.get("/api/admin/docs/trash/stats", { preHandler: adminOnly }, async (request) => {
+  app.get("/api/docs/trash/stats", { preHandler: authenticate }, async (request) => {
     const stats = await getTrashStats(request.user!);
     return stats;
   });
@@ -119,7 +119,7 @@ export async function docsRoutes(app: FastifyInstance) {
     }
     return { success: true, restored: restoredDocUids.length, restoredDocUids };
   });
-  app.post("/api/docs/trash/batch-delete", { preHandler: authenticate }, async (request) => {
+  app.post("/api/docs/trash/batch-delete", { preHandler: [authenticate, requireDangerVerification] }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
     const deletedDocUids = await bulkHardDeleteTrashDocsByUid(body.docUids, request.user!);
     if (deletedDocUids.length) {
@@ -133,7 +133,7 @@ export async function docsRoutes(app: FastifyInstance) {
     }
     return { success: true, deleted: deletedDocUids.length, deletedDocUids };
   });
-  app.post("/api/admin/docs/trash/bulk-restore", { preHandler: adminOnly }, async (request) => {
+  app.post("/api/admin/docs/trash/bulk-restore", { preHandler: superAdminOnly }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
     const restoredDocUids = await bulkRestoreDocsByUid(body.docUids, request.user!.id, request.user!);
     if (restoredDocUids.length) {
@@ -147,7 +147,7 @@ export async function docsRoutes(app: FastifyInstance) {
     }
     return { ok: true, restoredDocUids };
   });
-  app.post("/api/admin/docs/trash/bulk-hard-delete", { preHandler: dangerousAdmin }, async (request) => {
+  app.post("/api/admin/docs/trash/bulk-hard-delete", { preHandler: dangerousSuperAdmin }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
     const deletedDocUids = await bulkHardDeleteTrashDocsByUid(body.docUids, request.user!);
     if (deletedDocUids.length) {
@@ -207,7 +207,7 @@ export async function docsRoutes(app: FastifyInstance) {
     });
     return { ok: true };
   });
-  app.post("/api/admin/docs/:docUid/restore", { preHandler: adminOnly }, async (request) => {
+  app.post("/api/admin/docs/:docUid/restore", { preHandler: superAdminOnly }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
     const doc = await restoreDocByUid(params.docUid, request.user!.id, request.user!);
     enqueueDocumentLog({
@@ -227,7 +227,7 @@ export async function docsRoutes(app: FastifyInstance) {
     });
     return { doc: safeDocPayload(doc) };
   });
-  app.delete("/api/admin/docs/:docUid/hard", { preHandler: dangerousAdmin }, async (request) => {
+  app.delete("/api/admin/docs/:docUid/hard", { preHandler: dangerousSuperAdmin }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
     await hardDeleteDocByUid(params.docUid, request.user!);
     await writeAuditLog({
@@ -239,7 +239,7 @@ export async function docsRoutes(app: FastifyInstance) {
     });
     return { ok: true };
   });
-  app.post("/api/docs/:docUid/publish", { preHandler: adminOnly }, async (request) => {
+  app.post("/api/docs/:docUid/publish", { preHandler: authenticate }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
     const doc = await publishDocByUid(params.docUid, request.user!.id, request.user!);
     await writeAuditLog({

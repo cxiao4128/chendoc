@@ -83,13 +83,6 @@ export const sharePageStyle = `
     border-bottom: 1px solid var(--border);
     padding: 0 0 26px;
   }
-  .share-kicker {
-    width: fit-content;
-    margin: 0 0 12px;
-    color: var(--accent-dark);
-    font-size: 12px;
-    font-weight: 900;
-  }
   h1 {
     max-width: 13em;
     margin: 0;
@@ -100,11 +93,11 @@ export const sharePageStyle = `
     letter-spacing: 0;
   }
   .lead { margin: 14px 0 0; color: var(--muted); font-size: 16px; }
+  .share-document-meta { margin: 14px 0 0; color: var(--muted); font-size: 14px; }
   .content {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--paper);
-    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.06);
     padding: clamp(26px, 5vw, 56px);
     font-family: var(--font-serif);
   }
@@ -216,5 +209,11 @@ export const sharePageStyle = `
     .share-row { grid-template-columns: 1fr; }
     .share-native-info { align-items: flex-start; flex-direction: column; }
     .share-native-info p { text-align: left; }
+  }
+  @media print {
+    .topbar, .share-native-info { display: none; }
+    main { width: 100%; padding: 0; }
+    .content { border: 0; padding: 0; }
+    a { color: inherit; text-decoration: underline; }
   }
 `;

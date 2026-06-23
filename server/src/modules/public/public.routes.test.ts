@@ -121,4 +121,42 @@ describe("public share route cache headers", () => {
     const middleRange = await app.inject({ method: "GET", url: "/r/12345" });
     expect(middleRange.statusCode).toBe(404);
   });
+
+  test("uses one unavailable response for missing, disabled, expired, and deleted shares", async () => {
+    const { doc, share } = await createPublicShare("<p>private state</p>");
+    const missing = await app.inject({ method: "GET", url: "/r/777" });
+
+    db.update(shares).set({ isEnabled: false }).where(eq(shares.id, share.id)).run();
+    const disabled = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+
+    db.update(shares).set({ isEnabled: true, expireAt: new Date(Date.now() - 1000) }).where(eq(shares.id, share.id)).run();
+    const expired = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+
+    await updateDoc(doc.id, adminId, { status: "published" }, adminActor);
+    db.update(shares).set({ expireAt: null }).where(eq(shares.id, share.id)).run();
+    db.delete(shares).where(eq(shares.id, share.id)).run();
+    const deleted = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+
+    for (const response of [missing, disabled, expired, deleted]) {
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toContain("分享暂不可用或不存在");
+    }
+  });
+
+  test("does not expose a protected document title before password verification", async () => {
+    const doc = await createDoc(adminId, { title: "Confidential title" });
+    const share = await createOrGetShare(doc.id, { isEnabled: true, shareCode: 889, password: "StrongSharePassword" }, adminActor);
+    const response = await app.inject({ method: "GET", url: `/r/${share!.shareCode}` });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("受保护的分享");
+    expect(response.body).not.toContain("Confidential title");
+    expect(response.headers["content-security-policy"]).not.toContain("unsafe-inline");
+  });
+
+  test("serves share CSS as a cacheable static asset", async () => {
+    const response = await app.inject({ method: "GET", url: "/share-page.css" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/css");
+    expect(response.headers["cache-control"]).toContain("stale-while-revalidate");
+  });
 });

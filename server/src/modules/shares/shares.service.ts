@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import { db, dbAll, dbGet, dbRun } from "../../db/client.js";
+import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
 import { docs, shares, users } from "../../db/schema.js";
 import { env } from "../../config/env.js";
 import { enqueueSecurityLog } from "../../utils/asyncLogQueue.js";
@@ -13,6 +13,7 @@ import { hashPassword, verifyPassword } from "../../utils/password.js";
 import { sanitizeDocumentHtml } from "../../utils/sanitize.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
+import { generateShareToken, isWeakShareToken } from "../../utils/shareToken.js";
 import { canAccessDocument } from "../docs/documentAccess.js";
 
 type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
@@ -33,10 +34,11 @@ const USER_SHARE_CODE_MAX = 9_999_999;
 const USER_SHARE_CODE_MAX_EXCLUSIVE = USER_SHARE_CODE_MAX + 1;
 
 const shareCodeSchema = z.number().int().min(ADMIN_SHARE_CODE_MIN).max(USER_SHARE_CODE_MAX);
+const sharePasswordSchema = z.union([z.literal(""), z.string().min(8).max(80)]).optional().nullable();
 
 const createShareSchema = z.object({
   isEnabled: z.boolean().optional(),
-  password: z.string().max(80).optional().nullable(),
+  password: sharePasswordSchema,
   expireAt: z.string().datetime().optional().nullable(),
   customSlug: slugSchema.optional().nullable(),
   shareCode: shareCodeSchema.optional().nullable()
@@ -44,7 +46,7 @@ const createShareSchema = z.object({
 
 const updateShareSchema = z.object({
   isEnabled: z.boolean().optional(),
-  password: z.string().max(80).optional().nullable(),
+  password: sharePasswordSchema,
   expireAt: z.string().datetime().optional().nullable(),
   customSlug: slugSchema.optional().nullable(),
   shareCode: shareCodeSchema.optional().nullable()
@@ -67,6 +69,7 @@ const SHARE_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
 const SHARE_PASSWORD_LOCK_MS = 10 * 60 * 1000;
 const SHARE_PASSWORD_BACKOFF_THRESHOLD = 4;
 const SHARE_PASSWORD_LOCK_THRESHOLD = 8;
+const SHARE_PASSWORD_ATTEMPT_MAX_SIZE = 5_000;
 
 export class ShareAccessError extends AppError {
   constructor(code: string, message: string, statusCode = 400) {
@@ -134,6 +137,15 @@ async function randomUserShareCode() {
     if (!existing) return code;
   }
   throw new Error("分享数字生成失败，请稍后重试");
+}
+
+async function createUniqueShareToken(currentShareId?: number) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const token = generateShareToken();
+    const existing = await dbGet<{ id: number }>(db.select({ id: shares.id }).from(shares).where(eq(shares.shareToken, token)).limit(1));
+    if (!existing || existing.id === currentShareId) return token;
+  }
+  throw new Error("share_token generation failed.");
 }
 
 async function docWithOwner(docId: number) {
@@ -208,9 +220,14 @@ function assertCanManageDocShare(actor: Actor, doc: { ownerId: number | null; is
   throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
 }
 
-async function syncDocVisibilityForShare(docId: number, share: { isEnabled: boolean; reviewStatus: string }) {
+async function syncDocVisibilityForShare(executor: any, docId: number, share: { isEnabled: boolean; reviewStatus: string }) {
   const visibility = share.isEnabled && share.reviewStatus === "approved" ? "shared" : "private";
-  await dbRun(db.update(docs).set({ visibility }).where(eq(docs.id, docId)));
+  await dbRun(executor.update(docs).set({
+    visibility,
+    ...(visibility === "shared" ? { status: "published" as const } : {}),
+    revision: sql`${docs.revision} + 1`,
+    updatedAt: now()
+  }).where(eq(docs.id, docId)));
 }
 
 export async function createOrGetShare(docId: number, input: unknown, actor: Actor = { id: 1, role: "admin" }) {
@@ -235,14 +252,14 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
   const reviewContentHash = userOwned ? documentReviewHash(doc) : null;
   const createdAt = now();
   const shareCode = body.shareCode ?? (userOwned ? await randomUserShareCode() : await nextAdminShareCode());
-  const result = await dbRun(db.insert(shares).values({
+  const values = {
     docId,
     shareCode,
-    shareToken: String(shareCode),
+    shareToken: await createUniqueShareToken(),
     customSlug: null,
     passwordHash: body.password ? await hashPassword(body.password) : null,
     isEnabled: isAdminDoc || isAdminApprovingUserDoc ? body.isEnabled ?? false : false,
-    reviewStatus: isAdminDoc || isAdminApprovingUserDoc ? "approved" : "pending",
+    reviewStatus: isAdminDoc || isAdminApprovingUserDoc ? "approved" as const : "pending" as const,
     reviewNote: null,
     reviewContentHash,
     requestedBy: userOwned ? doc.createdBy ?? actor.id : null,
@@ -252,11 +269,20 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
     viewCount: 0,
     createdAt,
     updatedAt: createdAt
-  }));
-
-  const created = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.id, Number(result.lastInsertRowid))).limit(1));
-  if (created) await syncDocVisibilityForShare(docId, created);
-  return created;
+  };
+  try {
+    return await dbTransaction(async (tx) => {
+      const result = await dbRun(tx.insert(shares).values(values));
+      const created = await dbGet<typeof shares.$inferSelect>(tx.select().from(shares).where(eq(shares.id, Number(result.lastInsertRowid))).limit(1));
+      if (!created) throw new Error("分享创建失败");
+      await syncDocVisibilityForShare(tx, docId, created);
+      return created;
+    });
+  } catch (error) {
+    const raced = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, docId)).limit(1));
+    if (raced) return raced;
+    throw error;
+  }
 }
 
 export async function updateShare(id: number, input: unknown, actor: Actor = { id: 1, role: "admin" }) {
@@ -296,7 +322,6 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
       assertShareCodeRangeForDoc(nextShareCode, userOwned);
       await assertShareCodeAvailable(nextShareCode, id);
       patch.shareCode = nextShareCode;
-      patch.shareToken = String(patch.shareCode);
     }
     if (body.customSlug !== undefined) {
       assertNoCustomSlug(body.customSlug);
@@ -311,11 +336,14 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
     }
   }
 
+  if (isWeakShareToken(current.shareToken, current.shareCode)) patch.shareToken = await createUniqueShareToken(id);
   if (body.password !== undefined) patch.passwordHash = body.password ? await hashPassword(body.password) : null;
   if (body.expireAt !== undefined) patch.expireAt = parseExpireAt(body.expireAt);
 
-  await dbRun(db.update(shares).set(patch).where(eq(shares.id, id)));
-  await syncDocVisibilityForShare(current.docId, { ...current, ...patch });
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.update(shares).set(patch).where(eq(shares.id, id)));
+    await syncDocVisibilityForShare(tx, current.docId, { ...current, ...patch });
+  });
   return { docUid: doc.docUid, ownerId: doc.ownerId };
 }
 
@@ -362,8 +390,10 @@ export function adminSharePayload(share: typeof shares.$inferSelect) {
 export async function deleteShare(id: number, actor: Actor) {
   const { doc } = await shareWithDoc(id);
   assertCanManageDocShare(actor, doc);
-  await dbRun(db.delete(shares).where(eq(shares.id, id)));
-  await dbRun(db.update(docs).set({ visibility: "private" }).where(eq(docs.id, doc.id)));
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.delete(shares).where(eq(shares.id, id)));
+    await dbRun(tx.update(docs).set({ visibility: "private", revision: sql`${docs.revision} + 1`, updatedAt: now() }).where(eq(docs.id, doc.id)));
+  });
   return { docUid: doc.docUid, ownerId: doc.ownerId };
 }
 
@@ -417,18 +447,19 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
     assertUserShareCode(nextShareCode);
     await assertShareCodeAvailable(nextShareCode, id);
     patch.shareCode = nextShareCode;
-    patch.shareToken = String(patch.shareCode);
   } else if (body.action === "approve" && !isUserShareCode(current.shareCode)) {
     patch.shareCode = await randomUserShareCode();
-    patch.shareToken = String(patch.shareCode);
   }
+  if (isWeakShareToken(current.shareToken, current.shareCode)) patch.shareToken = await createUniqueShareToken(id);
   if (body.customSlug !== undefined) {
     assertNoCustomSlug(body.customSlug);
     patch.customSlug = null;
   }
 
-  await dbRun(db.update(shares).set(patch).where(eq(shares.id, id)));
-  await syncDocVisibilityForShare(current.docId, { ...current, ...patch });
+  await dbTransaction(async (tx) => {
+    await dbRun(tx.update(shares).set(patch).where(eq(shares.id, id)));
+    await syncDocVisibilityForShare(tx, current.docId, { ...current, ...patch });
+  });
 }
 
 function shareWhere(key: string | number) {
@@ -442,6 +473,8 @@ function shareWhere(key: string | number) {
 type PublicDocRecord = {
   id: number;
   docUid: string;
+  ownerId: number;
+  ownerStatus: "active" | "disabled" | null;
   title: string;
   summary: string | null;
   coverUrl: string | null;
@@ -469,6 +502,8 @@ function publicDocSelect() {
   return {
     id: docs.id,
     docUid: docs.docUid,
+    ownerId: docs.ownerId,
+    ownerStatus: users.status,
     title: docs.title,
     summary: docs.summary,
     coverUrl: docs.coverUrl,
@@ -542,6 +577,7 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
     dbGet<PublicDocRecord>(db
       .select(publicDocSelect())
       .from(docs)
+      .leftJoin(users, eq(docs.ownerId, users.id))
       .where(sql`${docs.id} = (SELECT doc_id FROM shares WHERE ${shareWhere(shareKey)} LIMIT 1)`)
       .limit(1))
   ]);
@@ -552,6 +588,8 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
 
   // ===== 分享页秒开优化：先检查数据库中的删除状态，再考虑缓存 =====
   if (!docRecord) return { ok: false, reason: "missing" };
+  if (docRecord.ownerStatus !== "active") return { ok: false, reason: "disabled" };
+  if (docRecord.status !== "published") return { ok: false, reason: "disabled" };
 
   // 如果数据库中已删除，永不使用缓存
   if (docRecord.deletedAt) {
@@ -591,15 +629,18 @@ export async function getPublicShare(shareKey: string | number, countView = fals
 }
 
 export function publicDocPayload(data: NonNullable<Awaited<ReturnType<typeof getPublicShare>>>, includeContent: boolean) {
+  if (!includeContent) return {};
   return {
-    docUid: data.doc.docUid,
     title: data.doc.title,
     summary: data.doc.summary,
     coverUrl: data.doc.coverUrl,
     updatedAt: data.doc.updatedAt,
-    status: data.doc.status,
-    ...(includeContent ? { contentHtml: sanitizeDocumentHtml(data.doc.contentHtml) } : {})
+    contentHtml: sanitizeDocumentHtml(data.doc.contentHtml)
   };
+}
+
+export async function recordPublicShareView(shareId: number) {
+  await dbRun(db.update(shares).set({ viewCount: sql`${shares.viewCount} + 1`, updatedAt: now() }).where(eq(shares.id, shareId)));
 }
 
 function base64ToBase64url(value: string) {
@@ -646,14 +687,16 @@ export function verifyShareAccessToken(token: string | undefined, share: typeof 
 }
 
 function sharePasswordAttemptKey(shareKey: string | number, meta: { ip?: string; userAgent?: string | string[] }) {
-  const userAgent = Array.isArray(meta.userAgent) ? meta.userAgent.join(", ") : meta.userAgent || "";
-  return `${String(shareKey).toLowerCase()}|${meta.ip || ""}|${userAgent.slice(0, 120)}`;
+  return `${String(shareKey).toLowerCase()}|${meta.ip || "unknown"}`;
 }
 
 function cleanupSharePasswordAttempts(nowMs = Date.now()) {
   for (const [key, state] of sharePasswordAttempts) {
     if (state.lockedUntil > nowMs) continue;
     if (nowMs - state.firstAt > SHARE_PASSWORD_WINDOW_MS) sharePasswordAttempts.delete(key);
+  }
+  while (sharePasswordAttempts.size >= SHARE_PASSWORD_ATTEMPT_MAX_SIZE) {
+    sharePasswordAttempts.delete(sharePasswordAttempts.keys().next().value!);
   }
 }
 

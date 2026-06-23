@@ -12,7 +12,7 @@ const docs = useDocStore();
 const { docPath } = useWorkspaceRoutes();
 const creatingKey = ref("");
 
-type TemplateDefinition = { key: string; title: string; summary: string; html: string };
+type TemplateDefinition = { key: string; title: string; summary: string; html: string; contentJson?: string };
 const baseTemplates: TemplateDefinition[] = [
   {
     key: "note",
@@ -38,6 +38,27 @@ const templates = computed(() => [...baseTemplates, ...customTemplates.value]);
 
 const recentDocs = computed(() => docs.docs.slice(0, 6));
 
+function contentJsonFromHtml(html: string) {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const content = Array.from(parsed.body.children).map((element) => {
+    const text = element.textContent?.trim() || "";
+    const inline = text ? [{ type: "text", text }] : undefined;
+    const tag = element.tagName.toLowerCase();
+    if (/^h[1-6]$/.test(tag)) return { type: "heading", attrs: { level: Number(tag.slice(1)) }, content: inline };
+    if (tag === "ul" || tag === "ol") {
+      return {
+        type: tag === "ul" ? "bulletList" : "orderedList",
+        content: Array.from(element.children).map((item) => ({
+          type: "listItem",
+          content: [{ type: "paragraph", content: item.textContent?.trim() ? [{ type: "text", text: item.textContent.trim() }] : undefined }]
+        }))
+      };
+    }
+    return { type: "paragraph", content: inline };
+  });
+  return JSON.stringify({ type: "doc", content: content.length ? content : [{ type: "paragraph" }] });
+}
+
 onMounted(() => {
   try { customTemplates.value = JSON.parse(localStorage.getItem("chendoc_custom_templates") || "[]"); } catch { customTemplates.value = []; }
   void docs.loadList();
@@ -47,7 +68,11 @@ async function createFromTemplate(template: TemplateDefinition) {
   creatingKey.value = template.key;
   try {
     const doc = await docs.createDoc(template.title);
-    await docs.saveDoc(doc.docUid, { summary: template.summary, contentHtml: template.html });
+    await docs.saveDoc(doc.docUid, {
+      summary: template.summary,
+      contentJson: template.contentJson || contentJsonFromHtml(template.html),
+      contentHtml: template.html
+    });
     router.push(docPath(doc.docUid));
   } finally {
     creatingKey.value = "";
@@ -60,7 +85,8 @@ async function saveAsTemplate(doc: DocSummary) {
     key: `custom-${doc.docUid}`,
     title: doc.title,
     summary: detail.summary || "从当前文档保存",
-    html: detail.contentHtml
+    html: detail.contentHtml,
+    contentJson: detail.contentJson
   };
   customTemplates.value = [template, ...customTemplates.value.filter((item) => item.key !== template.key)].slice(0, 20);
   localStorage.setItem("chendoc_custom_templates", JSON.stringify(customTemplates.value));
@@ -71,7 +97,7 @@ async function saveAsTemplate(doc: DocSummary) {
   <section class="utility-page">
     <header>
       <div>
-        <h1>模板中心 <span aria-hidden="true">✦</span></h1>
+        <h1>模板中心</h1>
         <p>用固定模板创建真实文档。</p>
       </div>
     </header>

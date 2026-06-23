@@ -42,6 +42,24 @@ afterAll(async () => {
 });
 
 describe("form submission policy", () => {
+  test("rejects invalid field contracts before publishing", async () => {
+    await expect(createForm(actor, {
+      title: "无选项",
+      fields: [{ id: "choice", type: "radio", label: "选择", required: true, order: 0 }]
+    })).rejects.toThrow(/至少需要一个选项/);
+
+    await expect(createForm(actor, {
+      title: "重复字段",
+      fields: [fields[0], { ...fields[0], label: "别名", order: 1 }]
+    })).rejects.toThrow(/字段 ID 不能重复/);
+
+    const sectionOnly = await createForm(actor, {
+      title: "只有分节",
+      fields: [{ id: "section", type: "section", label: "说明", required: false, order: 0 }]
+    });
+    await expect(publishForm(sectionOnly.id, actor)).rejects.toMatchObject({ code: "FORM_NO_FIELDS" });
+  });
+
   test("persists numeric maxSubmissions on create and update", async () => {
     const form = await createForm(actor, { title: "报名", fields, config: { maxSubmissions: 12 } });
     expect(form.maxSubmissions).toBe(12);
@@ -84,6 +102,25 @@ describe("form submission policy", () => {
       .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(submitForm(form.formUid, { agree: true }, { ip: "10.0.0.3" }))
       .resolves.toMatchObject({ ok: true });
+  });
+
+  test("validates preset fields and rating values", async () => {
+    const presetFields = [
+      { id: "age", type: "age" as const, label: "年龄", required: true, min: 1, max: 120, order: 0 },
+      { id: "idcard", type: "idcard" as const, label: "身份证号", required: true, order: 1 },
+      { id: "gender", type: "gender" as const, label: "性别", required: true, order: 2 },
+      { id: "rating", type: "rating" as const, label: "评分", required: true, order: 3 }
+    ];
+    const form = await createForm(actor, { title: "资料", fields: presetFields });
+    await publishForm(form.id, actor);
+
+    await expect(submitForm(form.formUid, {
+      age: "0", idcard: "123", gender: "未知", rating: "6"
+    }, { ip: "10.0.0.9" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    await expect(submitForm(form.formUid, {
+      age: "20", idcard: "11010519491231002X", gender: "其他", rating: "5"
+    }, { ip: "10.0.0.9" })).resolves.toMatchObject({ ok: true });
   });
 
   test("deletes all submissions transactionally and preserves concurrent count increments", async () => {

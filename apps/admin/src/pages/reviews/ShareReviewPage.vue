@@ -11,7 +11,6 @@ const keyword = ref("");
 const statusFilter = ref<"all" | "pending" | "approved" | "rejected">("pending");
 const scopeFilter = ref<"all" | "public" | "protected">("all");
 const dateFilter = ref<"all" | "today" | "week">("all");
-const riskFilter = ref<"all" | "normal" | "attention">("all");
 const sortMode = ref<"updatedDesc" | "createdDesc" | "titleAsc">("updatedDesc");
 const savingId = ref<number | null>(null);
 const editState = reactive<Record<number, { shareCode: string; note: string }>>({});
@@ -31,8 +30,6 @@ const filteredShares = computed(() => {
     if (scopeFilter.value === "public" && item.hasPassword) return false;
     if (dateFilter.value === "today" && !isToday(item.createdAt || item.updatedAt)) return false;
     if (dateFilter.value === "week" && !isRecentDays(item.createdAt || item.updatedAt, 7)) return false;
-    if (riskFilter.value === "normal" && riskLevel(item) !== "normal") return false;
-    if (riskFilter.value === "attention" && riskLevel(item) === "normal") return false;
     if (!q) return true;
     return (
       item.docTitle.toLowerCase().includes(q) ||
@@ -48,7 +45,6 @@ const filteredShares = computed(() => {
 
 const todayApplications = computed(() => shares.value.filter((item) => isToday(item.createdAt || item.updatedAt)).length);
 const recentReviews = computed(() => shares.value.filter((item) => item.reviewStatus !== "pending").slice(0, 4));
-const attentionCount = computed(() => shares.value.filter((item) => riskLevel(item) !== "normal").length);
 
 function statusCount(status: typeof statusOptions[number]["value"]) {
   if (status === "all") return shares.value.length;
@@ -85,19 +81,10 @@ function formatDate(value?: string | null) {
   }).format(new Date(value));
 }
 
-function riskLevel(item: ShareReviewItem) {
-  if (item.reviewStatus === "rejected") return "attention";
-  if (item.hasPassword) return "normal";
-  if (item.viewCount > 100) return "attention";
-  return "normal";
-}
-
-function riskText(item: ShareReviewItem) {
-  return riskLevel(item) === "normal" ? "正常" : "需关注";
-}
-
-function riskClass(item: ShareReviewItem) {
-  return riskLevel(item) === "normal" ? "is-approved" : "is-rejected";
+function statusClass(item: ShareReviewItem) {
+  if (item.reviewStatus === "approved") return "is-approved";
+  if (item.reviewStatus === "rejected") return "is-rejected";
+  return "is-pending";
 }
 
 function ensureEdit(item: ShareReviewItem) {
@@ -143,7 +130,6 @@ function resetFilters() {
   statusFilter.value = "all";
   scopeFilter.value = "all";
   dateFilter.value = "all";
-  riskFilter.value = "all";
   sortMode.value = "updatedDesc";
   keyword.value = "";
 }
@@ -163,8 +149,8 @@ onMounted(load);
   <section class="share-review-page">
     <header class="share-review-page__head">
       <div>
-        <h1>分享审核 <span aria-hidden="true">✦</span></h1>
-        <p>所有公开分享申请在此进行安全审核，保障文档合规与安全。</p>
+        <h1>分享审核</h1>
+        <p>审核普通用户提交的公开分享，确认内容和访问范围后再发布。</p>
       </div>
       <button class="cd-button" type="button" :disabled="loading" @click="load">
         <RefreshCcw :size="16" />刷新
@@ -175,7 +161,7 @@ onMounted(load);
       <article><span><ClipboardCheck :size="28" /></span><b>待审核</b><strong>{{ statusCount("pending") }}</strong><small>来自真实分享申请</small></article>
       <article><span><Send :size="28" /></span><b>今日申请</b><strong>{{ todayApplications }}</strong><small>按 createdAt 统计</small></article>
       <article><span class="is-green"><ShieldCheck :size="28" /></span><b>已通过</b><strong>{{ statusCount("approved") }}</strong><small>当前审核结果</small></article>
-      <article><span class="is-red"><XCircle :size="28" /></span><b>需关注</b><strong>{{ attentionCount }}</strong><small>拒绝或高访问分享</small></article>
+      <article><span class="is-red"><XCircle :size="28" /></span><b>已驳回</b><strong>{{ statusCount("rejected") }}</strong><small>当前审核结果</small></article>
     </div>
 
     <div class="share-review-page__filters" role="tablist" aria-label="审核状态">
@@ -196,7 +182,6 @@ onMounted(load);
         <form class="share-review-page__search" @submit.prevent>
           <label>分享范围<select v-model="scopeFilter"><option value="all">全部范围</option><option value="public">公开分享</option><option value="protected">密码保护</option></select></label>
           <label>提交时间<select v-model="dateFilter"><option value="all">全部时间</option><option value="today">今天</option><option value="week">7 天内</option></select></label>
-          <label>风险等级<select v-model="riskFilter"><option value="all">全部风险</option><option value="normal">正常</option><option value="attention">需关注</option></select></label>
           <label>排序<select v-model="sortMode"><option value="updatedDesc">更新时间（最新）</option><option value="createdDesc">提交时间（最新）</option><option value="titleAsc">文档标题</option></select></label>
           <button class="cd-button" type="button" @click="resetFilters"><Search :size="16" />重置</button>
           <input v-model.trim="keyword" aria-label="搜索文档、用户或分享数字" placeholder="搜索文档、用户或分享数字" />
@@ -213,16 +198,15 @@ onMounted(load);
 
         <div v-else class="share-review-page__table">
           <div class="share-review-page__table-head">
-            <span></span><span>文档名称</span><span>申请人</span><span>原始位置</span><span>提交时间</span><span>分享范围</span><span>风险等级</span><span>备注</span><span>操作</span>
+            <span>文档名称</span><span>申请人</span><span>分享编号</span><span>提交时间</span><span>分享范围</span><span>审核状态</span><span>备注</span><span>操作</span>
           </div>
           <article v-for="item in filteredShares" :key="item.id">
-            <label><input type="checkbox" /></label>
             <strong>{{ item.docTitle }}</strong>
             <span>{{ item.ownerName || item.ownerId || "未知" }}</span>
-            <span>/文档中心/{{ item.shareCode }}</span>
+            <span>{{ item.shareCode }}</span>
             <span>{{ formatDate(item.updatedAt) }}</span>
             <span class="is-scope">{{ item.hasPassword ? "密码保护" : "公开分享" }}</span>
-            <span class="share-review-page__status" :class="riskClass(item)">{{ riskText(item) }}</span>
+            <span class="share-review-page__status" :class="statusClass(item)">{{ statusText(item.reviewStatus) }}</span>
             <span>{{ item.reviewNote || "待审核说明" }}</span>
             <div class="share-review-page__actions">
               <RouterLink class="cd-button" :to="`/admin/docs/${item.docUid}`"><ExternalLink :size="14" />查看文档</RouterLink>
@@ -235,7 +219,7 @@ onMounted(load);
       </main>
 
       <aside class="share-review-page__aside">
-        <section><strong>审核规则 / 风险提示 <button type="button" @click="riskFilter = 'attention'">查看全部</button></strong><p>密码保护：正常</p><p>拒绝记录：需关注</p><p>访问量超过 100：需关注</p></section>
+        <section><strong>审核边界</strong><p>系统只提供人工审核，不自动判断内容合规。</p><p>审核前检查正文、附件和访问密码。</p><p>内容变更后会自动撤销已通过状态。</p></section>
         <section><strong>最近审核动态 <button type="button" @click="statusFilter = 'all'">查看全部</button></strong><p v-for="item in recentReviews" :key="item.id">{{ statusText(item.reviewStatus) }}：{{ item.docTitle }}</p><p v-if="!recentReviews.length">暂无审核动态</p></section>
         <section><strong>审核统计</strong><div class="share-review-page__donut"><span>总计<br />{{ shares.length }}</span></div></section>
       </aside>

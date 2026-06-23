@@ -4,6 +4,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { ArrowLeft, BookOpen, Copy, ExternalLink, Eye, Link2, MoreHorizontal, PanelRightOpen, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-vue-next";
 import DocTree from "../../components/docs/DocTree.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
+import DocEditorSharePanel from "./components/DocEditorSharePanel.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
 import { useDocAutosave } from "../../composables/useDocAutosave";
 import { useDocShareState } from "../../composables/useDocShare";
@@ -15,6 +16,7 @@ import { createShareApi, getShareByDocApi, updateShareApi, type SharePatch } fro
 import { useAuthStore } from "../../stores/auth";
 import { useDocStore } from "../../stores/doc";
 import { normalizeError } from "../../utils/error";
+import { readLocalDraft, removeLocalDraft, writeLocalDraft } from "../../services/localDraft";
 import "./css/doc-editor.css";
 
 interface TocItem {
@@ -53,7 +55,7 @@ const isMobile = useIsMobileViewport();
 const { docsPath, docPath } = useWorkspaceRoutes();
 
 const title = ref("");
-const draft = ref<{ contentJson: string; contentHtml: string } | null>(null);
+const draft = ref<{ contentJson: string; textLength: number } | null>(null);
 const saveState = ref<"idle" | "pending" | "saving" | "saved" | "error">("idle");
 const savedAt = ref("");
 const { share, shareLoading, shareEnabled, sharePassword, shareCodeInput, shareStatus, shareHasPassword, sharePanelOpen } = useDocShareState();
@@ -67,14 +69,13 @@ const editorRefresh = ref(0);
 const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions" | "more">(null);
 const localDetailError = ref("");
 const saveError = ref("");
-const lastServerConfirmedAt = ref("");
-const lastSaveDurationMs = ref<number | null>(null);
 let shareSaveTimer: number | undefined;
 let saving = false;
 let queuedWhileSaving = false;
 let syncingShare = false;
+let localDraftTimer: number | undefined;
 
-const AUTO_SAVE_DELAY_MS = 900;
+const AUTO_SAVE_DELAY_MS = 1200;
 
 const docUid = computed(() => String(route.params.docUid || ""));
 const current = computed(() => docs.current?.docUid === docUid.value ? docs.current : null);
@@ -98,9 +99,12 @@ const saveText = computed(() => {
   return "自动保存";
 });
 const documentWordCount = computed(() => {
-  const html = draft.value?.contentHtml || current.value?.contentHtml || "";
+  if (draft.value) return draft.value.textLength;
+  const html = current.value?.contentHtml || "";
   return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, "").length;
 });
+const showDesktopDocTree = computed(() => docs.loadingList || docs.docs.some((doc) => doc.docUid !== docUid.value));
+const showDesktopLeft = computed(() => showDesktopDocTree.value || toc.value.length > 0);
 const mobileSheetTitle = computed(() => {
   if (mobileSheet.value === "docs") return "切换文档";
   if (mobileSheet.value === "toc") return "目录导航";
@@ -148,6 +152,27 @@ function markDirty() {
   saveError.value = "";
   saveState.value = "pending";
   scheduleSave();
+  scheduleLocalDraft();
+}
+
+function scheduleLocalDraft() {
+  if (localDraftTimer) window.clearTimeout(localDraftTimer);
+  localDraftTimer = window.setTimeout(() => {
+    localDraftTimer = undefined;
+    void persistLocalDraft();
+  }, 800);
+}
+
+async function persistLocalDraft() {
+  if (!current.value || !dirty.value) return;
+  await writeLocalDraft({
+    docUid: current.value.docUid,
+    title: title.value,
+    contentJson: draft.value?.contentJson ?? current.value.contentJson,
+    textLength: draft.value?.textLength ?? documentWordCount.value,
+    serverRevision: current.value.revision,
+    savedAt: Date.now()
+  });
 }
 
 const { clear: clearSaveTimer, schedule: scheduleSave } = useDocAutosave({
@@ -212,6 +237,22 @@ async function load() {
     draft.value = null;
     dirty.value = false;
     saveState.value = "idle";
+    const localDraft = await readLocalDraft(doc.docUid).catch(() => null);
+    if (localDraft && localDraft.contentJson !== doc.contentJson) {
+      const serverChanged = localDraft.serverRevision !== doc.revision;
+      const restore = !serverChanged || await nativeConfirm({
+        title: "恢复本地草稿",
+        message: "检测到未保存草稿，但服务器文档也已更新。恢复会以本地草稿继续编辑。",
+        confirmText: "恢复草稿"
+      });
+      if (restore) {
+        title.value = localDraft.title;
+        draft.value = { contentJson: localDraft.contentJson, textLength: localDraft.textLength };
+        dirty.value = true;
+        saveState.value = "pending";
+        scheduleSave();
+      }
+    }
     await loadRelatedDocData(doc.docUid);
   } catch (error) {
     if (!isAbortError(error) && requestedDocUid === docUid.value) {
@@ -240,7 +281,7 @@ function selectDocFromSheet(uid: string) {
   selectDoc(uid);
 }
 
-function onEditorChange(payload: { contentJson: string; contentHtml: string }) {
+function onEditorChange(payload: { contentJson: string; textLength: number }) {
   draft.value = payload;
   markDirty();
 }
@@ -250,22 +291,20 @@ async function save() {
   const targetDocUid = current.value.docUid;
   const titleSnapshot = title.value;
   const draftSnapshot = draft.value;
-  const startedAt = performance.now();
   saving = true;
   saveState.value = "saving";
   saveError.value = "";
   try {
     await docs.saveDoc(targetDocUid, {
       title: titleSnapshot.trim() || "未命名文档",
-      ...(draftSnapshot ?? {})
+      ...(draftSnapshot ? { contentJson: draftSnapshot.contentJson } : {})
     });
     savedAt.value = new Date().toLocaleTimeString();
-    lastServerConfirmedAt.value = savedAt.value;
-    lastSaveDurationMs.value = Math.max(1, Math.round(performance.now() - startedAt));
     if (current.value?.docUid === targetDocUid && title.value === titleSnapshot && draft.value === draftSnapshot) {
       draft.value = null;
       dirty.value = false;
       saveState.value = "saved";
+      void removeLocalDraft(targetDocUid);
     } else if (current.value?.docUid === targetDocUid) {
       dirty.value = true;
       saveState.value = "pending";
@@ -465,8 +504,14 @@ async function remove() {
   router.push(docsPath.value);
 }
 
+function openDesktopDelete(event: MouseEvent) {
+  (event.currentTarget as HTMLElement).closest("details")?.removeAttribute("open");
+  deleteOpen.value = true;
+}
+
 function beforeUnload(event: BeforeUnloadEvent) {
   if (!dirty.value) return;
+  void persistLocalDraft();
   event.preventDefault();
   event.returnValue = "";
 }
@@ -481,6 +526,7 @@ watch([shareEnabled, shareCodeInput], scheduleShareSave);
 onMounted(() => {
   void load();
   window.addEventListener("beforeunload", beforeUnload);
+  window.addEventListener("pagehide", persistLocalDraft);
 });
 
 onBeforeRouteLeave(async (_to, _from, next) => {
@@ -505,7 +551,9 @@ onBeforeRouteLeave(async (_to, _from, next) => {
 onBeforeUnmount(() => {
   clearSaveTimer();
   if (shareSaveTimer) window.clearTimeout(shareSaveTimer);
+  if (localDraftTimer) window.clearTimeout(localDraftTimer);
   window.removeEventListener("beforeunload", beforeUnload);
+  window.removeEventListener("pagehide", persistLocalDraft);
   if (dirty.value) void save();
 });
 </script>
@@ -618,57 +666,29 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-else-if="mobileSheet === 'share'" class="doc-editor-page__mobile-form">
-            <div class="doc-editor-page__share-summary">
-              <strong>{{ shareStateText }}</strong>
-              <span>谁能访问：{{ shareAccessText }}</span>
-              <span>密码：{{ shareHasPassword ? "需要" : "不需要" }}</span>
-              <span>失效：{{ shareExpiryText }}</span>
-            </div>
-            <label class="doc-editor-page__check">
-              <input v-model="shareEnabled" type="checkbox" />
-              <span>{{ auth.isAdmin ? "公开分享" : "申请公开分享" }}</span>
-            </label>
-            <label v-if="auth.isAdmin">
-              <span>分享数字</span>
-              <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="888 / 1234567" />
-            </label>
-            <label>
-              <span>访问密码</span>
-              <div class="doc-editor-page__password-row">
-                <input v-model="sharePassword" type="password" placeholder="不点确认就是无密码" @input="onPasswordInput" />
-                <button class="cd-button" type="button" :disabled="shareLoading" @click="confirmSharePassword">确认密码</button>
-              </div>
-              <button v-if="shareHasPassword" class="doc-editor-page__text-button" type="button" :disabled="shareLoading" @click="clearSharePassword">
-                清除当前访问密码
-              </button>
-            </label>
-            <div v-if="shareUrl" class="doc-editor-page__share-card is-mobile">
-              <span>分享链接</span>
-              <a :href="shareUrl" target="_blank" rel="noopener noreferrer">
-                <Link2 :size="14" />{{ shareUrl }}
-              </a>
-            </div>
-            <div v-else-if="share?.shareCode" class="doc-editor-page__share-card is-mobile">
-              <span>分享数字</span>
-              <code>{{ share.shareCode }}</code>
-            </div>
-            <div v-if="shareUrl" class="doc-editor-page__mobile-share-actions">
-              <button class="cd-button" type="button" :disabled="shareLoading" @click="copyShare">
-                <Copy :size="16" />{{ copied ? "已复制" : "复制链接" }}
-              </button>
-              <a class="cd-button" :href="shareUrl" target="_blank" rel="noopener noreferrer">
-                <ExternalLink :size="16" />打开分享页
-              </a>
-            </div>
-            <p class="doc-editor-page__share-status" :class="{ 'is-error': shareStatusIsError }">
-              {{ shareMessage }}
-            </p>
-            <p v-if="shareReviewText" class="doc-editor-page__share-status" :class="{ 'is-error': share?.reviewStatus === 'rejected' }">
-              {{ shareReviewText }}
-            </p>
-            <button v-if="share?.reviewStatus === 'rejected'" class="cd-button primary" type="button" :disabled="shareLoading" @click="resubmitRejectedShare">
-              修改并重新提交
-            </button>
+            <DocEditorSharePanel
+              v-model:share-enabled="shareEnabled"
+              v-model:share-code-input="shareCodeInput"
+              v-model:share-password="sharePassword"
+              mobile
+              :is-admin="auth.isAdmin"
+              :share="share"
+              :share-url="shareUrl"
+              :share-loading="shareLoading"
+              :share-has-password="shareHasPassword"
+              :share-state-text="shareStateText"
+              :share-access-text="shareAccessText"
+              :share-expiry-text="shareExpiryText"
+              :share-message="shareMessage"
+              :share-status-is-error="shareStatusIsError"
+              :share-review-text="shareReviewText"
+              :copied="copied"
+              @confirm-password="confirmSharePassword"
+              @clear-password="clearSharePassword"
+              @password-input="onPasswordInput"
+              @copy="copyShare"
+              @resubmit="resubmitRejectedShare"
+            />
           </div>
 
           <div v-else-if="mobileSheet === 'versions'" class="doc-editor-page__versions is-mobile">
@@ -711,8 +731,8 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-      <div class="doc-editor-page__left">
-        <DocTree :docs="docs.docs" :active-uid="docUid" :loading="docs.loadingList" @create="createDoc" @select="selectDoc" />
+      <div v-if="showDesktopLeft" class="doc-editor-page__left" :class="{ 'is-toc-only': !showDesktopDocTree }">
+        <DocTree v-if="showDesktopDocTree" :docs="docs.docs" :active-uid="docUid" :loading="docs.loadingList" @create="createDoc" @select="selectDoc" />
         <section class="doc-editor-page__left-toc">
           <h2>目录</h2>
           <div v-if="toc.length" class="doc-editor-page__toc">
@@ -738,7 +758,7 @@ onBeforeUnmount(() => {
           <header class="doc-editor-page__bar">
             <input v-model="title" class="doc-editor-page__title" aria-label="文档标题" />
             <span class="doc-editor-page__save" :class="`is-${saveState}`">{{ saveText }}</span>
-            <span class="doc-editor-page__metrics">{{ documentWordCount }} 字 · 同步 {{ lastSaveDurationMs ?? "-" }} ms · 服务端确认 {{ lastServerConfirmedAt || "尚未保存" }}</span>
+            <span class="doc-editor-page__metrics">{{ documentWordCount }} 字</span>
             <button class="cd-button" :class="{ primary: sharePanelOpen }" type="button" @click="sharePanelOpen = !sharePanelOpen">
               <PanelRightOpen :size="16" />分享
             </button>
@@ -748,9 +768,16 @@ onBeforeUnmount(() => {
             <a v-if="shareCanOpenPublicly" class="cd-button" :href="shareUrl" target="_blank" rel="noopener noreferrer">
               <ExternalLink :size="16" />打开
             </a>
-            <button class="cd-button danger" type="button" @click="deleteOpen = true">
-              <Trash2 :size="16" />删除
-            </button>
+            <details class="doc-editor-page__desktop-more">
+              <summary class="cd-button" role="button" aria-label="更多操作" title="更多操作">
+                <MoreHorizontal :size="17" />更多
+              </summary>
+              <div class="doc-editor-page__desktop-menu">
+                <button type="button" @click="openDesktopDelete">
+                  <Trash2 :size="16" />删除文档
+                </button>
+              </div>
+            </details>
           </header>
 
           <div v-if="saveState === 'error'" class="doc-editor-page__save-error">
@@ -774,49 +801,26 @@ onBeforeUnmount(() => {
             <aside v-if="sharePanelOpen" class="doc-editor-page__aside">
               <section>
                 <h2>分享</h2>
-                <div class="doc-editor-page__share-summary">
-                  <strong>{{ shareStateText }}</strong>
-                  <span>谁能访问：{{ shareAccessText }}</span>
-                  <span>密码：{{ shareHasPassword ? "需要" : "不需要" }}</span>
-                  <span>失效：{{ shareExpiryText }}</span>
-                </div>
-                <label class="doc-editor-page__check">
-                  <input v-model="shareEnabled" type="checkbox" />
-                  <span>{{ auth.isAdmin ? "公开分享" : "申请公开分享" }}</span>
-                </label>
-                <label v-if="auth.isAdmin">
-                  <span>分享数字</span>
-                  <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="888 / 1234567" />
-                </label>
-                <label>
-                  <span>访问密码</span>
-                  <div class="doc-editor-page__password-row">
-                    <input v-model="sharePassword" type="password" placeholder="不点确认就是无密码" @input="onPasswordInput" />
-                    <button class="cd-button" type="button" :disabled="shareLoading" @click="confirmSharePassword">确认密码</button>
-                  </div>
-                  <button v-if="shareHasPassword" class="doc-editor-page__text-button" type="button" :disabled="shareLoading" @click="clearSharePassword">
-                    清除当前访问密码
-                  </button>
-                </label>
-                <div v-if="shareUrl" class="doc-editor-page__share-card">
-                  <span>分享链接</span>
-                  <a :href="shareUrl" target="_blank" rel="noopener noreferrer">
-                    <Link2 :size="14" />{{ shareUrl }}
-                  </a>
-                </div>
-                <div v-else-if="share?.shareCode" class="doc-editor-page__share-card">
-                  <span>分享数字</span>
-                  <code>{{ share.shareCode }}</code>
-                </div>
-                <p class="doc-editor-page__share-status" :class="{ 'is-error': shareStatusIsError }">
-                  {{ shareMessage }}
-                </p>
-                <p v-if="shareReviewText" class="doc-editor-page__share-status" :class="{ 'is-error': share?.reviewStatus === 'rejected' }">
-                  {{ shareReviewText }}
-                </p>
-                <button v-if="share?.reviewStatus === 'rejected'" class="cd-button primary" type="button" :disabled="shareLoading" @click="resubmitRejectedShare">
-                  修改并重新提交
-                </button>
+                <DocEditorSharePanel
+                  v-model:share-enabled="shareEnabled"
+                  v-model:share-code-input="shareCodeInput"
+                  v-model:share-password="sharePassword"
+                  :is-admin="auth.isAdmin"
+                  :share="share"
+                  :share-url="shareUrl"
+                  :share-loading="shareLoading"
+                  :share-has-password="shareHasPassword"
+                  :share-state-text="shareStateText"
+                  :share-access-text="shareAccessText"
+                  :share-expiry-text="shareExpiryText"
+                  :share-message="shareMessage"
+                  :share-status-is-error="shareStatusIsError"
+                  :share-review-text="shareReviewText"
+                  @confirm-password="confirmSharePassword"
+                  @clear-password="clearSharePassword"
+                  @password-input="onPasswordInput"
+                  @resubmit="resubmitRejectedShare"
+                />
               </section>
 
               <section>

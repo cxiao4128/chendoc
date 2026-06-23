@@ -6,3 +6,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.doc-list-page__ops button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.doc-list-page__row-title + .status-draft {
+  border-color: var(--cd-border-strong);
+  background: var(--cd-paper-soft);
+  color: var(--cd-text-secondary);
+}
+
+.doc-list-page__row-title + .status-closed {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: #fffbeb;
+  color: #b45309;
+}

@@ -186,8 +186,19 @@
   min-width: 140px;
 }
 
-.form-submissions .export-dropdown:hover .export-menu {
+.form-submissions .export-dropdown:hover .export-menu,
+.form-submissions .export-dropdown:focus-within .export-menu {
   display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .form-submissions *,
+  .form-submissions *::before,
+  .form-submissions *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .form-submissions .export-menu button {

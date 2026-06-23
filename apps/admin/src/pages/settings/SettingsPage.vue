@@ -60,7 +60,7 @@ type ActivePanel = "overview" | "logs" | "appearance" | "recovery" | "users" | "
 type UserDetailTab = "info" | "roles" | "login" | "actions";
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v2.6.0";
+const APP_VERSION = "v2.9.0";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -192,7 +192,7 @@ const securitySummaryText = computed(() => {
   const security = systemStatus.value?.security;
   if (!security) return "等待安全状态刷新";
   if (security.expiredSessions || security.staleCaptchas) return "有可清理项";
-  return "安全状态良好";
+  return "会话与验证码正常";
 });
 const filteredManagedUsers = computed(() => {
   const keyword = userSearch.value.trim().toLowerCase();
@@ -663,7 +663,7 @@ onBeforeUnmount(() => {
   <section class="settings-page" :class="{ 'is-mobile': isMobile }">
     <header class="settings-page__head">
       <div>
-        <h1>系统管理中心 <span aria-hidden="true">✦</span></h1>
+        <h1>系统管理中心</h1>
         <p>查看实时状态、用户、日志、外观和维护动作。</p>
       </div>
       <button class="cd-button" type="button" :disabled="systemLoading" @click="refreshAll">
@@ -1086,7 +1086,7 @@ onBeforeUnmount(() => {
               <section>
                 <h3>安全设置</h3>
                 <dl class="settings-page__side-list">
-                  <div><dt>两步验证 OTP</dt><dd>{{ selectedUser.role === "admin" ? "按安全中心状态" : "未启用" }}</dd></div>
+                  <div><dt>风险验证 OTP</dt><dd>{{ selectedUser.role === "admin" ? "按安全中心状态" : "未启用" }}</dd></div>
                   <div><dt>登录保护</dt><dd>已启用</dd></div>
                   <div><dt>密码强度</dt><dd>高</dd></div>
                   <div><dt>账户锁定</dt><dd>{{ selectedUser.status === "disabled" ? "已禁用" : "未锁定" }}</dd></div>

@@ -15,14 +15,16 @@ const formId = computed(() => Number(route.params.id));
 
 // 数据
 const form = ref<FormItem | null>(null);
+const inputFields = computed(() => form.value?.fields.filter((field) => field.type !== "section") || []);
 const submissions = ref<SubmissionItem[]>([]);
 const ipStats = ref<IpStats[]>([]);
 const pagination = ref({ page: 1, pageSize: 20, hasMore: false });
 
 // UI状态
 const loading = ref(true);
+const loadingMore = ref(false);
 const exporting = ref(false);
-const activeTab = ref<"submissions" | "ip">("submissions");
+const activeTab = ref<"submissions" | "sources">("submissions");
 const error = ref("");
 
 // 详情弹窗
@@ -54,21 +56,25 @@ async function loadData() {
 }
 
 async function loadMore() {
-  if (!pagination.value.hasMore) return;
+  if (!pagination.value.hasMore || loadingMore.value) return;
+  loadingMore.value = true;
   pagination.value.page++;
   try {
     const res = await listSubmissionsApi(formId.value, { page: pagination.value.page, pageSize: pagination.value.pageSize });
     submissions.value.push(...res.submissions);
     pagination.value = res.pagination;
-  } catch {
+  } catch (e) {
     pagination.value.page--;
+    error.value = e instanceof Error ? e.message : "加载更多失败";
+  } finally {
+    loadingMore.value = false;
   }
 }
 
 async function exportData(format: "csv" | "json" | "xlsx") {
   const confirmed = await nativeConfirm({
     title: "导出提交记录",
-    message: `将导出 ${form.value?.submissionCount || submissions.value.length} 条记录，文件包含填写内容和提交时间${format === "json" || format === "csv" ? "，并包含 IP 与浏览器信息" : ""}。请妥善保存。`,
+    message: `将导出 ${form.value?.submissionCount || submissions.value.length} 条记录，文件包含填写内容、提交时间和来源摘要${format === "json" || format === "csv" ? "，开启记录时还会包含浏览器信息" : ""}。请妥善保存。`,
     confirmText: "导出记录"
   });
   if (!confirmed) return;
@@ -84,8 +90,8 @@ async function exportData(format: "csv" | "json" | "xlsx") {
       filename = `${form.value?.title || "表单"}_导出.json`;
     } else if (format === "csv") {
       // 生成CSV
-      const fields = res.form.fields;
-      const headers = ["提交时间", "IP地址", "User Agent", ...fields.map(f => f.label)];
+      const fields = res.form.fields.filter((field) => field.type !== "section");
+      const headers = ["提交时间", "来源摘要", "浏览器信息", ...fields.map(f => f.label)];
       const rows = res.submissions.map(sub => {
         const row = [
           formatDate(sub.submittedAt),
@@ -117,10 +123,10 @@ async function exportData(format: "csv" | "json" | "xlsx") {
       filename = `${form.value?.title || "表单"}_导出.csv`;
     } else {
       // 生成Excel (使用SheetJS格式的HTML表格方式)
-      const fields = res.form.fields;
+      const fields = res.form.fields.filter((field) => field.type !== "section");
       let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body><table>`;
       html += "<thead><tr>";
-      html += "<th>提交时间</th><th>IP地址</th>";
+      html += "<th>提交时间</th><th>来源摘要</th>";
       fields.forEach(f => { html += `<th>${escapeHtml(f.label)}</th>`; });
       html += "</tr></thead><tbody>";
       res.submissions.forEach(sub => {
@@ -166,7 +172,10 @@ function formatDate(dateStr: string) {
 }
 
 function formatFieldValue(value: unknown) {
-  return Array.isArray(value) ? value.join(", ") : String(value || "-");
+  if (Array.isArray(value)) return value.length ? value.join("、") : "-";
+  if (value === true) return "是";
+  if (value === false) return "否";
+  return value === null || value === undefined || value === "" ? "-" : String(value);
 }
 
 // 查看详情
@@ -190,7 +199,7 @@ async function doDeleteSubmission() {
     // 移除已删除的记录
     submissions.value = submissions.value.filter(s => s.id !== deletingSubmissionId.value);
     if (form.value) {
-      form.value.submissionCount--;
+      form.value.submissionCount = Math.max(0, form.value.submissionCount - 1);
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : "删除失败";
@@ -215,6 +224,8 @@ async function deleteAllSubmissions() {
     submissions.value = [];
     ipStats.value = [];
     if (form.value) form.value.submissionCount = 0;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "删除失败";
   } finally {
     deleting.value = false;
   }
@@ -237,7 +248,7 @@ onMounted(loadData);
         <button class="cd-button" @click="loadData" :disabled="loading">
           <RefreshCw :size="16" :class="{ spinning: loading }" /> 刷新
         </button>
-        <button class="cd-button danger" :disabled="deleting || !submissions.length" @click="deleteAllSubmissions"><Trash2 :size="16" /> 删除全部数据</button>
+        <button class="cd-button danger" :disabled="deleting || !form?.submissionCount" @click="deleteAllSubmissions"><Trash2 :size="16" /> 删除全部数据</button>
         <div class="export-dropdown">
           <button class="cd-button cd-button-primary" :disabled="exporting">
             <Download :size="16" /> 导出
@@ -280,8 +291,8 @@ onMounted(loadData);
         <button :class="['tab', { active: activeTab === 'submissions' }]" @click="activeTab = 'submissions'">
           提交记录
         </button>
-        <button :class="['tab', { active: activeTab === 'ip' }]" @click="activeTab = 'ip'">
-          IP统计
+        <button :class="['tab', { active: activeTab === 'sources' }]" @click="activeTab = 'sources'">
+          来源统计
         </button>
       </div>
 
@@ -296,7 +307,7 @@ onMounted(loadData);
             <article v-for="sub in submissions" :key="sub.id" @click="viewDetail(sub)">
               <header><strong>提交 #{{ sub.id }}</strong><time>{{ formatDate(sub.submittedAt) }}</time></header>
               <dl>
-                <div v-for="field in form?.fields.slice(0, 3)" :key="field.id">
+                <div v-for="field in inputFields.slice(0, 3)" :key="field.id">
                   <dt>{{ field.label }}</dt>
                   <dd>{{ formatFieldValue(sub.data[field.id]) }}</dd>
                 </div>
@@ -311,7 +322,7 @@ onMounted(loadData);
             <thead>
               <tr>
                 <th>#</th>
-                <th v-for="field in form?.fields" :key="field.id">{{ field.label }}</th>
+                <th v-for="field in inputFields" :key="field.id">{{ field.label }}</th>
                 <th>来源摘要</th>
                 <th>时间</th>
                 <th>操作</th>
@@ -319,8 +330,8 @@ onMounted(loadData);
             </thead>
             <tbody>
               <tr v-for="(sub, index) in submissions" :key="sub.id">
-                <td>{{ (pagination.page - 1) * pagination.pageSize + index + 1 }}</td>
-                <td v-for="field in form?.fields" :key="field.id">
+                <td>{{ index + 1 }}</td>
+                <td v-for="field in inputFields" :key="field.id">
                   {{ formatFieldValue(sub.data[field.id]) }}
                 </td>
                 <td class="ip-cell">{{ sub.ip }}</td>
@@ -338,15 +349,15 @@ onMounted(loadData);
           </table>
 
           <div v-if="pagination.hasMore" class="load-more">
-            <button class="cd-button" @click="loadMore">加载更多</button>
+            <button class="cd-button" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? '加载中…' : '加载更多' }}</button>
           </div>
         </div>
       </div>
 
-      <!-- IP统计 -->
-      <div v-if="activeTab === 'ip'" class="tab-content">
+      <!-- 来源统计 -->
+      <div v-if="activeTab === 'sources'" class="tab-content">
         <div v-if="ipStats.length === 0" class="empty-state">
-          暂无IP统计数据
+          暂无来源统计数据
         </div>
 
         <div v-else class="ip-table">
@@ -375,10 +386,10 @@ onMounted(loadData);
     <!-- 详情弹窗 -->
     <Teleport to="body">
       <div v-if="detailDialogOpen" class="detail-dialog-overlay" @click="detailDialogOpen = false">
-        <div class="detail-dialog" @click.stop>
+        <div class="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="submission-detail-title" @click.stop>
           <div class="detail-dialog__header">
-            <h3>提交详情</h3>
-            <button class="detail-dialog__close" @click="detailDialogOpen = false">&times;</button>
+            <h3 id="submission-detail-title">提交详情</h3>
+            <button class="detail-dialog__close" type="button" aria-label="关闭提交详情" @click="detailDialogOpen = false">&times;</button>
           </div>
           <div class="detail-dialog__body">
             <div class="detail-dialog__meta">
@@ -387,7 +398,7 @@ onMounted(loadData);
               <span>User Agent: {{ selectedSubmission?.userAgent || "未记录" }}</span>
             </div>
             <div class="detail-dialog__content">
-              <div v-for="field in form?.fields" :key="field.id" class="detail-dialog__item">
+              <div v-for="field in inputFields" :key="field.id" class="detail-dialog__item">
                 <div class="detail-dialog__label">{{ field.label }}</div>
                 <div class="detail-dialog__value">
                   {{ formatFieldValue(selectedSubmission?.data[field.id]) }}

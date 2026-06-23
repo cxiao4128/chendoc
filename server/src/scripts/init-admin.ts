@@ -5,6 +5,7 @@ import { docs, shares, spaces, users } from "../db/schema.js";
 import { env } from "../config/env.js";
 import { now } from "../utils/date.js";
 import { encryptDocumentContent } from "../utils/documentCrypto.js";
+import { generateShareToken } from "../utils/shareToken.js";
 import { generateDocUid } from "../utils/docUid.js";
 import { hashPassword } from "../utils/password.js";
 
@@ -48,6 +49,7 @@ async function main() {
         passwordHash: await getPasswordHash(),
         role: "admin",
         status: "active",
+        isSuperAdmin: true,
         updatedAt: now()
       }).where(eq(users.id, existing.id)));
       console.log(`Admin exists: ${env.defaultAdminUsername}. Password reset because CHENDOC_RESET_ADMIN_PASSWORD=1.`);
@@ -55,6 +57,7 @@ async function main() {
       await dbRun(db.update(users).set({
         role: "admin",
         status: "active",
+        isSuperAdmin: true,
         updatedAt: now()
       }).where(eq(users.id, existing.id)));
       console.log(`Admin exists: ${env.defaultAdminUsername}. Password unchanged. Set CHENDOC_RESET_ADMIN_PASSWORD=1 to reset it.`);
@@ -66,6 +69,7 @@ async function main() {
       passwordHash: await getPasswordHash(),
       role: "admin",
       status: "active",
+      isSuperAdmin: true,
       createdAt,
       updatedAt: createdAt
     }));
@@ -115,7 +119,7 @@ async function main() {
     await dbRun(db.insert(shares).values({
       docId,
       shareCode: 111,
-      shareToken: "111",
+      shareToken: generateShareToken(),
       isEnabled: false,
       viewCount: 0,
       createdAt: now(),

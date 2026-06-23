@@ -16,6 +16,7 @@ import { captchaRoutes } from "./modules/captcha/captcha.routes.js";
 import { cryptoRoutes } from "./modules/crypto/crypto.routes.js";
 import { dangerRoutes } from "./modules/danger/danger.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
+import { purgeExpiredTrashDocs } from "./modules/docs/docs.service.js";
 import { formsRoutes } from "./modules/forms/forms.routes.js";
 import { formsPublicRoutes } from "./modules/forms/forms.public.routes.js";
 import { runFormMaintenance } from "./modules/forms/forms.service.js";
@@ -26,9 +27,12 @@ import { sharesRoutes } from "./modules/shares/shares.routes.js";
 import { spacesRoutes } from "./modules/spaces/spaces.routes.js";
 import { uploadsRoutes } from "./modules/uploads/uploads.routes.js";
 import { currentRequestTiming, enterRequestTiming } from "./utils/requestTiming.js";
+import { isHttpsRequest } from "./utils/httpsRequest.js";
+import { dbHealthCheck } from "./db/client.js";
 
 export async function buildApp() {
   const app = Fastify({
+    bodyLimit: env.bodyLimitBytes,
     logger: {
       level: env.nodeEnv === "production" ? "info" : "debug",
       redact: [
@@ -68,12 +72,17 @@ export async function buildApp() {
     void runFormMaintenance().catch((error) => app.log.error({ error }, "form maintenance failed"));
   }, 6 * 60 * 60 * 1000);
   formMaintenanceTimer.unref();
+  const trashMaintenanceTimer = setInterval(() => {
+    void purgeExpiredTrashDocs().catch((error) => app.log.error({ error }, "trash maintenance failed"));
+  }, 6 * 60 * 60 * 1000);
+  trashMaintenanceTimer.unref();
   app.addHook("onRequest", async (request) => {
     enterRequestTiming(request.id);
     request.headers["x-request-id"] = request.id;
   });
   app.addHook("onClose", async () => {
     clearInterval(formMaintenanceTimer);
+    clearInterval(trashMaintenanceTimer);
     await shutdownAsyncLogQueue();
   });
   app.addHook("preValidation", unpackGatewayRequest);
@@ -98,7 +107,13 @@ export async function buildApp() {
 
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    if (env.nodeEnv === "production" && env.forceHttps && request.protocol !== "https") {
+    const secureRequest = isHttpsRequest({
+      protocol: request.protocol,
+      forwardedProto: request.headers["x-forwarded-proto"],
+      remoteAddress: request.raw.socket.remoteAddress,
+      publicSiteUrl: env.publicSiteUrl
+    });
+    if (env.nodeEnv === "production" && env.forceHttps && !secureRequest) {
       if (request.method === "GET" || request.method === "HEAD") {
         const publicOrigin = new URL(env.publicSiteUrl).origin;
         return reply.redirect(`${publicOrigin}${request.url}`, 308);
@@ -131,6 +146,12 @@ export async function buildApp() {
     timeWindow: "1 minute"
   });
 
+  app.get("/api/health", async (_request, reply) => {
+    const ok = await dbHealthCheck();
+    if (!ok) return reply.code(503).send({ ok: false });
+    return reply.header("Cache-Control", "no-store").send({ ok: true, database: "ok" });
+  });
+
   await app.register(publicRoutes);
   await app.register(formsPublicRoutes);
   await app.register(cryptoRoutes);
@@ -155,7 +176,9 @@ export async function buildApp() {
       index: false,
       setHeaders: (res, pathName) => {
         if (/\.(?:avif|css|gif|jpe?g|js|png|svg|webp|woff2?)$/i.test(pathName)) {
-          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          res.setHeader("Cache-Control", pathName.includes("site-assets")
+            ? "public, max-age=3600, must-revalidate"
+            : "public, max-age=31536000, immutable");
         }
       }
     });

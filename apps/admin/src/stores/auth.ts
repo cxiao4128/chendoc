@@ -28,6 +28,7 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = null;
     lastFetchedAt = 0;
     clearAuthSession();
+    void import("../services/localDraft").then(({ clearLocalDrafts }) => clearLocalDrafts()).catch(() => undefined);
   }
 
   async function fetchMe(force = false) {
@@ -36,7 +37,12 @@ export const useAuthStore = defineStore("auth", () => {
 
     inflightMe = (async () => {
       try {
-        const { a2: fetchProfile } = await import("../api/auth");
+        const { a2: fetchProfile, a4: restoreSession } = await import("../api/auth");
+        if (!getAuthToken()) {
+          const restored = await restoreSession();
+          setSession(restored.user, restored.token, restored.expiresAt);
+          return restored.user;
+        }
         const response = await fetchProfile();
         user.value = response.user;
         lastFetchedAt = Date.now();

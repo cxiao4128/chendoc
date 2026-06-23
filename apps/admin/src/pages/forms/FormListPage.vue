@@ -18,14 +18,12 @@ import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import { normalizeError } from "../../utils/error";
 import EmptyState from "../../components/common/EmptyState.vue";
 import { listFormsApi, deleteFormApi, type FormItem } from "../../api/forms";
-import { useAuth } from "../../composables/useAuth";
 import "./css/form-list.css";
 
 type FormViewFilter = "all" | "published" | "draft" | "closed";
 type SortMode = "updatedDesc" | "createdDesc" | "titleAsc";
 
 const router = useRouter();
-const { auth } = useAuth();
 
 const activeView = ref<FormViewFilter>("all");
 const allForms = ref<FormItem[]>([]);
@@ -63,9 +61,6 @@ const closedCount = computed(() => allForms.value.filter((f) => f.status === "cl
 const selectedCount = computed(() => selectedFormIds.value.size);
 
 const errorText = computed(() => normalizeError(localError.value) || "");
-const ownerName = computed(() => auth.user?.username || "xchen");
-const recentForms = computed(() => visibleForms.value.slice(0, 5));
-
 const sortLabel = computed(() => {
   if (sortMode.value === "createdDesc") return "按创建时间";
   if (sortMode.value === "titleAsc") return "按标题";
@@ -120,13 +115,19 @@ function viewSubmissions(id: number) {
   router.push(`/admin/forms/${id}/submissions`);
 }
 
-function copyLink(formUid: string) {
+async function copyLink(form: FormItem) {
+  if (form.status !== "published") return;
+  const formUid = form.formUid;
   const url = `${location.origin}/f/${formUid}`;
-  navigator.clipboard.writeText(url);
-  copiedUid.value = formUid;
-  setTimeout(() => {
-    if (copiedUid.value === formUid) copiedUid.value = null;
-  }, 2000);
+  try {
+    await navigator.clipboard.writeText(url);
+    copiedUid.value = formUid;
+    setTimeout(() => {
+      if (copiedUid.value === formUid) copiedUid.value = null;
+    }, 2000);
+  } catch {
+    localError.value = "复制失败，请检查浏览器剪贴板权限。";
+  }
 }
 
 function openOrToggleForm(id: number) {
@@ -216,8 +217,8 @@ onMounted(() => {
   <section class="doc-list-page">
     <div class="doc-list-page__head">
       <div>
-        <h1>收集表 <span aria-hidden="true">✦</span></h1>
-        <p>创建表单收集数据，轻松管理提交记录</p>
+        <h1>收集表</h1>
+        <p>创建表单，收集并管理提交记录。</p>
       </div>
       <div class="doc-list-page__actions">
         <span v-if="bulkMode && selectedCount" class="doc-list-page__bulk-counter">已选 {{ selectedCount }} 个</span>
@@ -240,7 +241,7 @@ onMounted(() => {
       <button type="button" aria-label="新建表单" @click="createForm"><Plus :size="15" /></button>
     </div>
 
-    <div class="doc-list-page__workspace">
+    <div class="doc-list-page__workspace is-toolbox-collapsed">
       <div class="doc-list-page__ledger">
         <div class="doc-list-page__table-tools">
           <button class="cd-button" type="button" @click="cycleSortMode"><ArrowUpDown :size="15" />{{ sortLabel }}</button>
@@ -267,16 +268,15 @@ onMounted(() => {
             <span></span>
             <span>表单名称</span>
             <span>状态</span>
-            <span>所有者</span>
             <span>更新时间</span>
-            <span>分享链接</span>
+            <span>访问与提交</span>
             <span>操作</span>
           </div>
           <article
             v-for="form in visibleForms"
             :key="form.id"
             class="doc-list-page__row"
-            :class="{ 'is-selected': selectedFormIds.has(form.id) }"
+            :class="{ 'is-selected': selectedFormIds.has(form.id), 'is-bulk': bulkMode }"
             role="button"
             tabindex="0"
             @click="openOrToggleForm(form.id)"
@@ -292,14 +292,13 @@ onMounted(() => {
               <small v-if="form.description">{{ form.description }}</small>
               <small v-else>/ {{ form.formUid }}</small>
             </span>
-            <span>{{ statusLabel(form.status) }}</span>
-            <span class="doc-list-page__owner"><img src="/site-assets/chendoc-logo-192.webp" alt="" />{{ ownerName }}</span>
+            <span :class="`status-${form.status}`">{{ statusLabel(form.status) }}</span>
             <span>{{ formatDate(form.updatedAt) }}</span>
             <code>{{ form.viewCount }} 访问 · {{ form.submissionCount }} 提交</code>
             <span class="doc-list-page__ops" @click.stop>
               <button type="button" aria-label="编辑" @click="editForm(form.id)"><MoreHorizontal :size="17" /></button>
               <button type="button" aria-label="查看结果" @click="viewSubmissions(form.id)"><BarChart2 :size="16" /></button>
-              <button type="button" :aria-label="copiedUid === form.formUid ? '已复制' : '复制链接'" @click="copyLink(form.formUid)">
+              <button type="button" :disabled="form.status !== 'published'" :aria-label="form.status === 'published' ? (copiedUid === form.formUid ? '已复制' : '复制公开链接') : '发布后可复制链接'" @click="copyLink(form)">
                 <span v-if="copiedUid === form.formUid"><Copy :size="16" />已复制</span>
                 <Link v-else :size="16" />
               </button>
@@ -308,23 +307,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <aside class="doc-list-page__toolbox" aria-label="收集表概览">
-        <section>
-          <strong>快捷操作</strong>
-          <button class="doc-list-page__toolbox-action is-primary" type="button" @click="createForm">
-            <Plus :size="16" /><span>新建表单</span>
-          </button>
-        </section>
-
-        <section>
-          <strong>最近动态</strong>
-          <article v-for="form in recentForms" :key="form.id">
-            <FileText :size="16" />
-            <span><b>{{ form.title }}</b><small>{{ statusLabel(form.status) }} · {{ formatDate(form.updatedAt) }}</small></span>
-          </article>
-          <p v-if="!recentForms.length" class="doc-list-page__toolbox-empty">暂无收集表</p>
-        </section>
-      </aside>
     </div>
 
     <ConfirmDialog
