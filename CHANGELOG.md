@@ -4,6 +4,17 @@
 
 ## 中文
 
+### 2.9.3
+
+版本号：`2.9.3`
+
+展示版本：`v2.9.3`
+
+- 修复旧 MySQL 库里 `fk_docs_owner` 仍为 `ON DELETE SET NULL` 时，部署迁移无法把 `docs.owner_id` 改为 `NOT NULL` 的问题。
+- 迁移会先移除 `docs.owner_id` 的旧外键，再按 `ON DELETE RESTRICT` 重建，保持文档必须有所有者的安全边界。
+
+更新时间：2026-06-24 +08:00
+
 ### 2.9.2
 
 版本号：`2.9.2`
@@ -344,6 +355,19 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 2.9.3
+
+Version: `2.9.3`
+
+Display version: `v2.9.3`
+
+Changes:
+
+- Fixed deployment migration failures on older MySQL databases where `fk_docs_owner` still used `ON DELETE SET NULL`, which blocked changing `docs.owner_id` to `NOT NULL`.
+- The migration now drops the old `docs.owner_id` foreign key first, then recreates it with `ON DELETE RESTRICT` to preserve the required document-owner boundary.
+
+Updated at: 2026-06-24 +08:00
 
 ### 2.9.2
 
