@@ -91,6 +91,12 @@ function assertNoCustomSlug(customSlug: string | null | undefined) {
   if (customSlug) throw new BadRequestError("分享链接只允许使用数字码", "CUSTOM_SLUG_DISABLED");
 }
 
+function assertSystemAssignedShareCode(shareCode: number | null | undefined) {
+  if (shareCode !== undefined && shareCode !== null) {
+    throw new BadRequestError("分享码由系统自动生成：管理员 111-9999 递增，普通用户 7 位随机。", "SHARE_CODE_SYSTEM_ASSIGNED");
+  }
+}
+
 function isAdminShareCode(shareCode: number) {
   return shareCode >= ADMIN_SHARE_CODE_MIN && shareCode <= ADMIN_SHARE_CODE_MAX;
 }
@@ -119,14 +125,12 @@ function isValidPublicShareCode(shareCode: number) {
 }
 
 async function nextAdminShareCode() {
-  const rows = await dbAll<{ code: number }>(db
-    .select({ code: shares.shareCode })
+  const row = await dbGet<{ code: number | null }>(db
+    .select({ code: sql<number | null>`max(${shares.shareCode})` })
     .from(shares)
     .where(sql`${shares.shareCode} >= ${ADMIN_SHARE_CODE_MIN} and ${shares.shareCode} <= ${ADMIN_SHARE_CODE_MAX}`));
-  const used = new Set(rows.map((row) => row.code));
-  for (let code = ADMIN_SHARE_CODE_MIN; code <= ADMIN_SHARE_CODE_MAX; code += 1) {
-    if (!used.has(code)) return code;
-  }
+  const code = (row?.code ?? ADMIN_SHARE_CODE_MIN - 1) + 1;
+  if (code <= ADMIN_SHARE_CODE_MAX) return code;
   throw new BadRequestError("管理员分享编号已用完", "SHARE_CODE_EXHAUSTED");
 }
 
@@ -244,14 +248,13 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
   }
 
   assertNoCustomSlug(body.customSlug);
-  assertShareCodeRangeForDoc(body.shareCode, userOwned);
-  await assertShareCodeAvailable(body.shareCode ?? undefined);
+  assertSystemAssignedShareCode(body.shareCode);
 
   const isAdminDoc = !userOwned;
   const isAdminApprovingUserDoc = userOwned && actor.role === "admin";
   const reviewContentHash = userOwned ? documentReviewHash(doc) : null;
   const createdAt = now();
-  const shareCode = body.shareCode ?? (userOwned ? await randomUserShareCode() : await nextAdminShareCode());
+  const shareCode = userOwned ? await randomUserShareCode() : await nextAdminShareCode();
   const values = {
     docId,
     shareCode,
@@ -318,10 +321,7 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
   } else {
     if (body.isEnabled !== undefined) patch.isEnabled = body.isEnabled;
     if (body.shareCode !== undefined) {
-      const nextShareCode = body.shareCode ?? current.shareCode;
-      assertShareCodeRangeForDoc(nextShareCode, userOwned);
-      await assertShareCodeAvailable(nextShareCode, id);
-      patch.shareCode = nextShareCode;
+      assertSystemAssignedShareCode(body.shareCode);
     }
     if (body.customSlug !== undefined) {
       assertNoCustomSlug(body.customSlug);
@@ -443,10 +443,7 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
   };
 
   if (body.shareCode !== undefined) {
-    const nextShareCode = body.shareCode ?? current.shareCode;
-    assertUserShareCode(nextShareCode);
-    await assertShareCodeAvailable(nextShareCode, id);
-    patch.shareCode = nextShareCode;
+    assertSystemAssignedShareCode(body.shareCode);
   } else if (body.action === "approve" && !isUserShareCode(current.shareCode)) {
     patch.shareCode = await randomUserShareCode();
   }

@@ -63,7 +63,7 @@ async function createPublicShare(contentHtml: string) {
     summary: "Cache summary",
     contentHtml
   }, adminActor);
-  const share = await createOrGetShare(doc.id, { isEnabled: true, shareCode: 888 }, adminActor);
+  const share = await createOrGetShare(doc.id, { isEnabled: true }, adminActor);
   if (!share) throw new Error("share was not created");
   return { doc, share };
 }
@@ -112,12 +112,12 @@ describe("public share route cache headers", () => {
   });
 
   test("keeps short numeric share links and rejects invalid middle range", async () => {
-    await createPublicShare("<p>short code</p>");
+    const { share } = await createPublicShare("<p>short code</p>");
 
-    const shortCode = await app.inject({ method: "GET", url: "/r/888" });
+    const shortCode = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
     expect(shortCode.statusCode).toBe(200);
 
-    db.update(shares).set({ shareCode: 12345, shareToken: "12345" }).where(eq(shares.shareCode, 888)).run();
+    db.update(shares).set({ shareCode: 12345, shareToken: "12345" }).where(eq(shares.shareCode, share.shareCode)).run();
     const middleRange = await app.inject({ method: "GET", url: "/r/12345" });
     expect(middleRange.statusCode).toBe(404);
   });
@@ -145,7 +145,7 @@ describe("public share route cache headers", () => {
 
   test("does not expose a protected document title before password verification", async () => {
     const doc = await createDoc(adminId, { title: "Confidential title" });
-    const share = await createOrGetShare(doc.id, { isEnabled: true, shareCode: 889, password: "StrongSharePassword" }, adminActor);
+    const share = await createOrGetShare(doc.id, { isEnabled: true, password: "StrongSharePassword" }, adminActor);
     const response = await app.inject({ method: "GET", url: `/r/${share!.shareCode}` });
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain("受保护的分享");

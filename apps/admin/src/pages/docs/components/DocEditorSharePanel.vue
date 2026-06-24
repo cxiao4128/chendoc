@@ -43,7 +43,7 @@ defineEmits<{
   </label>
   <label v-if="isAdmin">
     <span>分享数字</span>
-    <input v-model.trim="shareCodeInput" inputmode="numeric" placeholder="888 / 1234567" />
+    <input :value="shareCodeInput || (share?.shareCode ? String(share.shareCode) : '系统自动分配')" type="text" readonly />
   </label>
   <label>
     <span>访问密码</span>

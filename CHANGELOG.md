@@ -4,6 +4,18 @@
 
 ## 中文
 
+### 2.9.1
+
+版本号：`2.9.1`
+
+展示版本：`v2.9.1`
+
+- 分享码改为系统分配：管理员文档使用 `111-9999` 短码按当前最大值递增，普通用户文档使用 7 位随机码。
+- 禁止后台、编辑页和审核接口手动指定分享码，避免普通用户分享被改成管理员短码或管理员短码被随意跳号。
+- 编辑页分享面板改为只读展示分享码，审核页通过/驳回不再提交人工分享码。
+
+更新时间：2026-06-23 +08:00
+
 ### 2.9.0
 
 版本号：`2.9.0`
@@ -321,6 +333,20 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 2.9.1
+
+Version: `2.9.1`
+
+Display version: `v2.9.1`
+
+Changes:
+
+- Share codes are now system-assigned: admin documents use ascending `111-9999` short codes, and ordinary user documents use random 7-digit codes.
+- Admin, editor, and review APIs no longer accept manual share-code assignment.
+- The editor share panel shows the code as read-only, and review approval/rejection no longer submits a human-edited code.
+
+Updated at: 2026-06-23 +08:00
 
 ### 2.9.0
 
