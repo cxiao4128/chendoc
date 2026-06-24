@@ -368,10 +368,6 @@ async function saveShare(passwordConfirmed = false, clearPassword = false) {
     };
     if (passwordConfirmed && sharePassword.value.trim()) patch.password = sharePassword.value.trim();
     if (clearPassword) patch.password = null;
-    if (auth.isAdmin) {
-      const shareCode = Number(shareCodeInput.value.trim());
-      patch.shareCode = Number.isInteger(shareCode) && shareCode > 0 ? shareCode : null;
-    }
     await updateShareApi(target.id, patch);
     const response = await getShareByDocApi(current.value.docUid);
     share.value = response.share;
@@ -521,7 +517,7 @@ watch(() => route.fullPath, () => {
   mobileSheet.value = null;
 });
 watch(title, markDirty);
-watch([shareEnabled, shareCodeInput], scheduleShareSave);
+watch(shareEnabled, scheduleShareSave);
 
 onMounted(() => {
   void load();

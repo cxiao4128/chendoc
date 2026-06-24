@@ -111,13 +111,10 @@ async function load() {
 async function review(item: ShareReviewItem, action: "approve" | "reject") {
   if (item.reviewStatus !== "pending") return;
   const state = ensureEdit(item);
-  const shareCode = Number(state.shareCode.trim());
-  const isUserShareCode = Number.isInteger(shareCode) && shareCode >= 1_000_000 && shareCode <= 9_999_999;
   savingId.value = item.id;
   try {
     await reviewShareApi(item.id, {
       action,
-      shareCode: isUserShareCode ? shareCode : item.shareCode,
       note: state.note.trim() || null
     });
     await load();

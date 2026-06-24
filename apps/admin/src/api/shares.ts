@@ -52,6 +52,6 @@ export function listShareReviewsApi() {
   return request<{ shares: ShareReviewItem[] }>("/api/admin/share-reviews");
 }
 
-export function reviewShareApi(id: number, body: { action: "approve" | "reject"; shareCode?: number | null; customSlug?: string | null; note?: string | null }) {
+export function reviewShareApi(id: number, body: { action: "approve" | "reject"; note?: string | null }) {
   return request<{ ok: true }>(`/api/admin/share-reviews/${id}/review`, { method: "POST", body: JSON.stringify(body) });
 }

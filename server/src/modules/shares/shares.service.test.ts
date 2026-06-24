@@ -125,17 +125,15 @@ describe("share public access boundary", () => {
     expect(data?.doc.contentHtml).toBe("<p>private content</p>");
   });
 
-  test("admin shares use the short code pool and allow custom short codes", async () => {
+  test("admin shares use the short code pool in ascending order and reject manual codes", async () => {
     const firstDoc = await createDocument();
     const firstShare = await createShare(firstDoc.id, { isEnabled: true });
     expect(firstShare.shareCode).toBe(111);
     expect(firstShare.shareToken).not.toBe(String(firstShare.shareCode));
     expect(firstShare.shareToken).toMatch(/^s_[A-Za-z0-9_-]{40,}$/);
 
-    const customDoc = await createDocument();
-    const customShare = await createShare(customDoc.id, { isEnabled: true, shareCode: 888 });
-    expect(customShare.shareCode).toBe(888);
-    expect(customShare.shareToken).not.toBe(String(customShare.shareCode));
+    await expect(createShare((await createDocument()).id, { isEnabled: true, shareCode: 888 }))
+      .rejects.toMatchObject({ code: "SHARE_CODE_SYSTEM_ASSIGNED" });
 
     const nextDoc = await createDocument();
     const nextShare = await createShare(nextDoc.id, { isEnabled: true });
@@ -344,14 +342,12 @@ describe("user document share review flow", () => {
     expect(share?.reviewStatus).toBe("pending");
     expect(await getPublicShare(share!.shareCode)).toBeNull();
 
-    await expect(reviewUserShare(share!.id, { action: "approve", shareCode: 888 }, adminId))
-      .rejects.toThrow(/7 位/);
+    await expect(reviewUserShare(share!.id, { action: "approve", shareCode: 8_765_432 }, adminId))
+      .rejects.toMatchObject({ code: "SHARE_CODE_SYSTEM_ASSIGNED" });
 
-    const approvedCode = share!.shareCode === 8_765_432 ? 8_765_433 : 8_765_432;
-    await reviewUserShare(share!.id, { action: "approve", shareCode: approvedCode }, adminId);
+    await reviewUserShare(share!.id, { action: "approve" }, adminId);
 
-    expect(await getPublicShare(share!.shareCode)).toBeNull();
-    const approved = await getPublicShare(approvedCode);
+    const approved = await getPublicShare(share!.shareCode);
     expect(approved?.doc.contentHtml).toBe("<p>user content</p>");
   });
 
