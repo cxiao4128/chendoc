@@ -158,7 +158,11 @@ if (env.CHENDOC_REQUIRE_UPLOAD_SCAN === undefined || flagEnabled(env.CHENDOC_REQ
 const r2Configured = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]
   .some((name) => String(env[name] || "").trim());
 if (r2Configured && !String(env.R2_BACKUP_BUCKET || "").trim()) {
-  fail("R2_BACKUP_BUCKET is required when R2 uploads are configured. Database backups alone do not protect uploaded objects.");
+  if (flagEnabled(env.CHENDOC_REQUIRE_R2_BACKUP)) {
+    fail("R2_BACKUP_BUCKET is required when CHENDOC_REQUIRE_R2_BACKUP=true and R2 uploads are configured.");
+  } else {
+    warn("R2 uploads are configured but object backup is disabled. Database backups do not protect uploaded objects.");
+  }
 }
 
 if (!String(env.PUBLIC_SITE_URL || "").startsWith("https://")) {

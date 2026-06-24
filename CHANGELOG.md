@@ -4,6 +4,17 @@
 
 ## 中文
 
+### 2.9.2
+
+版本号：`2.9.2`
+
+展示版本：`v2.9.2`
+
+- R2 对象备份改为显式可选：未配置 `R2_BACKUP_BUCKET` 时部署预检只警告，不再阻塞不需要对象备份的部署。
+- 新增 `CHENDOC_REQUIRE_R2_BACKUP` 开关；设为 `true` 时仍强制要求独立 R2 备份桶。
+
+更新时间：2026-06-24 +08:00
+
 ### 2.9.1
 
 版本号：`2.9.1`
@@ -333,6 +344,19 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 2.9.2
+
+Version: `2.9.2`
+
+Display version: `v2.9.2`
+
+Changes:
+
+- Made R2 object backup explicitly optional: when `R2_BACKUP_BUCKET` is not set, deploy preflight now warns instead of blocking deployments that do not want object backup.
+- Added `CHENDOC_REQUIRE_R2_BACKUP`; setting it to `true` keeps the independent R2 backup bucket requirement.
+
+Updated at: 2026-06-24 +08:00
 
 ### 2.9.1
 

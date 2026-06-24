@@ -2,7 +2,7 @@
 
 > 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
 
-当前版本 / Current version: `v2.9.1`
+当前版本 / Current version: `v2.9.2`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -97,7 +97,7 @@ bash ./stop.sh           # 停止服务
 - 首次部署后请确认管理员密码、JWT 密钥、配置加密密钥、RSA 私钥加密密钥和文档加密密钥均已替换。
 - R2 Access Key 和 Secret 只保存在服务端配置中，前端不会直接暴露密钥。
 - R2 运行密钥只需对象读写权限，不应授予桶 CORS 管理权限。CORS 在 Cloudflare 控制台限定为 `PUBLIC_SITE_URL`，方法仅 `GET`、`HEAD`、`PUT`。
-- 生产环境默认要求 `CHENDOC_UPLOAD_SCAN_WEBHOOK`。配置 `R2_BACKUP_BUCKET` 后，维护任务每日复制上传对象到独立备份桶。
+- 生产环境默认要求 `CHENDOC_UPLOAD_SCAN_WEBHOOK`。R2 对象备份可选；需要时配置 `CHENDOC_REQUIRE_R2_BACKUP=true` 和独立 `R2_BACKUP_BUCKET`。
 - 上线前建议测试登录、公开分享、分享审核、注册卡密、R2 上传和管理员安全中心。
 
 ### 更新日志
