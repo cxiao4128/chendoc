@@ -2,7 +2,7 @@
 
 > 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
 
-当前版本 / Current version: `v2.9.2`
+当前版本 / Current version: `v2.9.3`
 
 语言 / Language: [中文](#中文) | [English](#english)
 

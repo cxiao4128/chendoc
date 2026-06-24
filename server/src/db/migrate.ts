@@ -15,6 +15,14 @@ type DocIdentityMigrationStats = {
   retryCount: number;
 };
 
+type MysqlForeignKeySpec = {
+  table: string;
+  name: string;
+  column: string;
+  target: string;
+  onDelete?: string;
+};
+
 function emptyDocIdentityStats(): DocIdentityMigrationStats {
   return {
     total: 0,
@@ -557,6 +565,7 @@ async function migrateMysql() {
     await mysqlPool.query("UPDATE docs d LEFT JOIN users u ON u.id = d.owner_id SET d.owner_id = ?, d.owner_role = 'super_admin', d.scope = 'admin', d.is_super_admin_doc = 1, d.visibility = 'private' WHERE d.owner_id IS NULL OR u.id IS NULL", [fallbackOwnerId]);
   }
   await mysqlPool.query("ALTER TABLE docs MODIFY COLUMN doc_uid VARCHAR(32) NOT NULL");
+  await dropMysqlForeignKeysForColumn(databaseName, "docs", "owner_id");
   await mysqlPool.query("ALTER TABLE docs MODIFY COLUMN owner_id INT NOT NULL");
   await addMysqlUniqueIndexIfMissing(databaseName, "docs", "uk_documents_doc_uid", "`doc_uid`");
   for (const tableName of ["docs", "doc_versions"]) {
@@ -741,6 +750,33 @@ async function addMysqlColumnIfMissing(databaseName: string, tableName: string, 
   await mysqlPool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`);
 }
 
+async function dropMysqlForeignKey(databaseName: string, tableName: string, constraintName: string) {
+  if (!mysqlPool) throw new Error("MySQL connection is not available.");
+  const [rows] = await mysqlPool.query(
+    `SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? LIMIT 1`,
+    [databaseName, tableName, constraintName]
+  );
+  if (!(rows as unknown[]).length) return;
+  await mysqlPool.query(`ALTER TABLE \`${tableName}\` DROP FOREIGN KEY \`${constraintName.replace(/`/g, "``")}\``);
+}
+
+async function dropMysqlForeignKeysForColumn(databaseName: string, tableName: string, columnName: string) {
+  if (!mysqlPool) throw new Error("MySQL connection is not available.");
+  const [rows] = await mysqlPool.query(
+    `SELECT DISTINCT k.CONSTRAINT_NAME AS constraintName
+     FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
+     WHERE k.TABLE_SCHEMA = ?
+       AND k.TABLE_NAME = ?
+       AND k.COLUMN_NAME = ?
+       AND k.REFERENCED_TABLE_NAME IS NOT NULL`,
+    [databaseName, tableName, columnName]
+  );
+  for (const row of rows as Array<{ constraintName: string }>) {
+    await dropMysqlForeignKey(databaseName, tableName, row.constraintName);
+  }
+}
+
 async function addMysqlForeignKeys(databaseName: string) {
   if (!mysqlPool) throw new Error("MySQL connection is not available.");
   await mysqlPool.query("DELETE s FROM auth_sessions s LEFT JOIN users u ON u.id = s.user_id WHERE u.id IS NULL");
@@ -759,7 +795,7 @@ async function addMysqlForeignKeys(databaseName: string) {
   await mysqlPool.query("UPDATE shares s LEFT JOIN users u ON u.id = s.requested_by SET s.requested_by = NULL WHERE s.requested_by IS NOT NULL AND u.id IS NULL");
   await mysqlPool.query("UPDATE shares s LEFT JOIN users u ON u.id = s.reviewed_by SET s.reviewed_by = NULL WHERE s.reviewed_by IS NOT NULL AND u.id IS NULL");
   await mysqlPool.query("DELETE f FROM forms f LEFT JOIN users u ON u.id = f.owner_id WHERE u.id IS NULL");
-  const constraints = [
+  const constraints: MysqlForeignKeySpec[] = [
     { table: "auth_sessions", name: "fk_auth_sessions_user", column: "user_id", target: "users(id)" },
     { table: "spaces", name: "fk_spaces_owner", column: "owner_id", target: "users(id)", onDelete: "SET NULL" },
     { table: "docs", name: "fk_docs_space", column: "space_id", target: "spaces(id)", onDelete: "SET NULL" },
@@ -780,11 +816,30 @@ async function addMysqlForeignKeys(databaseName: string) {
   ];
   for (const item of constraints) {
     const [rows] = await mysqlPool.query(
-      `SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
-       WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? LIMIT 1`,
+      `SELECT k.COLUMN_NAME AS columnName,
+              k.REFERENCED_TABLE_NAME AS referencedTableName,
+              k.REFERENCED_COLUMN_NAME AS referencedColumnName,
+              r.DELETE_RULE AS deleteRule
+       FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS r
+       JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
+         ON k.CONSTRAINT_SCHEMA = r.CONSTRAINT_SCHEMA
+        AND k.TABLE_NAME = r.TABLE_NAME
+        AND k.CONSTRAINT_NAME = r.CONSTRAINT_NAME
+       WHERE r.CONSTRAINT_SCHEMA = ? AND r.TABLE_NAME = ? AND r.CONSTRAINT_NAME = ? LIMIT 1`,
       [databaseName, item.table, item.name]
     );
-    if ((rows as unknown[]).length) continue;
+    const existing = (rows as Array<{ columnName: string; referencedTableName: string; referencedColumnName: string; deleteRule: string }>)[0];
+    if (existing) {
+      const [targetTable, targetColumn] = item.target.replace(/`/g, "").replace(/\)/g, "").split("(");
+      const expectedDeleteRule = item.onDelete ?? "CASCADE";
+      const matches =
+        existing.columnName === item.column &&
+        existing.referencedTableName === targetTable &&
+        existing.referencedColumnName === targetColumn &&
+        existing.deleteRule.toUpperCase() === expectedDeleteRule.toUpperCase();
+      if (matches) continue;
+      await dropMysqlForeignKey(databaseName, item.table, item.name);
+    }
     await mysqlPool.query(
       `ALTER TABLE \`${item.table}\` ADD CONSTRAINT \`${item.name}\` FOREIGN KEY (\`${item.column}\`) REFERENCES ${item.target} ON DELETE ${item.onDelete ?? "CASCADE"}`
     );

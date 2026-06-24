@@ -1,6 +1,6 @@
 {
   "name": "chendoc",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "private": true,
   "type": "module",
   "description": "ChenDoc / Chen Shu commercial document management and knowledge publishing platform.",
