@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   decryptSubmittedValue,
 } from "../modules/crypto/crypto.service.js";
@@ -114,7 +114,14 @@ async function decryptOuterEnvelope(input: string) {
   const encryptedBody = base64urlDecode(bodyValue);
   if (iv.length !== 12 || encryptedBody.length <= 16) throw new GatewayPacketError("INVALID_PACKET");
 
-  const keyPlaintext = await decryptSubmittedValue(keyId, decodeTransportKey(encryptedKey));
+  let keyPlaintext: string;
+  try {
+    keyPlaintext = await decryptSubmittedValue(keyId, decodeTransportKey(encryptedKey));
+  } catch (err) {
+    if (err instanceof GatewayPacketError) throw err;
+    throw new GatewayPacketError("KEY_DECRYPT_FAILED");
+  }
+
   const key = Buffer.from(keyPlaintext, "base64");
   if (key.length !== 32) throw new GatewayPacketError("INVALID_PACKET");
 
@@ -287,8 +294,13 @@ function signatureInput(packet: { action: string; timestamp: number; nonce: stri
   return [packet.action, String(packet.timestamp), packet.nonce, packet.body, packet.challenge].join("\n");
 }
 
+function deriveSignatureKey(aesKey: Buffer) {
+  return hkdfSync("sha256", aesKey, "", "chendoc-signature", 32);
+}
+
 function validateSignature(aesKey: Buffer, packet: { action: string; timestamp: number; nonce: string; body: string; challenge: string; signature: string }) {
-  const expected = createHmac("sha256", aesKey).update(signatureInput(packet)).digest();
+  const signatureKey = deriveSignatureKey(aesKey);
+  const expected = createHmac("sha256", signatureKey).update(signatureInput(packet)).digest();
   const actual = base64urlDecode(packet.signature);
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     throw new GatewayPacketError("INVALID_SIGNATURE");

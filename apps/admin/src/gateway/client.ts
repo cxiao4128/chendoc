@@ -145,6 +145,7 @@ async function fetchServerKey(action?: string) {
   if (GATEWAY_DEBUG) console.log("[gateway] fetchServerKey:", url, "action:", action);
   const response = await fetch(url, {
     cache: "no-store",
+    signal: AbortSignal.timeout(30000),
     ...(action ? { headers } : {})
   });
   if (GATEWAY_DEBUG) console.log("[gateway] fetchServerKey response:", response.status, response.statusText);
@@ -550,7 +551,8 @@ export async function gatewayClientRequest<T>(url: string, options: RequestInit,
     ...options,
     method: "POST",
     headers: gatewayHeaders,
-    body: JSON.stringify(envelope)
+    body: JSON.stringify(envelope),
+    signal: AbortSignal.timeout(30000)
   });
   const contentType = response.headers.get("Content-Type") || "";
   const rawPayload = contentType.includes("application/json") ? await response.json() : await response.text();

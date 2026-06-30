@@ -4,7 +4,7 @@ import { clientIpFromRequest } from "../utils/requestIp.js";
 import { isGatewayActionCode, type GatewayActionCode } from "./action-registry.js";
 import { internalGatewayHeaders } from "./internal-request.js";
 
-// Gateway 调试模式
+// Gateway 调试模式 - 使用结构化日志
 const GATEWAY_DEBUG = process.env.NODE_ENV !== "production";
 
 type GatewayMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -302,17 +302,17 @@ function parseInjectedPayload(payload: string, contentType: string | undefined) 
 
 export async function gatewayRoutes(app: FastifyInstance) {
   app.post("/api/gateway", async (request, reply) => {
-    try {
-      const actionCode = request.packet?.actionCode ?? payloadOf(request).actionCode as string | undefined;
-      if (!actionCode) {
-        return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
-      }
-      if (!isGatewayActionCode(actionCode)) {
-        return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
-      }
+    const actionCode = request.packet?.actionCode ?? payloadOf(request).actionCode as string | undefined;
+    if (!actionCode) {
+      return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
+    }
+    if (!isGatewayActionCode(actionCode)) {
+      return reply.code(400).send({ code: "INVALID_ACTION", message: "Invalid gateway action." });
+    }
 
+    try {
       if (GATEWAY_DEBUG) {
-        console.log(`[gateway] ${request.method} ${request.url} → action: ${actionCode}`);
+        request.log.info({ action: actionCode, method: request.method, url: request.url }, "gateway request");
       }
 
       const targetRequest = actionTarget(actionCode, payloadOf(request));
@@ -325,11 +325,11 @@ export async function gatewayRoutes(app: FastifyInstance) {
           ...internalHeaders(request),
           ...(hasBody ? { "content-type": "application/json" } : {})
         },
-        payload: hasBody ? JSON.stringify(targetRequest.body ?? {}) : undefined
+        payload: hasBody ? targetRequest.body ?? {} : undefined
       });
 
       if (GATEWAY_DEBUG && response.statusCode >= 400) {
-        console.log(`[gateway] ${targetRequest.method} ${targetRequest.url} ← ${response.statusCode}`);
+        request.log.warn({ action: actionCode, status: response.statusCode, method: targetRequest.method, url: targetRequest.url }, "gateway error response");
       }
 
       const contentType = Array.isArray(response.headers["content-type"])
@@ -342,9 +342,7 @@ export async function gatewayRoutes(app: FastifyInstance) {
         .send(parseInjectedPayload(response.body, contentType));
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Gateway processing failed");
-      if (GATEWAY_DEBUG) {
-        console.error("[gateway] error:", error.message);
-      }
+      request.log.error({ action: actionCode, err: error.message }, "gateway processing failed");
       return reply.code(500).send({ code: "GATEWAY_ERROR", message: "Gateway request failed." });
     }
   });
