@@ -318,6 +318,8 @@ export async function gatewayRoutes(app: FastifyInstance) {
       const targetRequest = actionTarget(actionCode, payloadOf(request));
       const hasBody = targetRequest.method !== "GET" && targetRequest.method !== "DELETE";
 
+      // 直接传对象，避免双重序列化
+      // app.inject() 会根据 content-type 自动处理，不需要手动 JSON.stringify
       const response = await app.inject({
         method: targetRequest.method,
         url: targetRequest.url,
@@ -325,7 +327,7 @@ export async function gatewayRoutes(app: FastifyInstance) {
           ...internalHeaders(request),
           ...(hasBody ? { "content-type": "application/json" } : {})
         },
-        payload: hasBody ? targetRequest.body ?? {} : undefined
+        payload: hasBody ? targetRequest.body : undefined
       });
 
       if (GATEWAY_DEBUG && response.statusCode >= 400) {
