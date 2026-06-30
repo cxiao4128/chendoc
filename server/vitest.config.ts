@@ -32,13 +32,9 @@ export default defineConfig({
         '**/types/**',
       ],
     },
-    // 线程池配置（服务端测试需要更多并发）
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: false,
-        max: 4,
-      },
+    // 工作线程配置（Vitest 4 推荐方式）
+    workers: {
+      max: 4,
     },
     // 环境变量
     env: {
