@@ -325,16 +325,32 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
 // ===== 标签模块 =====
+// 注意：SQLite 不支持自引用外键约束，parentId 依赖索引和逻辑约束
 export const tags = sqliteTable("tags", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   color: text("color").notNull().default("#3b82f6"),
+  parentId: integer("parent_id"),
   ownerId: integer("owner_id").references(() => users.id, { onDelete: "cascade" }),
   docCount: integer("doc_count").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
   nameOwnerUnique: uniqueIndex("uk_tags_name_owner").on(table.name, table.ownerId),
-  ownerIdx: index("tags_owner_idx").on(table.ownerId)
+  ownerIdx: index("tags_owner_idx").on(table.ownerId),
+  parentIdx: index("tags_parent_idx").on(table.parentId)
+}));
+
+// 标签层级关系表（多对多，支持标签间互相引用）
+export const tagHierarchy = sqliteTable("tag_hierarchy", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  parentTagId: integer("parent_tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  childTagId: integer("child_tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  parentChildUnique: uniqueIndex("uk_tag_hierarchy_parent_child").on(table.parentTagId, table.childTagId),
+  parentIdx: index("tag_hierarchy_parent_idx").on(table.parentTagId),
+  childIdx: index("tag_hierarchy_child_idx").on(table.childTagId)
 }));
 
 // ===== 模板模块 =====

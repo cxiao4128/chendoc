@@ -327,16 +327,32 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
 // ===== 标签模块 =====
+// parentId 自引用通过逻辑约束处理，外键在迁移脚本中添加
 export const tags = mysqlTable("tags", {
   id: id(),
   name: varchar("name", { length: 191 }).notNull(),
   color: varchar("color", { length: 16 }).notNull().default("#3b82f6"),
+  parentId: int("parent_id").$type<number | null>(),
   ownerId: int("owner_id").references(() => users.id, { onDelete: "cascade" }),
   docCount: int("doc_count").notNull().default(0),
   createdAt: ts("created_at").notNull()
 }, (table) => [
   uniqueIndex("uk_tags_name_owner").on(table.name, table.ownerId),
-  index("tags_owner_idx").on(table.ownerId)
+  index("tags_owner_idx").on(table.ownerId),
+  index("tags_parent_idx").on(table.parentId)
+]);
+
+// 标签层级关系表（多对多，支持标签间互相引用）
+export const tagHierarchy = mysqlTable("tag_hierarchy", {
+  id: id(),
+  parentTagId: int("parent_tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  childTagId: int("child_tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  ownerId: int("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: ts("created_at").notNull()
+}, (table) => [
+  uniqueIndex("uk_tag_hierarchy_parent_child").on(table.parentTagId, table.childTagId),
+  index("tag_hierarchy_parent_idx").on(table.parentTagId),
+  index("tag_hierarchy_child_idx").on(table.childTagId)
 ]);
 
 // ===== 模板模块 =====

@@ -26,6 +26,7 @@ export const uniqueShareCode = activeSchema.uniqueShareCode as typeof sqliteSche
 export const forms = activeSchema.forms as typeof sqliteSchema.forms;
 export const formSubmissions = activeSchema.formSubmissions as typeof sqliteSchema.formSubmissions;
 export const tags = activeSchema.tags as typeof sqliteSchema.tags;
+export const tagHierarchy = activeSchema.tagHierarchy as typeof sqliteSchema.tagHierarchy;
 export const templates = activeSchema.templates as typeof sqliteSchema.templates;
 export const accessLogs = activeSchema.accessLogs as typeof sqliteSchema.accessLogs;
 export const jwtKeys = activeSchema.jwtKeys as typeof sqliteSchema.jwtKeys;
