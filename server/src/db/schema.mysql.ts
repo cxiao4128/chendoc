@@ -195,7 +195,7 @@ export const loginFailures = mysqlTable("login_failures", {
   lockedUntil: ts("locked_until")
 }, (table) => [
   uniqueIndex("login_failures_dimension_unique").on(table.username, table.scope, table.dimension, table.dimensionValue),
-  index("login_failures_lookup_idx").on(table.username, table.scope, table.dimension),
+  index("login_failures_lookup_idx").on(table.username, table.scope, table.dimension, table.lockedUntil),
   index("login_failures_last_failed_idx").on(table.lastFailedAt),
   index("login_failures_locked_idx").on(table.lockedUntil)
 ]);

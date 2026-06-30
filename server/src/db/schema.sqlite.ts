@@ -52,7 +52,8 @@ export const authSessions = sqliteTable("auth_sessions", {
   keyEncrypted: text("key_encrypted").notNull(),
   expireAt: integer("expire_at", { mode: "timestamp_ms" }).notNull(),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  version: integer("version").notNull().default(1)
 }, (table) => ({
   authSessionsUserIdx: index("auth_sessions_user_idx").on(table.userId),
   authSessionsExpireIdx: index("auth_sessions_expire_idx").on(table.expireAt)
@@ -192,7 +193,7 @@ export const loginFailures = sqliteTable("login_failures", {
   lockedUntil: integer("locked_until", { mode: "timestamp_ms" })
 }, (table) => ({
   loginFailuresDimensionUnique: uniqueIndex("login_failures_dimension_unique").on(table.username, table.scope, table.dimension, table.dimensionValue),
-  loginFailuresLookupIdx: index("login_failures_lookup_idx").on(table.username, table.scope, table.dimension),
+  loginFailuresLookupIdx: index("login_failures_lookup_idx").on(table.username, table.scope, table.dimension, table.lockedUntil),
   loginFailuresLastFailedIdx: index("login_failures_last_failed_idx").on(table.lastFailedAt),
   loginFailuresLockedIdx: index("login_failures_locked_idx").on(table.lockedUntil)
 }));
