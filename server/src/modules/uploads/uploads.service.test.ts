@@ -19,7 +19,7 @@ const { createDoc } = await import("../docs/docs.service.js");
 const { createPresignedUpload, deleteUpload, getUploadPolicy } = await import("./uploads.service.js");
 
 beforeEach(() => {
-  sqlite.exec("DELETE FROM uploads; DELETE FROM docs; DELETE FROM users; DELETE FROM sqlite_sequence WHERE name IN ('uploads', 'docs', 'users');");
+  sqlite!.exec("DELETE FROM uploads; DELETE FROM docs; DELETE FROM users; DELETE FROM sqlite_sequence WHERE name IN ('uploads', 'docs', 'users');");
   db.insert(users).values([
     { username: "owner", passwordHash: "hash", role: "user", status: "active", createdAt: new Date(), updatedAt: new Date() },
     { username: "other", passwordHash: "hash", role: "user", status: "active", createdAt: new Date(), updatedAt: new Date() },
