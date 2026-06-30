@@ -123,32 +123,6 @@ function actionTarget(actionCode: GatewayActionCode, payload: GatewayPayload): G
         url: `/api/docs/${param(payload, "docUid")}/versions/${param(payload, "versionId")}/restore`,
         body: {}
       };
-    case "d9":
-      return {
-        method: "GET",
-        url: `/api/docs/search/quick${queryString(payload)}`
-      };
-    case "d10":
-      return {
-        method: "GET",
-        url: `/api/docs/search/suggestions${queryString(payload)}`
-      };
-    case "d11":
-      return {
-        method: "GET",
-        url: `/api/docs/search/history${queryString(payload)}`
-      };
-    case "d12":
-      return {
-        method: "DELETE",
-        url: `/api/docs/search/history/${param(payload, "id")}`
-      };
-    case "d13":
-      return {
-        method: "DELETE",
-        url: "/api/docs/search/history"
-      };
-
     case "r1":
       return {
         method: "GET",

@@ -5,8 +5,7 @@ export const gatewayActionCodes = [
   "u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8",
   "f1", "f2", "f3", "f4", "w1", "w2", "w3", "w4",
   "fm1", "fm2", "fm3", "fm4", "fm5", "fm6", "fm7", "fm8", "fm9", "fm10", "fm11",
-  "i1", "i2", "i3", "i4", "i5", "x1", "x2", "y1", "y2", "y3", "y4", "y6", "y7", "y8",
-  "d9", "d10", "d11", "d12", "d13"
+  "i1", "i2", "i3", "i4", "i5", "x1", "x2", "y1", "y2", "y3", "y4", "y6", "y7", "y8"
 ] as const;
 
 export type GatewayActionCode = typeof gatewayActionCodes[number];
