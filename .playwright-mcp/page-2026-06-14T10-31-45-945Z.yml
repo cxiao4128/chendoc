@@ -1,0 +1,314 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e7]:
+          - strong [ref=e8]: ChenDoc
+          - generic [ref=e9]: 陈书
+        - button "展开或收起导航" [ref=e10] [cursor=pointer]:
+          - img [ref=e11]
+      - navigation "ChenDoc 工作台导航" [ref=e12]:
+        - link "文档" [ref=e13] [cursor=pointer]:
+          - /url: /admin/docs
+          - img [ref=e14]
+          - generic [ref=e16]: 文档
+        - link "回收站" [ref=e17] [cursor=pointer]:
+          - /url: /admin/trash
+          - img [ref=e18]
+          - generic [ref=e21]: 回收站
+        - link "邀请码" [ref=e22] [cursor=pointer]:
+          - /url: /admin/invites
+          - img [ref=e23]
+          - generic [ref=e25]: 邀请码
+        - link "收集表" [ref=e26] [cursor=pointer]:
+          - /url: /admin/forms
+          - img [ref=e27]
+          - generic [ref=e30]: 收集表
+        - link "审核" [ref=e31] [cursor=pointer]:
+          - /url: /admin/share-reviews
+          - img [ref=e32]
+          - generic [ref=e36]: 审核
+        - link "安全中心" [ref=e37] [cursor=pointer]:
+          - /url: /admin/security
+          - img [ref=e38]
+          - generic [ref=e41]: 安全中心
+        - link "模板中心" [ref=e42] [cursor=pointer]:
+          - /url: /admin/templates
+          - img [ref=e43]
+          - generic [ref=e45]: 模板中心
+        - link "知识库" [ref=e46] [cursor=pointer]:
+          - /url: /admin/knowledge
+          - img [ref=e47]
+          - generic [ref=e49]: 知识库
+        - link "系统管理" [ref=e50] [cursor=pointer]:
+          - /url: /admin/settings
+          - img [ref=e51]
+          - generic [ref=e54]: 系统管理
+      - generic [ref=e57]:
+        - strong [ref=e58]: xchen
+        - generic [ref=e59]: 超级管理员
+      - button "退出登录" [ref=e60] [cursor=pointer]:
+        - img [ref=e61]
+        - generic [ref=e64]: 退出
+    - main [ref=e65]:
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - img [ref=e68]
+          - textbox "搜索文档" [ref=e71]:
+            - /placeholder: 搜索文档、关键词、标签或 / 快捷命令
+        - generic "快捷入口" [ref=e72]:
+          - button "模板中心" [ref=e73] [cursor=pointer]:
+            - img [ref=e74]
+          - button "审核通知" [ref=e78] [cursor=pointer]:
+            - img [ref=e79]
+          - button "帮助" [ref=e82] [cursor=pointer]:
+            - img [ref=e83]
+          - button "当前用户" [ref=e87] [cursor=pointer]:
+            - strong [ref=e89]: xchen
+            - img [ref=e90]
+      - generic [ref=e92]:
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - heading "文档" [level=1] [ref=e95]: 文档 ✦
+            - paragraph [ref=e96]: 集中管理和知识沉淀，安全协作，高效流转
+          - generic [ref=e97]:
+            - button "批量操作" [ref=e98] [cursor=pointer]:
+              - img [ref=e99]
+              - text: 批量操作
+            - button "新建文档" [ref=e102] [cursor=pointer]:
+              - img [ref=e103]
+              - text: 新建文档
+        - tablist "文档视图" [ref=e104]:
+          - tab "全部 9" [selected] [ref=e105] [cursor=pointer]:
+            - text: 全部
+            - generic [ref=e106]: "9"
+          - tab "已发布 9" [ref=e107] [cursor=pointer]:
+            - text: 已发布
+            - generic [ref=e108]: "9"
+          - tab "草稿 0" [ref=e109] [cursor=pointer]:
+            - text: 草稿
+            - generic [ref=e110]: "0"
+          - tab "审批中 0" [ref=e111] [cursor=pointer]:
+            - text: 审批中
+            - generic [ref=e112]: "0"
+          - tab "已分享 3" [ref=e113] [cursor=pointer]:
+            - text: 已分享
+            - generic [ref=e114]: "3"
+          - tab "未分享 6" [ref=e115] [cursor=pointer]:
+            - text: 未分享
+            - generic [ref=e116]: "6"
+          - button "新建文档" [ref=e117] [cursor=pointer]:
+            - img [ref=e118]
+        - generic [ref=e119]:
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - button "按更新时间" [ref=e122] [cursor=pointer]:
+                - img [ref=e123]
+                - text: 按更新时间
+              - button "重置筛选" [ref=e126] [cursor=pointer]:
+                - img [ref=e127]
+                - text: 重置筛选
+              - button "紧凑视图" [ref=e128] [cursor=pointer]:
+                - img [ref=e129]
+            - generic [ref=e131]:
+              - generic [ref=e132]:
+                - generic [ref=e133]: 文档名称
+                - generic [ref=e134]: 状态
+                - generic [ref=e135]: 所有者
+                - generic [ref=e136]: 更新时间
+                - generic [ref=e137]: 分享
+                - generic [ref=e138]: 操作
+              - button "未命名文档 / WqfWKJ8CMkXtmSNrXEaYBBAH 已发布 xchen 2026/06/14 16:29 未分享 收藏 创建分享" [ref=e139] [cursor=pointer]:
+                - checkbox [ref=e141]
+                - generic [ref=e142]:
+                  - img [ref=e144]
+                  - strong [ref=e147]: 未命名文档
+                  - generic [ref=e148]: / WqfWKJ8CMkXtmSNrXEaYBBAH
+                - generic [ref=e149]: 已发布
+                - generic [ref=e150]: xchen
+                - generic [ref=e151]: 2026/06/14 16:29
+                - code [ref=e152]: 未分享
+                - generic [ref=e153]:
+                  - button "收藏" [ref=e154]:
+                    - img [ref=e155]
+                  - button "创建分享" [ref=e157]:
+                    - img [ref=e158]
+              - button "周报 / XivagEwhaQpmsLaHxNKUPWCE 已发布 xchen 2026/06/12 01:07 未分享 收藏 创建分享" [ref=e162] [cursor=pointer]:
+                - checkbox [ref=e164]
+                - generic [ref=e165]:
+                  - img [ref=e167]
+                  - strong [ref=e170]: 周报
+                  - generic [ref=e171]: / XivagEwhaQpmsLaHxNKUPWCE
+                - generic [ref=e172]: 已发布
+                - generic [ref=e173]: xchen
+                - generic [ref=e174]: 2026/06/12 01:07
+                - code [ref=e175]: 未分享
+                - generic [ref=e176]:
+                  - button "收藏" [ref=e177]:
+                    - img [ref=e178]
+                  - button "创建分享" [ref=e180]:
+                    - img [ref=e181]
+              - button "未命名文档 / ggCtJRh1HVNbXGMlAXEwYPh1 已发布 xchen 2026/06/11 18:54 未分享 收藏 创建分享" [ref=e185] [cursor=pointer]:
+                - checkbox [ref=e187]
+                - generic [ref=e188]:
+                  - img [ref=e190]
+                  - strong [ref=e193]: 未命名文档
+                  - generic [ref=e194]: / ggCtJRh1HVNbXGMlAXEwYPh1
+                - generic [ref=e195]: 已发布
+                - generic [ref=e196]: xchen
+                - generic [ref=e197]: 2026/06/11 18:54
+                - code [ref=e198]: 未分享
+                - generic [ref=e199]:
+                  - button "收藏" [ref=e200]:
+                    - img [ref=e201]
+                  - button "创建分享" [ref=e203]:
+                    - img [ref=e204]
+              - button "新建模板文档 / HsNCweddUXUETFxtmEQgh1g4 已发布 xchen 2026/06/11 18:51 未分享 收藏 创建分享" [ref=e208] [cursor=pointer]:
+                - checkbox [ref=e210]
+                - generic [ref=e211]:
+                  - img [ref=e213]
+                  - strong [ref=e216]: 新建模板文档
+                  - generic [ref=e217]: / HsNCweddUXUETFxtmEQgh1g4
+                - generic [ref=e218]: 已发布
+                - generic [ref=e219]: xchen
+                - generic [ref=e220]: 2026/06/11 18:51
+                - code [ref=e221]: 未分享
+                - generic [ref=e222]:
+                  - button "收藏" [ref=e223]:
+                    - img [ref=e224]
+                  - button "创建分享" [ref=e226]:
+                    - img [ref=e227]
+              - button "未命名文档 / XqtHNjHjFECroNBbEGKH1bLq 已发布 xchen 2026/06/05 23:42 未分享 收藏 创建分享" [ref=e231] [cursor=pointer]:
+                - checkbox [ref=e233]
+                - generic [ref=e234]:
+                  - img [ref=e236]
+                  - strong [ref=e239]: 未命名文档
+                  - generic [ref=e240]: / XqtHNjHjFECroNBbEGKH1bLq
+                - generic [ref=e241]: 已发布
+                - generic [ref=e242]: xchen
+                - generic [ref=e243]: 2026/06/05 23:42
+                - code [ref=e244]: 未分享
+                - generic [ref=e245]:
+                  - button "收藏" [ref=e246]:
+                    - img [ref=e247]
+                  - button "创建分享" [ref=e249]:
+                    - img [ref=e250]
+              - button "未命名文档 / E7tJTHkabSNC0rCjANyzaLiX 已发布 xchen 2026/06/05 00:10 /r/888 收藏 打开分享" [ref=e254] [cursor=pointer]:
+                - checkbox [ref=e256]
+                - generic [ref=e257]:
+                  - img [ref=e259]
+                  - strong [ref=e262]: 未命名文档
+                  - generic [ref=e263]: / E7tJTHkabSNC0rCjANyzaLiX
+                - generic [ref=e264]: 已发布
+                - generic [ref=e265]: xchen
+                - generic [ref=e266]: 2026/06/05 00:10
+                - code [ref=e267]: /r/888
+                - generic [ref=e268]:
+                  - button "收藏" [ref=e269]:
+                    - img [ref=e270]
+                  - button "打开分享" [ref=e272]:
+                    - img [ref=e273]
+              - button "未命名文档 / uNGNNgC3EX10HHctfRS3R8py 已发布 xchen 2026/05/06 01:33 未分享 收藏 创建分享" [ref=e277] [cursor=pointer]:
+                - checkbox [ref=e279]
+                - generic [ref=e280]:
+                  - img [ref=e282]
+                  - strong [ref=e285]: 未命名文档
+                  - generic [ref=e286]: / uNGNNgC3EX10HHctfRS3R8py
+                - generic [ref=e287]: 已发布
+                - generic [ref=e288]: xchen
+                - generic [ref=e289]: 2026/05/06 01:33
+                - code [ref=e290]: 未分享
+                - generic [ref=e291]:
+                  - button "收藏" [ref=e292]:
+                    - img [ref=e293]
+                  - button "创建分享" [ref=e295]:
+                    - img [ref=e296]
+              - button "未命名文档 / dMeNVLEtaFEXrG8CZChHugdW 已发布 xchen 2026/04/29 04:08 /r/112 收藏 打开分享" [ref=e300] [cursor=pointer]:
+                - checkbox [ref=e302]
+                - generic [ref=e303]:
+                  - img [ref=e305]
+                  - strong [ref=e308]: 未命名文档
+                  - generic [ref=e309]: / dMeNVLEtaFEXrG8CZChHugdW
+                - generic [ref=e310]: 已发布
+                - generic [ref=e311]: xchen
+                - generic [ref=e312]: 2026/04/29 04:08
+                - code [ref=e313]: /r/112
+                - generic [ref=e314]:
+                  - button "收藏" [ref=e315]:
+                    - img [ref=e316]
+                  - button "打开分享" [ref=e318]:
+                    - img [ref=e319]
+              - button "欢迎使用 ChenDoc / XXCJpE5MdFmeEZSFTIcHPNHP 已发布 xchen 2026/04/29 03:59 /r/111 收藏 打开分享" [ref=e323] [cursor=pointer]:
+                - checkbox [ref=e325]
+                - generic [ref=e326]:
+                  - img [ref=e328]
+                  - strong [ref=e331]: 欢迎使用 ChenDoc
+                  - generic [ref=e332]: / XXCJpE5MdFmeEZSFTIcHPNHP
+                - generic [ref=e333]: 已发布
+                - generic [ref=e334]: xchen
+                - generic [ref=e335]: 2026/04/29 03:59
+                - code [ref=e336]: /r/111
+                - generic [ref=e337]:
+                  - button "收藏" [ref=e338]:
+                    - img [ref=e339]
+                  - button "打开分享" [ref=e341]:
+                    - img [ref=e342]
+          - complementary "文档概览" [ref=e346]:
+            - generic [ref=e347]:
+              - strong [ref=e348]: 存储概览
+              - paragraph [ref=e351]: 0 B · 0 个上传记录
+              - link "管理存储" [ref=e352] [cursor=pointer]:
+                - /url: /admin/settings/storage
+            - generic [ref=e353]:
+              - strong [ref=e354]: 快捷操作
+              - button "上传文档" [ref=e355] [cursor=pointer]:
+                - img [ref=e356]
+                - generic [ref=e359]: 上传文档
+              - button "新建空间" [ref=e360] [cursor=pointer]:
+                - img [ref=e361]
+                - generic [ref=e363]: 新建空间
+              - button "从模板新建" [ref=e364] [cursor=pointer]:
+                - img [ref=e365]
+                - generic [ref=e368]: 从模板新建
+              - button "导入文档" [ref=e369] [cursor=pointer]:
+                - img [ref=e370]
+                - generic [ref=e373]: 导入文档
+            - generic [ref=e374]:
+              - strong [ref=e375]:
+                - text: 最近动态
+                - link "查看全部" [ref=e376] [cursor=pointer]:
+                  - /url: /admin/docs
+              - article [ref=e377]:
+                - img [ref=e378]
+                - generic [ref=e381]:
+                  - generic [ref=e382]: 未命名文档
+                  - generic [ref=e383]: 已更新 · 2026/06/14 16:29
+              - article [ref=e384]:
+                - img [ref=e385]
+                - generic [ref=e388]:
+                  - generic [ref=e389]: 周报
+                  - generic [ref=e390]: 已更新 · 2026/06/12 01:07
+              - article [ref=e391]:
+                - img [ref=e392]
+                - generic [ref=e395]:
+                  - generic [ref=e396]: 未命名文档
+                  - generic [ref=e397]: 已更新 · 2026/06/11 18:54
+              - article [ref=e398]:
+                - img [ref=e399]
+                - generic [ref=e402]:
+                  - generic [ref=e403]: 新建模板文档
+                  - generic [ref=e404]: 已更新 · 2026/06/11 18:51
+              - article [ref=e405]:
+                - img [ref=e406]
+                - generic [ref=e409]:
+                  - generic [ref=e410]: 未命名文档
+                  - generic [ref=e411]: 已更新 · 2026/06/05 23:42
+  - dialog [ref=e412]:
+    - generic [ref=e413]:
+      - button "关闭" [ref=e414] [cursor=pointer]:
+        - img [ref=e415]
+      - heading "批量删除" [level=2] [ref=e418]
+      - paragraph [ref=e419]: 确认将选中的 0 篇文档移入回收站吗？
+      - generic [ref=e420]:
+        - button "取消" [ref=e421] [cursor=pointer]
+        - button "批量删除" [ref=e422] [cursor=pointer]

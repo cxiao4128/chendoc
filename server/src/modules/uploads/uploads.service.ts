@@ -169,6 +169,12 @@ function validateFile(body: z.infer<typeof presignSchema>) {
   if (!allowedMime) throw new BadRequestError("文件后缀不允许", "UPLOAD_EXTENSION_NOT_ALLOWED");
   if (!allowedMime.includes(normalizeMimeType(body.mimeType))) throw new BadRequestError("文件 MIME 类型与后缀不匹配", "UPLOAD_MIME_MISMATCH");
   if (body.size > policy.maxMb * 1024 * 1024) throw new BadRequestError("文件超过大小限制", "UPLOAD_TOO_LARGE");
+
+  // M-1: 防御双扩展名绕过 (如 avatar.jpg.php)
+  const finalExt = extname(body.fileName.replace(/^.*\./, "").toLowerCase());
+  if (finalExt && finalExt !== ext) {
+    throw new BadRequestError("文件名包含可疑后缀", "UPLOAD_DOUBLE_EXTENSION_BLOCKED");
+  }
 }
 
 function validateCompletedObject(expected: z.infer<typeof uploadTokenSchema>, object: HeadObjectCommandOutput) {

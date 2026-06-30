@@ -1,0 +1,49 @@
+- main [ref=e3]:
+  - region "ChenDoc 登录页" [ref=e4]:
+    - generic [ref=e6]:
+      - region "ChenDoc" [ref=e7]:
+        - generic [ref=e8]:
+          - heading "陈书" [level=1] [ref=e9]
+          - strong [ref=e10]: ChenDoc 文档系统
+        - generic [ref=e12]: © 2026 ChenDoc. All rights reserved.
+      - region "登录" [ref=e13]:
+        - generic [ref=e14]:
+          - generic:
+            - textbox
+            - textbox
+          - generic [ref=e16]:
+            - paragraph [ref=e17]: 陈书
+            - paragraph [ref=e18]: 文档管理平台
+          - generic [ref=e19]:
+            - generic [ref=e20]: 用户名
+            - generic [ref=e21]:
+              - img [ref=e22]
+              - textbox "用户名" [ref=e25]: xchen
+          - generic [ref=e26]:
+            - generic [ref=e27]: 密码
+            - generic [ref=e28]:
+              - img [ref=e29]
+              - textbox "密码 切换密码显示" [ref=e33]:
+                - /placeholder: 密码
+              - button "切换密码显示" [ref=e34] [cursor=pointer]:
+                - img [ref=e47]
+          - generic [ref=e52]:
+            - generic [ref=e53]:
+              - text: 验证码
+              - textbox "验证码" [active] [ref=e54]:
+                - /placeholder: 输入结果
+            - button "刷新验证码" [ref=e55] [cursor=pointer]:
+              - img "验证码" [ref=e56]
+            - button "刷新验证码" [ref=e57] [cursor=pointer]:
+              - img [ref=e58]
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - checkbox "记住登录状态" [checked] [ref=e40]
+              - generic [ref=e41]: 记住登录状态
+            - generic [ref=e42]:
+              - link "忘记密码?" [ref=e43] [cursor=pointer]:
+                - /url: /forgot-password
+              - link "立即注册" [ref=e45] [cursor=pointer]:
+                - /url: /register
+          - alert [ref=e64]: 登录失败：账号或密码不正确
+          - button "进入陈书" [ref=e46] [cursor=pointer]
