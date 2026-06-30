@@ -5,6 +5,7 @@ import { bulkDeleteDocsApi, createDocApi, getDocApi, listDocsApi, updateDocApi }
 import { getApiErrorMessage } from "../api/request";
 
 const DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
+const DETAIL_CACHE_MAX_SIZE = 200;
 
 interface DetailCacheEntry {
   doc: DocDetail;
@@ -14,6 +15,15 @@ interface DetailCacheEntry {
 const detailCache = new Map<string, DetailCacheEntry>();
 
 function setDetailCache(doc: DocDetail) {
+  // 缓存满时驱逐30%最旧条目
+  if (detailCache.size >= DETAIL_CACHE_MAX_SIZE) {
+    const entries = Array.from(detailCache.entries());
+    entries.sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+    const removeCount = Math.ceil(entries.length * 0.3);
+    for (let i = 0; i < removeCount; i++) {
+      detailCache.delete(entries[i][0]);
+    }
+  }
   detailCache.set(doc.docUid, {
     doc,
     expiresAt: Date.now() + DETAIL_CACHE_TTL_MS
@@ -37,6 +47,51 @@ function pruneDetailCache() {
   }
 }
 
+// 文档列表缓存
+const LIST_CACHE_TTL_MS = 60 * 1000;
+const LIST_CACHE_MAX_SIZE = 100;
+
+interface ListCacheEntry {
+  docs: DocSummary[];
+  pagination: { page: number; hasMore: boolean };
+  expiresAt: number;
+}
+
+const listCache = new Map<string, ListCacheEntry>();
+
+function setListCache(key: string, docs: DocSummary[], pagination: { page: number; hasMore: boolean }) {
+  if (listCache.size >= LIST_CACHE_MAX_SIZE) {
+    const entries = Array.from(listCache.entries());
+    entries.sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+    const removeCount = Math.ceil(entries.length * 0.3);
+    for (let i = 0; i < removeCount; i++) {
+      listCache.delete(entries[i][0]);
+    }
+  }
+  listCache.set(key, {
+    docs,
+    pagination,
+    expiresAt: Date.now() + LIST_CACHE_TTL_MS
+  });
+}
+
+function getListCache(key: string) {
+  const cached = listCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    listCache.delete(key);
+    return null;
+  }
+  return cached;
+}
+
+function pruneListCache() {
+  const now = Date.now();
+  for (const [k, cached] of listCache) {
+    if (cached.expiresAt <= now) listCache.delete(k);
+  }
+}
+
 export const useDocStore = defineStore("doc", () => {
   const docs = ref<DocSummary[]>([]);
   const current = ref<DocDetail | null>(null);
@@ -54,6 +109,20 @@ export const useDocStore = defineStore("doc", () => {
 
   async function loadList(q = "", options: { append?: boolean } = {}) {
     const page = options.append ? listPage.value + 1 : 1;
+    const cacheKey = `${q}:${page}:${listPageSize.value}`;
+
+    // 命中缓存（仅第一页）
+    if (!options.append) {
+      const cached = getListCache(cacheKey);
+      if (cached) {
+        docs.value = cached.docs;
+        listPage.value = cached.pagination.page;
+        listHasMore.value = cached.pagination.hasMore;
+        pruneDetailCache();
+        return;
+      }
+    }
+
     listLoading.value = true;
     listError.value = null;
     try {
@@ -61,6 +130,12 @@ export const useDocStore = defineStore("doc", () => {
       docs.value = options.append ? [...docs.value, ...response.docs] : response.docs;
       listPage.value = response.pagination?.page ?? page;
       listHasMore.value = response.pagination?.hasMore ?? false;
+
+      // 缓存第一页结果
+      if (!options.append) {
+        setListCache(cacheKey, docs.value, { page: listPage.value, hasMore: listHasMore.value });
+      }
+
       pruneDetailCache();
     } catch (error) {
       listError.value = getApiErrorMessage(error);
