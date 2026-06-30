@@ -31,7 +31,7 @@ export const useAuthStore = defineStore("auth", () => {
     void import("../services/localDraft").then(({ clearLocalDrafts }) => clearLocalDrafts()).catch(() => undefined);
   }
 
-  async function fetchMe(force = false) {
+  async function fetchMe(force = false): Promise<UserProfile | null> {
     if (!force && ready.value && user.value && Date.now() - lastFetchedAt < ME_CACHE_TTL_MS) return user.value;
     if (inflightMe) return inflightMe;
 
@@ -42,27 +42,32 @@ export const useAuthStore = defineStore("auth", () => {
       rejectMe = reject;
     });
 
-    (async () => {
+    const execute = async () => {
       try {
         const { a2: fetchProfile, a4: restoreSession } = await import("../api/auth");
         if (!getAuthToken()) {
           const restored = await restoreSession();
           setSession(restored.user, restored.token, restored.expiresAt);
-          resolveMe(restored.user);
+          resolveMe!(restored.user);
           return;
         }
         const response = await fetchProfile();
         user.value = response.user;
         lastFetchedAt = Date.now();
-        resolveMe(response.user);
-      } catch {
+        resolveMe!(response.user);
+      } catch (err) {
+        console.error("[auth] fetchMe failed:", err instanceof Error ? err.message : String(err));
         logout();
-        resolveMe(null);
+        resolveMe!(null);
       } finally {
         ready.value = true;
         inflightMe = null;
       }
-    })();
+    };
+
+    execute().catch((err) => {
+      rejectMe(err);
+    });
 
     return inflightMe;
   }
