@@ -143,8 +143,13 @@ export async function renewAuthSession(
   const result = await dbRun(db.update(authSessions).set({
     keyEncrypted: nextState,
     expireAt,
-    lastSeenAt: now()
-  }).where(and(eq(authSessions.id, sessionId), eq(authSessions.keyEncrypted, existing.keyEncrypted))));
+    lastSeenAt: now(),
+    version: existing.version + 1
+  }).where(and(
+    eq(authSessions.id, sessionId),
+    eq(authSessions.keyEncrypted, existing.keyEncrypted),
+    eq(authSessions.version, existing.version)
+  )));
   if (result.changes !== 1) {
     const concurrent = recentRenewals.get(sessionId);
     if (concurrent && concurrent.sourceDigest === presentedDigest && concurrent.validUntil > Date.now()) {

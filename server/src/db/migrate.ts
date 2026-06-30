@@ -174,7 +174,8 @@ function migrateSqlite() {
       key_encrypted TEXT NOT NULL,
       expire_at INTEGER NOT NULL,
       last_seen_at INTEGER NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS spaces (
@@ -371,7 +372,6 @@ function migrateSqlite() {
     CREATE INDEX IF NOT EXISTS uploads_user_idx ON uploads(user_id);
     CREATE INDEX IF NOT EXISTS uploads_doc_idx ON uploads(doc_id);
     CREATE INDEX IF NOT EXISTS uploads_user_created_idx ON uploads(user_id, created_at);
-    CREATE INDEX IF NOT EXISTS uploads_detached_idx ON uploads(detached_at);
     CREATE INDEX IF NOT EXISTS doc_versions_doc_created_idx ON doc_versions(doc_id, created_at);
     CREATE INDEX IF NOT EXISTS forms_owner_idx ON forms(owner_id);
     CREATE INDEX IF NOT EXISTS forms_status_idx ON forms(status);
@@ -381,7 +381,7 @@ function migrateSqlite() {
     CREATE INDEX IF NOT EXISTS operation_logs_target_idx ON operation_logs(target_type, target_id);
     CREATE INDEX IF NOT EXISTS operation_logs_user_idx ON operation_logs(user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS login_failures_dimension_unique ON login_failures(username, scope, dimension, dimension_value);
-    CREATE INDEX IF NOT EXISTS login_failures_lookup_idx ON login_failures(username, scope, dimension);
+    CREATE INDEX IF NOT EXISTS login_failures_lookup_idx ON login_failures(username, scope, dimension, locked_until);
     CREATE INDEX IF NOT EXISTS login_failures_last_failed_idx ON login_failures(last_failed_at);
     CREATE INDEX IF NOT EXISTS login_failures_locked_idx ON login_failures(locked_until);
     CREATE UNIQUE INDEX IF NOT EXISTS danger_verifications_session_unique ON danger_verifications(session_id);
@@ -490,6 +490,7 @@ function migrateSqlite() {
     sqlite.exec("ALTER TABLE auth_sessions ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0");
     sqlite.exec("UPDATE auth_sessions SET last_seen_at = created_at WHERE last_seen_at = 0");
   }
+  if (!hasAuthSessionColumn("version")) sqlite.exec("ALTER TABLE auth_sessions ADD COLUMN version INTEGER NOT NULL DEFAULT 1");
   const formColumns = sqlite.prepare("PRAGMA table_info(forms)").all() as Array<{ name: string }>;
   const hasFormColumn = (name: string) => formColumns.some((column) => column.name === name);
   if (!hasFormColumn("exclusive_info")) sqlite.exec("ALTER TABLE forms ADD COLUMN exclusive_info TEXT");
@@ -580,6 +581,7 @@ async function migrateMysql() {
   }
   await addMysqlColumnIfMissing(databaseName, "auth_sessions", "last_seen_at", "DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
   await mysqlPool.query("UPDATE auth_sessions SET last_seen_at = created_at WHERE last_seen_at IS NULL");
+  await addMysqlColumnIfMissing(databaseName, "auth_sessions", "version", "INT NOT NULL DEFAULT 1");
   await addMysqlColumnIfMissing(databaseName, "shares", "share_token", "VARCHAR(64) NULL");
   await addMysqlColumnIfMissing(databaseName, "forms", "exclusive_info", "TEXT NULL");
   await addMysqlColumnIfMissing(databaseName, "forms", "privacy_notice", "TEXT NULL");
