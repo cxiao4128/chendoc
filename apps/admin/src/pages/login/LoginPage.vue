@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, reactive, ref } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-vue-next";
 import type { SiteConfigView } from "../../api/settings";
@@ -167,6 +167,8 @@ async function resolvePreloadedImage(url: string, fallback: string) {
 }
 
 async function prepareLoginPage() {
+  if (prepareCancelled) return;
+
   takeLoginNotice();
 
   let nextConfig: PublicSiteConfig | null = null;
@@ -177,7 +179,7 @@ async function prepareLoginPage() {
     // Bundled assets remain the fallback.
   }
 
-  if (!nextConfig) {
+  if (prepareCancelled || !nextConfig) {
     wallpaperReady.value = true;
     return;
   }
@@ -193,9 +195,11 @@ async function prepareLoginPage() {
   });
 
   void resolvePreloadedImage(logoUrl, bundledLogoUrl).then((readyLogoUrl) => {
+    if (prepareCancelled) return;
     site.logoUrl = readyLogoUrl;
   });
   void resolvePreloadedImage(wallpaperUrl, bundledWallpaperUrl).then((readyWallpaperUrl) => {
+    if (prepareCancelled) return;
     site.authWallpaperUrl = readyWallpaperUrl;
     wallpaperReady.value = true;
   });
@@ -236,8 +240,15 @@ async function submit() {
   }
 }
 
+let prepareCancelled = false;
+
 onMounted(() => {
+  prepareCancelled = false;
   void prepareLoginPage();
+});
+
+onBeforeUnmount(() => {
+  prepareCancelled = true;
 });
 </script>
 
