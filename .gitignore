@@ -1,3 +1,9 @@
+.agents/
+.codex/
+.playwright-mcp/
+.spectrai/
+.spectrai-worktrees/
+.tools/
 node_modules/
 dist/
 apps/admin/dist/

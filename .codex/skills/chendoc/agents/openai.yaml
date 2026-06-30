@@ -1,4 +1,0 @@
-interface:
-  display_name: "ChenDoc"
-  short_description: "ChenDoc project workflow and validation rules"
-  default_prompt: "Use $chendoc when working on ChenDoc code, local runtime, security, gateway, auth, UI, or release tasks."
