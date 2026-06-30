@@ -25,6 +25,11 @@ export const logs = activeSchema.logs as typeof sqliteSchema.logs;
 export const uniqueShareCode = activeSchema.uniqueShareCode as typeof sqliteSchema.uniqueShareCode;
 export const forms = activeSchema.forms as typeof sqliteSchema.forms;
 export const formSubmissions = activeSchema.formSubmissions as typeof sqliteSchema.formSubmissions;
+export const tags = activeSchema.tags as typeof sqliteSchema.tags;
+export const templates = activeSchema.templates as typeof sqliteSchema.templates;
+export const accessLogs = activeSchema.accessLogs as typeof sqliteSchema.accessLogs;
+export const jwtKeys = activeSchema.jwtKeys as typeof sqliteSchema.jwtKeys;
+export const totpFailures = activeSchema.totpFailures as typeof sqliteSchema.totpFailures;
 
 export type User = typeof sqliteSchema.users.$inferSelect;
 export type NewUser = typeof sqliteSchema.users.$inferInsert;

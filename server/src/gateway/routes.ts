@@ -327,21 +327,22 @@ export async function gatewayRoutes(app: FastifyInstance) {
           ...internalHeaders(request),
           ...(hasBody ? { "content-type": "application/json" } : {})
         },
-        payload: hasBody ? targetRequest.body : undefined
+        payload: (hasBody ? targetRequest.body : undefined) as import("fastify").InjectPayload
       });
 
-      if (GATEWAY_DEBUG && response.statusCode >= 400) {
-        request.log.warn({ action: actionCode, status: response.statusCode, method: targetRequest.method, url: targetRequest.url }, "gateway error response");
+      const injectedResponse = response as { statusCode: number; headers: Record<string, string | string[] | undefined>; body: string };
+
+      if (GATEWAY_DEBUG && injectedResponse.statusCode >= 400) {
+        request.log.warn({ action: actionCode, status: injectedResponse.statusCode, method: targetRequest.method, url: targetRequest.url }, "gateway error response");
       }
 
-      const contentType = Array.isArray(response.headers["content-type"])
-        ? response.headers["content-type"][0]
-        : response.headers["content-type"];
-      const setCookie = response.headers["set-cookie"];
+      const rawContentType = injectedResponse.headers["content-type"];
+      const contentType = Array.isArray(rawContentType) ? rawContentType[0] : rawContentType;
+      const setCookie = injectedResponse.headers["set-cookie"];
       if (setCookie) reply.header("Set-Cookie", setCookie);
       return reply
-        .code(response.statusCode)
-        .send(parseInjectedPayload(response.body, contentType));
+        .code(injectedResponse.statusCode)
+        .send(parseInjectedPayload(injectedResponse.body, contentType));
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Gateway processing failed");
       request.log.error({ action: actionCode, err: error.message }, "gateway processing failed");
