@@ -91,8 +91,12 @@ export const useDocStore = defineStore("doc", () => {
 
   async function loadDoc(docUid: string) {
     const cached = getDetailCache(docUid);
-    if (cached) current.value = cached;
-    else if (current.value?.docUid === docUid) current.value = null;
+    if (cached) {
+      current.value = cached;
+    } else if (current.value?.docUid !== docUid) {
+      // 如果当前文档不是我们要加载的文档，则清除当前文档状态
+      current.value = null;
+    }
 
     currentController?.abort();
     currentController = new AbortController();

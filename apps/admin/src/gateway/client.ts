@@ -43,7 +43,6 @@ interface GatewayResponsePacket<T = unknown> {
 
 interface PackedGatewayBody {
   envelope: { data: string };
-  key: Uint8Array;
 }
 
 interface GatewayAction {
@@ -275,6 +274,11 @@ function signatureInput(input: { action: string; timestamp: number; nonce: strin
 }
 
 export async function packGatewayBody(body: unknown, action = "x0"): Promise<PackedGatewayBody> {
+  const { envelope } = await packGatewayBodyWithKey(body, action);
+  return { envelope };
+}
+
+async function packGatewayBodyWithKey(body: unknown, action = "x0"): Promise<PackedGatewayBody & { key: Uint8Array }> {
   const { keyBox, challenge } = await gatewayCryptoContext(action);
   const key = crypto.getRandomValues(new Uint8Array(32));
   const encryptedKey = await encryptServerKey(bytesToBase64(key), keyBox);
@@ -537,7 +541,7 @@ export function shouldUseGateway(url: string, body?: BodyInit | null) {
 export async function gatewayClientRequest<T>(url: string, options: RequestInit, headers: Headers) {
   const method = (options.method || "GET").toUpperCase();
   const action = resolveGatewayAction(url, method, parseBody(options.body));
-  const packed = await packGatewayBody(action.payload, action.action);
+  const { envelope, key } = await packGatewayBodyWithKey(action.payload, action.action);
   const gatewayHeaders = new Headers(headers);
   gatewayHeaders.set("Content-Type", "application/json");
   gatewayHeaders.set("X-Client-Fingerprint", await clientFingerprint());
@@ -546,10 +550,10 @@ export async function gatewayClientRequest<T>(url: string, options: RequestInit,
     ...options,
     method: "POST",
     headers: gatewayHeaders,
-    body: JSON.stringify(packed.envelope)
+    body: JSON.stringify(envelope)
   });
   const contentType = response.headers.get("Content-Type") || "";
   const rawPayload = contentType.includes("application/json") ? await response.json() : await response.text();
-  const payload = await decryptGatewayResponse<T>(rawPayload, packed.key);
+  const payload = await decryptGatewayResponse<T>(rawPayload, key);
   return { response, payload };
 }

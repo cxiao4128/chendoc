@@ -35,21 +35,29 @@ export const useAuthStore = defineStore("auth", () => {
     if (!force && ready.value && user.value && Date.now() - lastFetchedAt < ME_CACHE_TTL_MS) return user.value;
     if (inflightMe) return inflightMe;
 
-    inflightMe = (async () => {
+    let resolveMe: (value: UserProfile | null) => void;
+    let rejectMe: (error: unknown) => void;
+    inflightMe = new Promise<UserProfile | null>((resolve, reject) => {
+      resolveMe = resolve;
+      rejectMe = reject;
+    });
+
+    (async () => {
       try {
         const { a2: fetchProfile, a4: restoreSession } = await import("../api/auth");
         if (!getAuthToken()) {
           const restored = await restoreSession();
           setSession(restored.user, restored.token, restored.expiresAt);
-          return restored.user;
+          resolveMe(restored.user);
+          return;
         }
         const response = await fetchProfile();
         user.value = response.user;
         lastFetchedAt = Date.now();
-        return response.user;
+        resolveMe(response.user);
       } catch {
         logout();
-        return null;
+        resolveMe(null);
       } finally {
         ready.value = true;
         inflightMe = null;
