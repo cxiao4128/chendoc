@@ -323,3 +323,98 @@ export const formSubmissions = sqliteTable("form_submissions", {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+// ===== 标签模块 =====
+export const tags = sqliteTable("tags", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("#3b82f6"),
+  ownerId: integer("owner_id").references(() => users.id, { onDelete: "cascade" }),
+  docCount: integer("doc_count").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  nameOwnerUnique: uniqueIndex("uk_tags_name_owner").on(table.name, table.ownerId),
+  ownerIdx: index("tags_owner_idx").on(table.ownerId)
+}));
+
+// ===== 模板模块 =====
+export const templates = sqliteTable("templates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  templateUid: text("template_uid").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  html: text("html").notNull().default(""),
+  contentJson: text("content_json").notNull().default(""),
+  sort: integer("sort").notNull().default(0),
+  tags: text("tags").notNull().default("[]"),
+  ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isBuiltIn: integer("is_built_in", { mode: "boolean" }).notNull().default(false),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  nameOwnerUnique: uniqueIndex("uk_templates_name_owner").on(table.title, table.ownerId),
+  ownerIdx: index("templates_owner_idx").on(table.ownerId)
+}));
+
+// ===== 访问统计模块 =====
+export const accessLogs = sqliteTable("access_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  targetType: text("target_type", { enum: ["doc", "form"] }).notNull(),
+  targetId: integer("target_id").notNull(),
+  visitorHash: text("visitor_hash"),
+  ipHash: text("ip_hash"),
+  userAgent: text("user_agent"),
+  device: text("device"),
+  viewedAt: integer("viewed_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  targetIdx: index("access_logs_target_idx").on(table.targetType, table.targetId),
+  ipHashIdx: index("access_logs_ip_hash_idx").on(table.ipHash),
+  timeIdx: index("access_logs_time_idx").on(table.viewedAt)
+}));
+
+// ===== JWT 密钥模块 =====
+export const jwtKeys = sqliteTable("jwt_keys", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  keyId: text("key_id").notNull().unique(),
+  secret: text("secret").notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" })
+}, (table) => ({
+  keyIdUnique: uniqueIndex("uk_jwt_keys_key_id").on(table.keyId),
+  activeIdx: index("jwt_keys_active_idx").on(table.isActive)
+}));
+
+// ===== TOTP 失败记录模块 =====
+export const totpFailures = sqliteTable("totp_failures", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  dimension: text("dimension", { enum: ["account", "ip"] }).notNull(),
+  dimensionValue: text("dimension_value").notNull(),
+  failCount: integer("fail_count").notNull().default(1),
+  firstFailedAt: integer("first_failed_at", { mode: "timestamp_ms" }).notNull(),
+  lastFailedAt: integer("last_failed_at", { mode: "timestamp_ms" }).notNull(),
+  lockedUntil: integer("locked_until", { mode: "timestamp_ms" })
+}, (table) => ({
+  userIdx: index("totp_failures_user_idx").on(table.userId),
+  timeIdx: index("totp_failures_time_idx").on(table.lastFailedAt)
+}));
+
+// ===== 搜索历史模块 =====
+export const searchHistory = sqliteTable("search_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  query: text("query").notNull(),
+  queryHash: text("query_hash").notNull(),
+  searchMode: text("search_mode", { enum: ["fulltext", "quick", "suggestions"] }).notNull().default("fulltext"),
+  resultCount: integer("result_count").notNull().default(0),
+  searchTime: integer("search_time").notNull().default(0),
+  ipHash: text("ip_hash"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  userIdx: index("search_history_user_idx").on(table.userId),
+  queryHashIdx: index("search_history_query_hash_idx").on(table.queryHash),
+  createdIdx: index("search_history_created_idx").on(table.createdAt),
+  userQueryUnique: uniqueIndex("uk_search_history_user_query").on(table.userId, table.queryHash)
+}));

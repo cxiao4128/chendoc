@@ -30,6 +30,7 @@ export const templates = activeSchema.templates as typeof sqliteSchema.templates
 export const accessLogs = activeSchema.accessLogs as typeof sqliteSchema.accessLogs;
 export const jwtKeys = activeSchema.jwtKeys as typeof sqliteSchema.jwtKeys;
 export const totpFailures = activeSchema.totpFailures as typeof sqliteSchema.totpFailures;
+export const searchHistory = activeSchema.searchHistory as typeof sqliteSchema.searchHistory;
 
 export type User = typeof sqliteSchema.users.$inferSelect;
 export type NewUser = typeof sqliteSchema.users.$inferInsert;

@@ -176,3 +176,31 @@ export function getDocVersionPreviewApi(docUid: string, versionId: number) {
 export function restoreDocVersionAsCopyApi(docUid: string, versionId: number) {
   return request<{ doc: DocDetail }>(`/api/docs/${docUid}/versions/${versionId}/restore-copy`, { method: "POST" });
 }
+
+// 导出格式
+export type ExportFormat = "markdown" | "html" | "json";
+
+// 导出文档结果
+export interface ExportedDoc {
+  docUid: string;
+  title: string;
+  content: string;
+  fileName: string;
+}
+
+// 批量导出结果
+export interface BatchExportResult {
+  documents: ExportedDoc[];
+}
+
+// 批量导出文档
+export async function batchExportDocsApi(
+  docUids: string[],
+  format: ExportFormat = "markdown",
+  includeMetadata = true
+): Promise<BatchExportResult> {
+  return request<BatchExportResult>("/api/docs/export", {
+    method: "POST",
+    body: JSON.stringify({ docUids, format, includeMetadata })
+  });
+}

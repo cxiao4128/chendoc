@@ -325,3 +325,98 @@ export const formSubmissions = mysqlTable("form_submissions", {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+// ===== 标签模块 =====
+export const tags = mysqlTable("tags", {
+  id: id(),
+  name: varchar("name", { length: 191 }).notNull(),
+  color: varchar("color", { length: 16 }).notNull().default("#3b82f6"),
+  ownerId: int("owner_id").references(() => users.id, { onDelete: "cascade" }),
+  docCount: int("doc_count").notNull().default(0),
+  createdAt: ts("created_at").notNull()
+}, (table) => [
+  uniqueIndex("uk_tags_name_owner").on(table.name, table.ownerId),
+  index("tags_owner_idx").on(table.ownerId)
+]);
+
+// ===== 模板模块 =====
+export const templates = mysqlTable("templates", {
+  id: id(),
+  templateUid: varchar("template_uid", { length: 32 }).notNull(),
+  title: varchar("title", { length: 191 }).notNull(),
+  summary: text("summary"),
+  html: mediumtext("html").notNull().default(""),
+  contentJson: mediumtext("content_json").notNull().default(""),
+  sort: int("sort").notNull().default(0),
+  tags: text("tags").notNull().default("[]"),
+  ownerId: int("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isBuiltIn: boolean("is_built_in").notNull().default(false),
+  usageCount: int("usage_count").notNull().default(0),
+  createdAt: ts("created_at").notNull(),
+  updatedAt: ts("updated_at").notNull()
+}, (table) => [
+  uniqueIndex("uk_templates_name_owner").on(table.title, table.ownerId),
+  index("templates_owner_idx").on(table.ownerId)
+]);
+
+// ===== 访问统计模块 =====
+export const accessLogs = mysqlTable("access_logs", {
+  id: id(),
+  targetType: varchar("target_type", { length: 16 }).notNull(),
+  targetId: int("target_id").notNull(),
+  visitorHash: varchar("visitor_hash", { length: 64 }),
+  ipHash: varchar("ip_hash", { length: 64 }),
+  userAgent: text("user_agent"),
+  device: varchar("device", { length: 32 }),
+  viewedAt: ts("viewed_at").notNull()
+}, (table) => [
+  index("access_logs_target_idx").on(table.targetType, table.targetId),
+  index("access_logs_ip_hash_idx").on(table.ipHash),
+  index("access_logs_time_idx").on(table.viewedAt)
+]);
+
+// ===== JWT 密钥模块 =====
+export const jwtKeys = mysqlTable("jwt_keys", {
+  id: id(),
+  keyId: varchar("key_id", { length: 64 }).notNull().unique(),
+  secret: text("secret").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: ts("created_at").notNull(),
+  expiresAt: datetime("expires_at")
+}, (table) => [
+  uniqueIndex("uk_jwt_keys_key_id").on(table.keyId),
+  index("jwt_keys_active_idx").on(table.isActive)
+]);
+
+// ===== TOTP 失败记录模块 =====
+export const totpFailures = mysqlTable("totp_failures", {
+  id: id(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  dimension: varchar("dimension", { length: 16 }).notNull(),
+  dimensionValue: varchar("dimension_value", { length: 191 }).notNull(),
+  failCount: int("fail_count").notNull().default(1),
+  firstFailedAt: ts("first_failed_at").notNull(),
+  lastFailedAt: ts("last_failed_at").notNull(),
+  lockedUntil: datetime("locked_until")
+}, (table) => [
+  index("totp_failures_user_idx").on(table.userId),
+  index("totp_failures_time_idx").on(table.lastFailedAt)
+]);
+
+// ===== 搜索历史模块 =====
+export const searchHistory = mysqlTable("search_history", {
+  id: id(),
+  userId: int("user_id").notNull(),
+  query: varchar("query", { length: 255 }).notNull(),
+  queryHash: varchar("query_hash", { length: 64 }).notNull(),
+  searchMode: varchar("search_mode", { length: 16 }).notNull().default("fulltext"),  // fulltext | quick | suggestions
+  resultCount: int("result_count").notNull().default(0),
+  searchTime: int("search_time").notNull().default(0),  // 毫秒
+  ipHash: varchar("ip_hash", { length: 64 }),
+  createdAt: ts("created_at").notNull()
+}, (table) => [
+  index("search_history_user_idx").on(table.userId),
+  index("search_history_query_hash_idx").on(table.queryHash),
+  index("search_history_created_idx").on(table.createdAt),
+  uniqueIndex("uk_search_history_user_query").on(table.userId, table.queryHash)
+]);
