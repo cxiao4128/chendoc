@@ -2,18 +2,17 @@
 
 **项目路径**: `d:/desktop/bixu/js/chensdoc-claude`
 **生成时间**: 2026-06-30
-**报告状态**: 初稿（安全审查与性能审查报告待完成）
+**报告状态**: ✅ 完整版（所有审计已完成）
 
 ---
 
 ## 一、审计范围
 
-| 审计类型 | 状态 | 报告文件 |
-|----------|------|----------|
-| 代码审查 | ✅ 已完成 | `code-review-report.md` |
-| 安全审查 | ⏳ 待完成 | `security-audit-report.md` |
-| 性能审查 | ⏳ 待完成 | `performance-audit-report.md` |
-| UI 分析 | ✅ 已完成 | `ui-analysis-report.md` |
+| 审计类型 | 状态 | 报告文件 | 发现数量 |
+|----------|------|----------|----------|
+| 代码审查 | ✅ 已完成 | `code-review-report.md` | Critical 5 / Major 9 / Minor 8 |
+| 安全审查 | ✅ 已完成 | `security-audit-report.md` | 高危 1 / 中危 2 / 低危 5 |
+| 性能审查 | ✅ 已完成 | `performance-audit-report.md` | High 1 / Medium 4 / Low 3 |
 
 ---
 
@@ -21,80 +20,85 @@
 
 ### 2.1 Critical / P0 问题（必须立即修复）
 
-#### 2.1.1 安全性问题
+#### 代码质量 - Critical
 
 | ID | 问题 | 文件 | 影响 |
 |----|------|------|------|
-| SEC-001 | Gateway 客户端 nonce 可预测 | `apps/admin/src/gateway/client.ts:150-220` | 重放攻击风险 |
-| SEC-002 | 表单 IP 限流可被绕过 | `server/src/modules/forms/forms.service.ts:280-320` | 暴力破解防护失效 |
-| SEC-003 | 文档加密密钥内存泄露风险 | `server/src/utils/documentCrypto.ts` | 密钥安全 |
-| SEC-004 | 加密/解密返回值可能为 undefined | `server/src/gateway/packet.ts` | 类型安全 |
-| SEC-005 | 缺少请求超时类型检查 | `apps/admin/src/gateway/client.ts` | 请求悬挂 |
+| CODE-C001 | 数据库客户端使用 `any` 类型 | `server/src/db/client.ts:60` | 完全丢失 ORM 类型安全 |
+| CODE-C002 | fetch 请求缺少超时控制 | `apps/admin/src/gateway/client.ts:549` | 网络问题导致请求无限期挂起 |
+| CODE-C003 | 生产环境调试日志泄露 | `server/src/gateway/routes.ts:8` | 敏感信息暴露 |
+| CODE-C004 | 解密函数缺少错误类型检查 | `server/src/gateway/packet.ts:117` | 非预期错误未被捕获 |
+| CODE-C005 | 异步错误被静默吞噬 | `apps/admin/src/stores/auth.ts:58-60` | 用户不知情状态下失败 |
 
-#### 2.1.2 类型安全与错误处理
-
-| ID | 问题 | 文件 | 影响 |
-|----|------|------|------|
-| CODE-001 | Pinia store 缺少错误边界 | `apps/admin/src/stores/*.ts` | 未捕获异常导致状态不一致 |
-| CODE-002 | API 路由缺少统一错误处理 | `server/src/modules/**/*.ts` | 错误响应格式不统一 |
-| CODE-003 | API 路由缺少参数验证 | `server/src/gateway/routes.ts:23` | 潜在注入风险 |
-
-#### 2.1.3 UI/无障碍问题
+#### 安全性 - Critical
 
 | ID | 问题 | 文件 | 影响 |
 |----|------|------|------|
-| UI-001 | 硬编码颜色未使用 CSS 变量 | `apps/admin/src/styles/doc-list.css` | 暗黑模式失效 |
-| UI-002 | ARIA 标签缺失 | `DocListPage.vue`, `SettingsPage.vue`, `TrashPage.vue` | 无障碍合规 |
+| SEC-C001 | HMAC 密钥派生未使用 HKDF | `server/src/gateway/packet.ts:52-56` | 不符合 NIST SP 800-56C 标准 |
 
 ---
 
-### 2.2 Major / P1 问题（建议近期修复）
+### 2.2 High / P1 问题（建议近期修复）
 
-#### 2.2.1 代码质量问题
+#### 性能问题
 
-| ID | 问题 | 文件 | 建议 |
+| ID | 问题 | 文件 | 影响 |
 |----|------|------|------|
-| CODE-004 | Vue Props 缺少验证 | `apps/admin/src/views/**/*.vue` | 使用 TypeScript 泛型 |
-| CODE-005 | 响应式数据未初始化 | `apps/admin/src/components/**/*.vue` | 提供明确初始值 |
-| CODE-006 | 生命周期清理缺失 | `apps/admin/src/**/*.vue` | 添加 onUnmounted 处理 |
-| CODE-007 | 命名不一致 | 全局 | 统一 camelCase |
-| CODE-008 | 未使用可选链 | `apps/admin/src/` | 使用 `?.` 运算符 |
-| CODE-009 | 数据库查询未检查空值 | `server/src/db/**/*.ts` | 添加空值断言或检查 |
+| PERF-H001 | DocListPage computed 重复遍历数组 | `apps/admin/src/pages/docs/DocListPage.vue:74-126` | 500+ 文档时明显卡顿 |
 
-#### 2.2.2 安全性问题
+#### 安全性问题
 
-| ID | 问题 | 文件 | 建议 |
+| ID | 问题 | 文件 | 影响 |
 |----|------|------|------|
-| SEC-006 | 分享码缓存 TTL 不一致 | `server/src/modules/shares/shares.service.ts` | 统一配置常量 |
-| SEC-007 | JWT 密钥轮换缺失 | `server/src/modules/auth/auth.routes.ts` | 实现 kid 版本支持 |
-| SEC-008 | 上传文件签名验证未强制 | `server/src/modules/uploads/uploads.service.ts` | 设为必选项 |
-| SEC-009 | 表单字段 JSON Schema 注入风险 | `server/src/modules/forms/forms.service.ts` | 严格输入验证 |
-| SEC-010 | 错误信息泄露堆栈 | `server/src/plugins/error-handler.ts` | 生产环境隐藏堆栈 |
+| SEC-M001 | 文件扩展名白名单可绕过 | `server/src/modules/uploads/uploads.service.ts:67-103` | 双扩展名攻击风险 |
+| SEC-M002 | 会话刷新并发容忍不足 | `server/src/modules/auth/session.service.ts:143-154` | 高频场景下合法用户被拒绝 |
 
-#### 2.2.3 UI/UX 问题
+#### 代码质量问题
 
-| ID | 问题 | 文件 | 建议 |
+| ID | 问题 | 文件 | 影响 |
 |----|------|------|------|
-| UI-003 | font-weight 超出有效范围 | `doc-list.css:443` | 改为 700 |
-| UI-004 | 断点不统一 | `app-sidebar.css`, `doc-list.css` | 收敛为 2-3 个主断点 |
-| UI-005 | 过渡动画时长不一致 | `doc-list.css`, `base.css` | 统一为 150ms |
-| UI-006 | 移动端 z-index 层级未统一 | `doc-list.css:699` | 定义 CSS 变量 |
-| UI-007 | 键盘导航焦点样式缺失 | `DocListPage.vue` | 添加 outline 过渡 |
+| CODE-M001 | dbAll/dbGet 默认类型为 any | `server/src/db/client.ts:62-70` | 隐式类型丢失 |
+| CODE-M002 | Schema 验证分散各处 | `server/src/modules/docs/docs.routes.ts:33-42` | 维护困难 |
+| CODE-M003 | ChendocEditor 使用 `(editor as any)` | `apps/admin/src/components/editor/ChendocEditor.vue:248,535` | 类型安全缺口 |
+| CODE-M004 | LoginPage async 操作无取消机制 | `apps/admin/src/pages/login/LoginPage.vue:239-241` | 组件卸载后继续执行 |
 
 ---
 
-### 2.3 Minor / P2 问题（可选优化）
+### 2.3 Medium / P2 问题（中期优化）
+
+#### 性能问题
 
 | ID | 问题 | 文件 | 建议 |
 |----|------|------|------|
-| CODE-010 | 重复的错误处理逻辑 | `apps/admin/src/gateway/client.ts` | 抽取为独立函数 |
-| CODE-011 | 重复的验证中间件 | `server/src/modules/**/` | 使用共享验证函数 |
-| CODE-012 | 关键函数缺少 JSDoc | `server/src/utils/*.ts`, `apps/admin/src/stores/*.ts` | 添加文档注释 |
-| CODE-013 | 硬编码魔法数字 | 多处 | 提取为命名常量 |
-| CODE-014 | 缓存未设置大小限制 | `server/src/gateway/packet.ts` | 添加最大条目数限制 |
-| UI-008 | 字号层级过多 | `doc-list.css` | 收敛为 3-4 档 |
-| UI-009 | CSS 类命名 BEM 不一致 | `doc-list.css` | 统一命名规范 |
-| UI-010 | prefers-reduced-motion 覆盖不完整 | `doc-list.css` | 添加 motion 媒体查询 |
+| PERF-M001 | Gateway 双层序列化开销 | `server/src/gateway/routes.ts:321-329` | 评估收益后决定是否优化 |
+| PERF-M002 | 中文搜索无全文索引 | `server/src/modules/docs/docs.service.ts` | 10万+文档时性能下降 |
+| PERF-M003 | 图片资源未懒加载 | `DocListPage.vue:656` | 多图同时加载 |
+| PERF-M004 | 文档列表无缓存 | `apps/admin/src/stores/doc.ts` | 每次重新请求 |
+
+#### 安全性问题
+
+| ID | 问题 | 文件 | 建议 |
+|----|------|------|------|
+| SEC-L001 | isSuperAdminDoc 类型宽松 | `server/src/modules/docs/documentAccess.ts:22` | 添加 DB 约束 |
+| SEC-L002 | 前端路由隔离需审查 | `apps/admin/src/router/access.ts` | 确保验证正确 |
+| SEC-S001 | RSA 私钥加密未派生 | `server/src/modules/crypto/crypto.service.ts:68` | 使用 HKDF 派生 |
+| SEC-S002 | 调试模式日志泄漏 | `server/src/config/jwt.ts:42` | 生产环境过滤 |
+| SEC-S003 | 登录锁定时间无上限 | `server/src/modules/auth/auth.service.ts:61-65` | 可能被 DoS |
+
+---
+
+### 2.4 Low / Minor 问题（可选优化）
+
+| ID | 问题 | 文件 | 建议 |
+|----|------|------|------|
+| CODE-N001 | loginFailures 查询未用覆盖索引 | `server/src/modules/auth/loginRisk.service.ts` | 添加复合索引 |
+| CODE-N002 | 详情缓存无最大条目限制 | `apps/admin/src/stores/doc.ts:14` | 添加 MAX_SIZE |
+| CODE-N003 | 正则表达式在循环中创建 | `DocListPage.vue:322` | 提取到循环外 |
+| CODE-N004 | 多处硬编码魔法数字 | 多处 | 提取为常量 |
+| CODE-N005 | 关键函数缺少 JSDoc | `server/src/utils/*.ts` | 添加文档注释 |
+| CODE-N006 | 路由解析重复逻辑 | `apps/admin/src/gateway/client.ts:390-529` | 使用映射表 |
+| CODE-N007 | 审计日志写入重复 | `server/src/modules/**/*.ts` | 抽取辅助函数 |
+| CODE-N008 | 未使用可选链 | `apps/admin/src/` | 使用 `?.` 运算符 |
 
 ---
 
@@ -104,60 +108,57 @@
 
 | 优先级 | 问题数 | 关键问题 |
 |--------|--------|----------|
-| Critical | 2 | nonce 可预测、类型安全 |
-| Major | 1 | 缓存大小无限制 |
-| Minor | 1 | 魔法数字未外化 |
+| Critical | 3 | db:any 类型、HMAC 未用 HKDF、调试日志泄露 |
+| High | 1 | 双层序列化开销 |
+| Medium | 0 | - |
+| Low | 2 | 缓存无上限、正则循环创建 |
 
 ### 3.2 认证与授权
 
 | 优先级 | 问题数 | 关键问题 |
 |--------|--------|----------|
-| Critical | 0 | - |
-| Major | 3 | JWT 轮换缺失、会话存储、IP 限流绕过 |
-| Minor | 2 | 错误信息泄露、魔法数字 |
+| Critical | 1 | 异步错误静默吞噬 |
+| High | 1 | 会话刷新并发容忍 |
+| Medium | 3 | 锁定无上限、日志泄漏、审计覆盖 |
+| Low | 1 | 索引优化 |
 
 ### 3.3 文档管理
 
 | 优先级 | 问题数 | 关键问题 |
 |--------|--------|----------|
-| Critical | 1 | 加密密钥管理 |
-| Major | 2 | 空值处理、Props 验证 |
-| Minor | 1 | 重复代码 |
+| Critical | 0 | - |
+| High | 1 | computed 重复遍历 |
+| Medium | 2 | 中文搜索无索引、列表无缓存 |
+| Low | 1 | 缓存无上限 |
 
-### 3.4 API 路由与服务
+### 3.4 上传与存储
 
 | 优先级 | 问题数 | 关键问题 |
 |--------|--------|----------|
-| Critical | 2 | 参数验证、错误处理 |
-| Major | 3 | JSON Schema 注入、TTL 不一致、签名验证 |
-| Minor | 2 | 重复验证逻辑 |
+| Critical | 0 | - |
+| High | 1 | 文件扩展名白名单绕过 |
+| Medium | 1 | 图片懒加载缺失 |
+| Low | 0 | - |
 
 ### 3.5 前端组件（Vue）
 
 | 优先级 | 问题数 | 关键问题 |
 |--------|--------|----------|
-| Critical | 1 | Pinia store 错误边界 |
-| Major | 4 | Props 验证、响应式初始化、生命周期清理、可选链 |
-| Minor | 2 | JSDoc 缺失、代码重复 |
-
-### 3.6 UI/CSS
-
-| 优先级 | 问题数 | 关键问题 |
-|--------|--------|----------|
-| P0 | 3 | 硬编码颜色、ARIA 缺失、暗黑模式 |
-| P1 | 5 | 断点、动画、z-index、焦点样式 |
-| P2 | 4 | 字号、命名规范、motion 偏好 |
+| Critical | 1 | fetch 缺少超时 |
+| High | 2 | Props 类型断言、async 无取消 |
+| Medium | 1 | Schema 分散 |
+| Low | 3 | JSDoc、重复代码、可选链 |
 
 ---
 
 ## 四、问题统计
 
-| 类别 | Critical/P0 | Major/P1 | Minor/P2 | 合计 |
-|------|-------------|----------|----------|------|
-| 安全性 | 5 | 5 | 2 | 12 |
-| 代码质量 | 3 | 6 | 5 | 14 |
-| UI/UX | 3 | 5 | 4 | 12 |
-| **总计** | **11** | **16** | **11** | **38** |
+| 类别 | Critical | High/High | Medium | Low/Minor | 合计 |
+|------|----------|------------|--------|-----------|------|
+| 代码质量 | 5 | 4 | 1 | 6 | 16 |
+| 安全性 | 1 | 2 | 2 | 5 | 10 |
+| 性能 | 0 | 1 | 4 | 3 | 8 |
+| **总计** | **6** | **7** | **7** | **14** | **34** |
 
 ---
 
@@ -165,25 +166,29 @@
 
 ### 第一优先级（立即修复，预计 1-2 天）
 
-1. **SEC-001**: 修复 Gateway nonce 生成，使用 `crypto.getRandomValues()`
-2. **SEC-002**: 修复 IP 限流绕过风险，添加反向代理信任验证
-3. **SEC-003**: 确保加密密钥不在错误日志中打印
-4. **CODE-001**: 为所有 Pinia store 添加 try-catch 错误边界
-5. **UI-001**: 替换 doc-list.css 中的硬编码颜色为 CSS 变量
+1. **[P0]** `server/src/db/client.ts:60` - 修复 `db: any` 类型问题
+2. **[P0]** `apps/admin/src/gateway/client.ts:549` - 添加 fetch 超时控制
+3. **[P0]** `server/src/gateway/packet.ts:52` - 改用 HKDF 密钥派生
+4. **[P1]** `apps/admin/src/stores/auth.ts:58` - 改进错误处理
+5. **[P1]** `server/src/gateway/routes.ts:8` - 生产环境禁用调试日志
+6. **[P1]** `apps/admin/src/pages/docs/DocListPage.vue:74-126` - 优化 computed 遍历
 
 ### 第二优先级（近期修复，预计 1 周）
 
-1. **CODE-002**: 统一 API 错误响应格式
-2. **CODE-004**: 为 Vue 组件添加 Props TypeScript 类型
-3. **SEC-006 ~ SEC-010**: 修复剩余安全性问题
-4. **UI-002**: 补充所有 icon-only 按钮的 ARIA 标签
-5. **UI-004 ~ UI-007**: 统一断点、动画、z-index 系统
+1. **[P1]** `server/src/modules/uploads/uploads.service.ts` - 文件名规范化
+2. **[P1]** `server/src/modules/auth/session.service.ts` - 提高并发容错率
+3. **[P2]** `server/src/db/client.ts:62-70` - dbAll/dbGet 默认类型
+4. **[P2]** `apps/admin/src/components/editor/ChendocEditor.vue` - 移除类型断言
+5. **[P2]** `server/src/modules/docs/docs.routes.ts` - Schema 集中管理
+6. **[P2]** `server/src/modules/auth/auth.service.ts` - 添加锁定上限
 
 ### 第三优先级（计划修复，预计 2-4 周）
 
-1. **CODE-005 ~ CODE-009**: 代码质量改进
-2. **UI-008 ~ UI-010**: UI/UX 细节优化
-3. **架构优化**: JWT 密钥轮换机制、文档加密 KMS 集成
+1. **[P2]** 文档列表缓存策略
+2. **[P2]** 中文全文搜索方案评估
+3. **[P3]** 提取魔法数字为常量
+4. **[P3]** 添加关键函数 JSDoc
+5. **[P3]** 消除重复代码
 
 ---
 
@@ -191,41 +196,63 @@
 
 | 实践项 | 状态 | 备注 |
 |--------|------|------|
-| SQL 注入防护 | ✅ | Drizzle ORM 参数化查询 |
-| XSS 防护 | ✅ | HTML 强制清洗 |
-| CSRF 防护 | ✅ | SameSite Cookie + 请求签名 |
-| 密码存储 | ✅ | bcrypt 哈希 |
-| 敏感数据加密 | ✅ | AES-256-GCM 文档加密 |
-| 速率限制 | ⚠️ | IP 限流存在绕过风险 |
-| 会话管理 | ✅ | JWT + 自动刷新 |
-| 错误处理 | ⚠️ | 非生产环境暴露堆栈 |
+| SQL 注入防护 | ✅ 优秀 | Drizzle ORM 参数化查询 |
+| XSS 防护 | ✅ 良好 | sanitize-html + JSON 渲染 |
+| CSRF 防护 | ✅ 良好 | SameSite Cookie + 请求签名 |
+| 密码存储 | ✅ 优秀 | Argon2id 优先，bcrypt 降级 |
+| 敏感数据加密 | ✅ 优秀 | AES-256-GCM 文档加密 |
+| 密钥派生 | ⚠️ 待改进 | 建议改用 HKDF |
+| 会话管理 | ✅ 良好 | Token 轮换 + Digest 追踪 |
+| 错误处理 | ⚠️ 待改进 | 部分静默失败 |
+| 速率限制 | ✅ 良好 | IP 限流 + 登录风险评估 |
 
 ---
 
-## 七、后续工作
+## 七、架构亮点
 
-1. **安全审查报告**: 建议进行渗透测试和依赖漏洞扫描
-2. **性能审查报告**: 建议进行 API 响应时间测试和数据库查询分析
-3. **暗黑模式测试**: 需在 `doc-list.css` 修复后进行完整测试
-4. **无障碍审计**: 建议集成 `eslint-plugin-jsx-a11y` 到构建流程
+1. **双层加密链路**: Gateway packet 加密 + JWT 会话加密，双重防护
+2. **无 SQL 注入**: 全程 Drizzle ORM 参数化
+3. **防御纵深**: 文件上传有 4 层验证 (MIME、Content-Type、签名、病毒扫描)
+4. **会话安全**: Token 轮换 + Digest 追踪 + 并发保护
+5. **XSS 防护**: sanitize-html 净化 + JSON 安全渲染
+6. **数据库索引**: 覆盖常见查询模式，设计合理
+7. **缓存策略**: TTL + LRU 驱逐机制完善
+8. **代码分割**: Vite 按功能模块分离
 
 ---
 
-## 八、附录
+## 八、后续工作
+
+1. **渗透测试**: 对 High/Critical 问题进行专项渗透测试
+2. **依赖扫描**: 定期执行 `npm.cmd run security:audit`
+3. **性能压测**: 评估 Gateway 双层序列化优化收益
+4. **中文搜索**: 评估全文索引方案（Elasticsearch/MeiliSearch）
+5. **暗黑模式**: 待 `doc-list.css` 修复后进行完整测试
+
+---
+
+## 九、附录
 
 ### A. 已有报告列表
 
 - `code-review-report.md` - 代码质量审计报告
-- `195931da-f760-44ef-a2ba-761a76c6aa27-code-review.md` - ChenDoc 代码审查报告（详细版）
-- `ui-analysis-report.md` - UI 现状分析报告
+- `security-audit-report.md` - 安全审计报告
+- `performance-audit-report.md` - 性能审计报告
 
-### B. 待生成报告
+### B. 核心文件位置
 
-- `security-audit-report.md` - 安全审查报告（待完成）
-- `performance-audit-report.md` - 性能审查报告（待完成）
+| 用途 | 文件 |
+|------|------|
+| 变更规范 | `chendoc/更改必读规范.md` |
+| Gateway 后端 | `server/src/gateway/routes.ts`, `middleware.ts`, `packet.ts` |
+| Gateway 前端 | `apps/admin/src/gateway/client.ts` |
+| 路由权限 | `apps/admin/src/router/access.ts` |
+| 文档加密 | `server/src/utils/documentCrypto.ts` |
 
 ---
 
-*本报告为 ChenDoc 项目综合审计汇总，待安全审查和性能审查完成后将更新至最终版本。*
-
-*报告生成：技术文档工程师 | ChenDoc 项目审计*
+*报告生成：ChenDoc 项目审计团队*
+*代码审查：code-reviewer*
+*安全审查：security-reviewer*
+*性能审查：performance-optimizer*
+*汇总整理：technical-writer*
