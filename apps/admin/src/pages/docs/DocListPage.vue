@@ -71,7 +71,34 @@ function docTags(doc: { tags?: string[] | string | null }) {
   try { return JSON.parse(doc.tags) as string[]; } catch { return []; }
 }
 
-const availableTags = computed(() => Array.from(new Set(allDocs.value.flatMap(docTags))).sort((a, b) => a.localeCompare(b, "zh-CN")));
+// 单一派生数据源 - 单次遍历计算所有统计数据
+const docStats = computed(() => {
+  const docs = allDocs.value;
+  let published = 0, shared = 0, review = 0, draft = 0, unshared = 0;
+  const tags = new Set<string>();
+  for (const doc of docs) {
+    if (doc.status === "published") published++;
+    else draft++;
+    if (doc.shareCode && doc.shareEnabled) shared++;
+    else unshared++;
+    if (doc.shareReviewStatus === "pending") review++;
+    docTags(doc).forEach(t => tags.add(t));
+  }
+  return {
+    total: docs.length,
+    published, shared, review, draft, unshared,
+    availableTags: Array.from(tags).sort((a, b) => a.localeCompare(b, "zh-CN"))
+  };
+});
+
+// 统计派生属性（复用 docStats）
+const totalCount = computed(() => docStats.value.total);
+const publishedCount = computed(() => docStats.value.published);
+const sharedCount = computed(() => docStats.value.shared);
+const reviewCount = computed(() => docStats.value.review);
+const draftCount = computed(() => docStats.value.draft);
+const unsharedCount = computed(() => docStats.value.unshared);
+const availableTags = computed(() => docStats.value.availableTags);
 const visibleDocs = computed(() => {
   const viewFiltered = activeView.value === "published"
     ? allDocs.value.filter((doc) => doc.status === "published")
@@ -118,12 +145,6 @@ let searchTimer: number | null = null;
 const listErrorText = computed(() => normalizeError((docs as unknown as DocStoreCompat).listError) || localListError.value);
 const selectedCount = computed(() => selectedDocUids.value.size);
 const allVisibleSelected = computed(() => !!visibleDocs.value.length && visibleDocs.value.every((doc) => selectedDocUids.value.has(doc.docUid)));
-const totalCount = computed(() => allDocs.value.length);
-const publishedCount = computed(() => allDocs.value.filter((doc) => doc.status === "published").length);
-const sharedCount = computed(() => allDocs.value.filter((doc) => doc.shareCode && doc.shareEnabled).length);
-const reviewCount = computed(() => allDocs.value.filter((doc) => doc.shareReviewStatus === "pending").length);
-const draftCount = computed(() => allDocs.value.filter((doc) => doc.status !== "published").length);
-const unsharedCount = computed(() => allDocs.value.filter((doc) => !doc.shareCode || !doc.shareEnabled).length);
 const ownerName = computed(() => auth.user?.username || "xchen");
 const showOwnerColumn = computed(() => managedUserCount.value > 1 || allDocs.value.some((doc) => doc.ownerId !== auth.user?.id));
 const storageTotalBytes = computed(() => systemStatus.value?.storage.totalBytes || 0);
@@ -653,7 +674,7 @@ watch(visibleDocs, (items) => {
                 <small v-else>/ {{ doc.docUid }}</small>
               </span>
               <span>{{ statusText(doc.status) }}</span>
-              <span v-if="showOwnerColumn" class="doc-list-page__owner"><img :src="logoUrl" alt="" />{{ doc.ownerUsername || ownerName }}</span>
+              <span v-if="showOwnerColumn" class="doc-list-page__owner"><img :src="logoUrl" alt="" loading="lazy" />{{ doc.ownerUsername || ownerName }}</span>
               <span>{{ formatDate(doc.updatedAt) }}</span>
               <code>{{ shareStatusText(doc) }}</code>
               <span class="doc-list-page__ops" @click.stop>
