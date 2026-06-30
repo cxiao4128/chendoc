@@ -38,6 +38,11 @@ type InsertCommand =
   | "size18"
   | "size20";
 
+// TipTap chain() returns a generic CommandChain type that can't fully type extension methods.
+// These are extension-provided methods like setVideo (video extension) and insertTable (table extension).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TipTapCommandChain = ReturnType<Editor["chain"]> & { setVideo: any; insertTable: any; updateAttributes: any };
+
 const props = defineProps<{
   docUid: string;
   contentJson: string;

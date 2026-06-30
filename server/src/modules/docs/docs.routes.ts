@@ -27,19 +27,20 @@ import {
   updateDocByUid
 } from "./docs.service.js";
 
+export const docUidSchema = z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/);
+export const listQuerySchema = z.object({
+  q: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(50).default(30)
+});
+export const docUidParamSchema = z.object({ docUid: docUidSchema });
+export const trashBulkSchema = z.object({
+  docUids: z.array(docUidSchema).min(1).max(200)
+});
+
 export async function docsRoutes(app: FastifyInstance) {
   const superAdminOnly = [authenticate, requireSuperAdmin];
   const dangerousSuperAdmin = [authenticate, requireSuperAdmin, requireDangerVerification];
-  const listQuerySchema = z.object({
-    q: z.string().optional(),
-    page: z.coerce.number().int().positive().default(1),
-    pageSize: z.coerce.number().int().positive().max(50).default(30)
-  });
-  const docUidSchema = z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/);
-  const docUidParamSchema = z.object({ docUid: docUidSchema });
-  const trashBulkSchema = z.object({
-    docUids: z.array(docUidSchema).min(1).max(200)
-  });
 
   app.get("/api/docs", { preHandler: authenticate }, async (request) => {
     const query = listQuerySchema.parse(request.query);

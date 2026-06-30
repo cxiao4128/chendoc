@@ -85,14 +85,15 @@ export async function login(input: unknown, meta: {
   const body = loginPayloadSchema.parse(input);
   const password = body.password;
   const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.username, body.username)).limit(1));
-  const riskInput = { username: body.username, scope: user?.role === "admin" ? "admin" as const : "user" as const, ip: meta.ip };
+  if (!user) {
+    const riskInput = { username: body.username, scope: "user" as const, ip: meta.ip };
+    await recordLoginFailure(riskInput);
+    throw invalidCredentials();
+  }
+  const riskInput = { username: body.username, scope: user.role === "admin" ? "admin" as const : "user" as const, ip: meta.ip };
   const risk = await assessLoginRisk(riskInput);
   if (risk.lockedUntil || risk.waitMs) {
     throw loginLocked(risk);
-  }
-  if (!user) {
-    await recordLoginFailure(riskInput);
-    throw invalidCredentials();
   }
   if (user.status !== "active") {
     await recordLoginFailure(riskInput);
