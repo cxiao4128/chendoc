@@ -8,13 +8,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const serverDir = resolve(here, "../..");
 const projectRoot = resolve(serverDir, "..");
 
-for (const envPath of [
-  resolve(projectRoot, ".env"),
-  resolve(serverDir, ".env"),
-  resolve(process.cwd(), ".env")
-]) {
-  if (existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
+const isE2ETesting = process.env.CHENDOC_E2E_TESTING === "true";
+
+// E2E 测试模式下跳过 .env 加载，使用 global-setup 传入的环境变量
+if (!isE2ETesting) {
+  for (const envPath of [
+    resolve(projectRoot, ".env"),
+    resolve(serverDir, ".env"),
+    resolve(process.cwd(), ".env")
+  ]) {
+    if (existsSync(envPath)) {
+      dotenv.config({ path: envPath, override: false });
+    }
   }
 }
 

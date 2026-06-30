@@ -30,6 +30,8 @@ import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
 import { ChendocImage } from "./chendoc-image-extension";
 import { Video } from "./video-extension";
+import Color from "@tiptap/extension-color";
+import Highlight from "@tiptap/extension-highlight";
 
 const lowlight = createLowlight({
   bash,
@@ -78,6 +80,8 @@ export function createChendocEditor(options: Record<string, unknown>) {
       CodeBlockLowlight.configure({ lowlight }),
       ChendocImage.configure({ HTMLAttributes: { loading: "lazy" } }),
       Video,
+      Color,
+      Highlight.configure({ multicolor: true }),
       Link.configure({
         openOnClick: false,
         autolink: true,

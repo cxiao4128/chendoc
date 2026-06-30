@@ -3,9 +3,7 @@
 
 import { ref } from "vue";
 import JSZip from "jszip";
-import { batchExportDocsApi, type ExportFormat, type BatchExportResult } from "../api/docs.js";
-
-export type { ExportFormat };
+import { batchExportDocsApi, type ExportFormat } from "../api/docs.js";
 
 export interface ExportOptions {
   format: ExportFormat;
@@ -27,7 +25,7 @@ export function useExport() {
     progress.value = 0;
 
     try {
-      const result = await batchExportDocsApi([docId], options.format, options.includeMetadata ?? true);
+      const result = await batchExportDocsApi([String(docId)], options.format, options.includeMetadata ?? true);
       if (result.documents.length === 0) {
         error.value = "文档不存在或无权访问";
         return;
@@ -55,7 +53,7 @@ export function useExport() {
     error.value = "";
 
     try {
-      const result = await batchExportDocsApi(docIds, options.format, options.includeMetadata ?? true);
+      const result = await batchExportDocsApi(docIds.map(String), options.format, options.includeMetadata ?? true);
       const zip = new JSZip();
       const folderName = options.fileName || "chendoc_export";
 

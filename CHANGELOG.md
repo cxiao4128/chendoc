@@ -4,6 +4,30 @@
 
 ## 中文
 
+### 3.0.0
+
+版本号：`3.0.0`
+
+展示版本：`v3.0.0`
+
+**核心架构/功能升级**
+
+- 深色模式：支持主题切换，自动跟随系统偏好
+- 编辑器增强：颜色批注功能，文字颜色和背景色选择器
+- 移动端优化：响应式布局，触摸友好的编辑器工具栏
+- 看板视图：支持看板模式查看和管理文档
+- 大文档性能优化：虚拟滚动，懒加载优化
+- 全文搜索增强：高亮匹配、排序优化、搜索建议和历史记录
+- 标签系统：多级标签、批量操作、合并/重命名、使用统计、树形展示
+- PDF导出：支持将文档导出为PDF格式
+- 文档评论批注：支持文档内评论和批注功能
+- 定时发布：支持文档定时发布
+- 开放API：提供RESTful API接口
+- Vitest v4配置升级：修复poolOptions配置弃用警告
+- TipTap统一升级至3.27.1版本
+
+更新时间：2026-07-01 +08:00
+
 ### 2.9.3
 
 版本号：`2.9.3`
@@ -355,6 +379,30 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 3.0.0
+
+Version: `3.0.0`
+
+Display version: `v3.0.0`
+
+Changes:
+
+- Dark mode: Theme switching support, auto-detect system preference
+- Editor enhancement: Color annotation feature, text color and background color pickers
+- Mobile optimization: Responsive layout, touch-friendly editor toolbar
+- Kanban view: Kanban mode for document management
+- Large document performance optimization: Virtual scrolling, lazy loading
+- Full-text search enhancement: Match highlighting, sort optimization, search suggestions and history
+- Tag system: Hierarchical tags, batch operations, merge/rename, usage statistics, tree view
+- PDF export: Export documents to PDF format
+- Document comments and annotations: Support for in-document comments and annotations
+- Scheduled publishing: Document scheduled publishing support
+- Open API: RESTful API endpoints
+- Vitest v4 config upgrade: Fixed poolOptions deprecation warnings
+- TipTap unified upgrade to version 3.27.1
+
+Updated at: 2026-07-01 +08:00
 
 ### 2.9.3
 

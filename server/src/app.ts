@@ -141,8 +141,9 @@ export async function buildApp() {
     }, "slow request");
   });
 
+  const isE2eTesting = env.nodeEnv === "test" || process.env.CHENDOC_E2E_TESTING === "true";
   await app.register(fastifyRateLimit, {
-    max: 300,
+    max: isE2eTesting ? 10_000 : 300,
     timeWindow: "1 minute"
   });
 

@@ -1,4 +1,4 @@
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, isNull } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { db, dbAll, dbGet, dbRun } from "../../db/client.js";
 import { jwtKeys } from "../../db/schema.js";
@@ -16,7 +16,7 @@ function generateSecret(): string {
 
 export async function initializeJwtKeys(): Promise<{ keyId: string; secret: string }> {
   const active = await dbGet<JwtKeyRecord>(
-    db.select().from(jwtKeys).where(eq(jwtKeys.status, "active")).limit(1)
+    db.select().from(jwtKeys).where(eq(jwtKeys.isActive, true)).limit(1)
   );
   if (active) {
     return { keyId: active.keyId, secret: active.secret };
@@ -26,7 +26,7 @@ export async function initializeJwtKeys(): Promise<{ keyId: string; secret: stri
   await dbRun(db.insert(jwtKeys).values({
     keyId,
     secret,
-    status: "active",
+    isActive: true,
     createdAt: now()
   }));
   return { keyId, secret };
@@ -34,21 +34,21 @@ export async function initializeJwtKeys(): Promise<{ keyId: string; secret: stri
 
 export async function getActiveJwtKey(): Promise<{ keyId: string; secret: string } | null> {
   const key = await dbGet<JwtKeyRecord>(
-    db.select().from(jwtKeys).where(eq(jwtKeys.status, "active")).limit(1)
+    db.select().from(jwtKeys).where(eq(jwtKeys.isActive, true)).limit(1)
   );
   if (!key) return null;
   return { keyId: key.keyId, secret: key.secret };
 }
 
 export async function getAllJwtKeys(): Promise<JwtKeyRecord[]> {
-  const keys = await dbAll<JwtKeyRecord[]>(
+  const keys = await dbAll<JwtKeyRecord>(
     db.select().from(jwtKeys).orderBy(jwtKeys.createdAt)
   );
   return keys;
 }
 
 export async function getValidJwtKeys(): Promise<{ keyId: string; secret: string }[]> {
-  const keys = await dbAll<JwtKeyRecord[]>(
+  const keys = await dbAll<JwtKeyRecord>(
     db.select().from(jwtKeys)
   );
   return keys.map((k) => ({ keyId: k.keyId, secret: k.secret }));
@@ -56,13 +56,13 @@ export async function getValidJwtKeys(): Promise<{ keyId: string; secret: string
 
 export async function rotateJwtKey(): Promise<{ newKeyId: string; newSecret: string }> {
   const existing = await dbGet<JwtKeyRecord>(
-    db.select().from(jwtKeys).where(eq(jwtKeys.status, "active")).limit(1)
+    db.select().from(jwtKeys).where(eq(jwtKeys.isActive, true)).limit(1)
   );
   if (existing) {
     await dbRun(
       db.update(jwtKeys)
-        .set({ status: "retired", retiredAt: now() })
-        .where(and(eq(jwtKeys.id, existing.id), eq(jwtKeys.status, "active")))
+        .set({ isActive: false })
+        .where(and(eq(jwtKeys.id, existing.id), eq(jwtKeys.isActive, true)))
     );
   }
   const newKeyId = generateKeyId();
@@ -70,7 +70,7 @@ export async function rotateJwtKey(): Promise<{ newKeyId: string; newSecret: str
   await dbRun(db.insert(jwtKeys).values({
     keyId: newKeyId,
     secret: newSecret,
-    status: "active",
+    isActive: true,
     createdAt: now()
   }));
   return { newKeyId, newSecret };
@@ -81,8 +81,8 @@ export async function cleanupOldJwtKeys(retentionDays = 30): Promise<number> {
   const result = await dbRun(
     db.delete(jwtKeys).where(
       and(
-        eq(jwtKeys.status, "retired"),
-        lt(jwtKeys.retiredAt, cutoff)
+        eq(jwtKeys.isActive, false),
+        lt(jwtKeys.createdAt, cutoff)
       )
     )
   );

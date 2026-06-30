@@ -4,12 +4,13 @@ import { mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 
-const port = 8996;
+const port = 8985;
 const secret = "e2e-secret-".padEnd(32, "x");
 const root = process.cwd();
 const env = {
   ...process.env,
-  NODE_ENV: "production",
+  NODE_ENV: "test",
+  CHENDOC_E2E_TESTING: "true",
   HOST: "127.0.0.1",
   PORT: String(port),
   PUBLIC_SITE_URL: `http://127.0.0.1:${port}`,
@@ -21,6 +22,7 @@ const env = {
   RSA_PRIVATE_KEY_ENCRYPTION_KEY: secret,
   CHENDOC_DOCUMENT_ENCRYPTION_KEY: secret,
   CHENDOC_INIT_ADMIN: "1",
+  CHENDOC_ALLOW_WEAK_ADMIN_PASSWORD: "true",
   DEFAULT_ADMIN_USERNAME: "e2eadmin",
   DEFAULT_ADMIN_PASSWORD: "E2e!Password123"
 };
@@ -54,7 +56,7 @@ export default async function globalSetup() {
 
   runNpm("db:migrate");
   runNpm("admin:init");
-  runNpm("build");
+  runNpm("build:test");
 
   const server = spawn(process.execPath, ["server/dist/server.js"], {
     cwd: root,

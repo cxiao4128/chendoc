@@ -57,12 +57,18 @@ let publicKeyCache: PublicKeyResponse | null = null;
 let importedKeyCache: ImportedServerKey | null = null;
 let fingerprintCache: string | null = null;
 
+const isTestMode = import.meta.env.MODE === "test";
+
 export const packetLayerDisabled =
-  import.meta.env.DEV
-  && (
-    String(import.meta.env.VITE_DISABLE_GATEWAY_PACKET ?? "").toLowerCase() === "true"
-    || String(import.meta.env.VITE_DISABLE_PACKET_LAYER ?? "").toLowerCase() === "true"
-    || String(import.meta.env.VITE_DISABLE_REQUEST_ENCRYPT ?? "").toLowerCase() === "true"
+  isTestMode
+  || String(import.meta.env.VITE_DISABLE_GATEWAY_PACKET ?? "").toLowerCase() === "true"
+  || String(import.meta.env.VITE_DISABLE_PACKET_LAYER ?? "").toLowerCase() === "true"
+  || String(import.meta.env.VITE_DISABLE_REQUEST_ENCRYPT ?? "").toLowerCase() === "true"
+  || (
+    import.meta.env.DEV && (
+      String(import.meta.env.VITE_DISABLE_PACKET_LAYER ?? "").toLowerCase() === "true"
+      || String(import.meta.env.VITE_DISABLE_REQUEST_ENCRYPT ?? "").toLowerCase() === "true"
+    )
   );
 
 function bytesToBase64(bytes: ArrayBuffer | Uint8Array) {

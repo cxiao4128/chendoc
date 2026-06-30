@@ -294,8 +294,8 @@ function signatureInput(packet: { action: string; timestamp: number; nonce: stri
   return [packet.action, String(packet.timestamp), packet.nonce, packet.body, packet.challenge].join("\n");
 }
 
-function deriveSignatureKey(aesKey: Buffer) {
-  return hkdfSync("sha256", new Uint8Array(aesKey), "", "chendoc-signature", 32);
+function deriveSignatureKey(aesKey: Buffer): Buffer {
+  return Buffer.from(hkdfSync("sha256", new Uint8Array(aesKey.buffer), "", "chendoc-signature", 32));
 }
 
 function validateSignature(aesKey: Buffer, packet: { action: string; timestamp: number; nonce: string; body: string; challenge: string; signature: string }) {

@@ -66,7 +66,7 @@ type SystemAction =
 
 const defaultRemoteLogoUrl = "";
 const defaultRemoteWallpaperUrl = "";
-const APP_VERSION = "2.9.3";
+const APP_VERSION = "3.0.0";
 const DATABASE_SCHEMA_VERSION = "20260620.1";
 const REMOTE_ASSET_TIMEOUT_MS = 5000;
 const REMOTE_LOGO_MAX_BYTES = 1024 * 1024;

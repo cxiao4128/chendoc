@@ -1,5 +1,9 @@
+import crypto from "crypto";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { db } from "../../db/client.js";
+import { searchHistory } from "../../db/schema.js";
 import { authenticate } from "../../middleware/auth.js";
 import { requireSuperAdmin } from "../../middleware/requireSuperAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
@@ -26,6 +30,16 @@ import {
   softDeleteDocByUid,
   updateDocByUid
 } from "./docs.service.js";
+import {
+  clearSearchHistory,
+  deleteSearchHistoryItem,
+  getSearchHistory,
+  getSearchSuggestions,
+  recordSearchHistory,
+  searchDocsFullText,
+  searchDocsQuick,
+  searchWithSuggestions
+} from "./docs.search.service.js";
 
 export const docUidSchema = z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/);
 export const listQuerySchema = z.object({
@@ -33,10 +47,27 @@ export const listQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(50).default(30)
 });
+export const searchQuerySchema = z.object({
+  q: z.string().min(1).max(255),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(50).default(20),
+  sort: z.enum(["relevance", "updatedAt", "createdAt", "viewCount"]).default("relevance"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+  includeHighlights: z.coerce.boolean().default(true),
+  mode: z.enum(["fulltext", "quick"]).default("fulltext")
+});
+export const suggestionsQuerySchema = z.object({
+  q: z.string().min(1).max(255),
+  limit: z.coerce.number().int().positive().max(20).default(10)
+});
 export const docUidParamSchema = z.object({ docUid: docUidSchema });
 export const trashBulkSchema = z.object({
   docUids: z.array(docUidSchema).min(1).max(200)
 });
+
+function hashString(input: string): string {
+  return crypto.createHash("md5").update(input).digest("hex");
+}
 
 export async function docsRoutes(app: FastifyInstance) {
   const superAdminOnly = [authenticate, requireSuperAdmin];
@@ -48,16 +79,105 @@ export async function docsRoutes(app: FastifyInstance) {
     return { ...result, docs: safeDocListPayload(result.docs) };
   });
   app.get("/api/docs/search", { preHandler: authenticate }, async (request) => {
-    const query = listQuerySchema.parse(request.query);
-    const result = await listDocsPage(request.user!, query.q, query);
+    const query = searchQuerySchema.parse(request.query);
+    const user = request.user!;
+    const ipHash = request.ip ? hashString(request.ip) : undefined;
+
+    const result = await searchDocsFullText(
+      { id: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
+      query.q,
+      {
+        page: query.page,
+        pageSize: query.pageSize,
+        sortBy: query.sort,
+        sortOrder: query.sortOrder,
+        includeHighlights: query.includeHighlights
+      },
+      ipHash
+    );
+
+    await recordSearchHistory(
+      user.id,
+      query.q,
+      "fulltext",
+      result.total,
+      result.searchTime,
+      ipHash
+    );
+
     enqueueDocumentLog({
-      userId: request.user!.id,
-      role: request.user!.role,
-      ownerId: request.user!.id,
+      userId: user.id,
+      role: user.role,
+      ownerId: user.id,
       action: "search",
       request
     });
-    return { ...result, docs: safeDocListPayload(result.docs) };
+
+    return result;
+  });
+
+  app.get("/api/docs/search/quick", { preHandler: authenticate }, async (request) => {
+    const query = searchQuerySchema.parse(request.query);
+    const user = request.user!;
+    const ipHash = request.ip ? hashString(request.ip) : undefined;
+
+    const result = await searchDocsQuick(
+      { id: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
+      query.q,
+      {
+        page: query.page,
+        pageSize: query.pageSize,
+        sortBy: query.sort,
+        sortOrder: query.sortOrder
+      }
+    );
+
+    await recordSearchHistory(
+      user.id,
+      query.q,
+      "quick",
+      result.total,
+      result.searchTime,
+      ipHash
+    );
+
+    return result;
+  });
+
+  app.get("/api/docs/search/suggestions", { preHandler: authenticate }, async (request) => {
+    const query = suggestionsQuerySchema.parse(request.query);
+    const suggestions = await getSearchSuggestions(
+      request.user!.id,
+      query.q,
+      query.limit
+    );
+    return { suggestions };
+  });
+
+  app.get("/api/docs/search/history", { preHandler: authenticate }, async (request) => {
+    const query = z.object({
+      page: z.coerce.number().int().positive().default(1),
+      pageSize: z.coerce.number().int().positive().max(50).default(20)
+    }).parse(request.query);
+
+    const result = await getSearchHistory(request.user!.id, query.pageSize);
+    return { history: result, page: query.page, pageSize: query.pageSize };
+  });
+
+  app.delete("/api/docs/search/history/:id", { preHandler: authenticate }, async (request) => {
+    const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const result = await db.query.searchHistory.findFirst({
+      where: and(eq(searchHistory.id, params.id), eq(searchHistory.userId, request.user!.id))
+    });
+    if (result) {
+      await deleteSearchHistoryItem(request.user!.id, result.query);
+    }
+    return { ok: true };
+  });
+
+  app.delete("/api/docs/search/history", { preHandler: authenticate }, async (request) => {
+    await clearSearchHistory(request.user!.id);
+    return { ok: true };
   });
   app.post("/api/docs", { preHandler: authenticate }, async (request) => {
     const doc = await createDoc(request.user!.id, request.body, request.user!);
