@@ -37,6 +37,18 @@ logs/
 *.ico
 *.svg
 *.webp
+vitest.config.ts
+打开CMD.bat
+安全审计.md
+开发者-分析报告.md
+用户-分析报告.md
+下载.ss.png
+回收站.png
+审核页.png
+文档工作台.png
+登录页.png
+登录页壁纸.png
+系统管理.png
 FILE_GUIDE.md
 超记忆副本.md
 优化建议.md
@@ -47,6 +59,13 @@ move-css-files.ps1
 move-css-files.sh
 move-css.bat
 playwright.config.ts
+vitest.config.ts
+vitest.contig.ts
+*.test.ts
+*.spec.ts
+# Test screenshots and assets
+*screenshot*
+*截图*
 register-page-2.png
 register-page.png
 settings-page.png
