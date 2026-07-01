@@ -517,6 +517,15 @@
   white-space: nowrap;
 }
 
+/* 同步状态指示器 */
+.doc-editor-page__bar :deep(.sync-indicator) {
+  justify-self: center;
+}
+
+.doc-editor-page__mobile-headline :deep(.sync-indicator) {
+  justify-self: end;
+}
+
 .doc-editor-page__muted {
   margin: 0;
   color: var(--cd-muted);
@@ -907,6 +916,53 @@
   max-width: none;
   margin: 16px 12px 0;
   border-radius: 18px;
+}
+
+.doc-editor-page__error-text {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--cd-radius);
+  background: var(--cd-danger-soft);
+  color: var(--cd-danger);
+  font-size: 12px;
+}
+
+.doc-editor-page__schedule-form {
+  display: grid;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.doc-editor-page__schedule-field {
+  display: grid;
+  gap: 6px;
+}
+
+.doc-editor-page__schedule-field span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cd-text);
+}
+
+.doc-editor-page__schedule-field small {
+  font-size: 11px;
+  color: var(--cd-muted);
+}
+
+.doc-editor-page__schedule-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cd-primary);
+}
+
+.doc-editor-page__schedule-field input[type="datetime-local"] {
+  width: 100%;
+}
+
+.doc-editor-page__schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
 }
 
 @media (max-width: 1180px) {

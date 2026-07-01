@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, FileSpreadsheet, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
+import { BookOpen, ClipboardCheck, FileSpreadsheet, MessageSquare, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
 import type { WorkspaceBase } from "../../router/access";
 
 export interface AdminNavItem {
@@ -17,6 +17,7 @@ export interface AdminRouteMeta {
 export const adminNavItems: AdminNavItem[] = [
   { to: "/admin/docs", label: "文档", icon: BookOpen },
   { to: "/admin/trash", label: "回收站", icon: Trash2, adminOnly: true },
+  { to: "/admin/comments", label: "评论", icon: MessageSquare, adminOnly: true },
   { to: "/admin/invites", label: "邀请码", icon: BookOpen, adminOnly: true },
   { to: "/admin/forms", label: "收集表", icon: FileSpreadsheet, adminOnly: true },
   { to: "/admin/share-reviews", label: "审核", icon: ClipboardCheck, adminOnly: true },
@@ -82,6 +83,14 @@ export function getAdminRouteMeta(path: string): AdminRouteMeta {
       eyebrow: "内容发布",
       title: "发布审核",
       description: "公开分享审核。"
+    };
+  }
+
+  if (normalizedPath.startsWith("/admin/comments")) {
+    return {
+      eyebrow: "内容管理",
+      title: "评论",
+      description: "评论管理、垃圾清理。"
     };
   }
 

@@ -210,6 +210,11 @@ export interface FullTextSearchOptions {
   sortBy?: "relevance" | "updatedAt" | "createdAt" | "viewCount";
   sortOrder?: "asc" | "desc";
   includeHighlights?: boolean;
+  // 高级过滤
+  status?: "draft" | "published" | "archived";
+  tags?: string[];
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface SearchSuggestion {
@@ -507,6 +512,29 @@ export async function searchDocsFullText(
   const accessWhere = queryAccessWhere(actor);
   const candidateQuery = `%${normalizedQuery}%`;
 
+  // 构建高级过滤条件
+  const filterConditions: SQL<unknown>[] = [];
+
+  // 状态过滤
+  if (options.status) {
+    filterConditions.push(eq(docs.status, options.status));
+  }
+
+  // 标签过滤
+  if (options.tags?.length) {
+    for (const tag of options.tags) {
+      filterConditions.push(sql`${docs.tags} LIKE ${`%${tag}%`}`);
+    }
+  }
+
+  // 日期范围过滤
+  if (options.dateFrom) {
+    filterConditions.push(sql`${docs.updatedAt} >= ${options.dateFrom}`);
+  }
+  if (options.dateTo) {
+    filterConditions.push(sql`${docs.updatedAt} <= ${options.dateTo}`);
+  }
+
   // 第一步：获取候选文档（通过标题、摘要、标签快速筛选）
   const candidates = await dbAll(
     db.select(selectFields())
@@ -514,7 +542,8 @@ export async function searchDocsFullText(
       .leftJoin(users, eq(docs.ownerId, users.id))
       .where(and(
         accessWhere,
-        sql`(title LIKE ${candidateQuery} OR summary LIKE ${candidateQuery} OR tags LIKE ${candidateQuery})`
+        sql`(title LIKE ${candidateQuery} OR summary LIKE ${candidateQuery} OR tags LIKE ${candidateQuery})`,
+        ...filterConditions
       ))
       .limit(maxResults * 2) // 获取更多候选以确保相关性排序
   );

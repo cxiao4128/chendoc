@@ -103,6 +103,10 @@ export const docs = mysqlTable("docs", {
   deletedAt: ts("deleted_at"),
   deletedBy: int("deleted_by").references(() => users.id, { onDelete: "set null" }),
   revision: int("revision").notNull().default(1),
+  // 定时发布和草稿过期
+  scheduledAt: ts("scheduled_at"),   // 定时发布时间
+  expiresAt: ts("expires_at"),        // 草稿过期时间
+  autoArchive: boolean("auto_archive").notNull().default(false),  // 过期后自动归档
   createdAt: ts("created_at").notNull(),
   updatedAt: ts("updated_at").notNull()
 }, (table) => [
@@ -112,6 +116,8 @@ export const docs = mysqlTable("docs", {
   index("docs_space_idx").on(table.spaceId),
   index("docs_pinned_idx").on(table.pinned),
   index("docs_status_idx").on(table.status),
+  index("docs_scheduled_idx").on(table.scheduledAt),
+  index("docs_expires_idx").on(table.expiresAt),
   index("idx_documents_owner_id").on(table.ownerId),
   index("idx_documents_super_admin_doc").on(table.isSuperAdminDoc),
   index("idx_documents_tenant_owner_doc").on(table.tenantKey, table.ownerId, table.docUid),
@@ -435,4 +441,37 @@ export const searchHistory = mysqlTable("search_history", {
   index("search_history_query_hash_idx").on(table.queryHash),
   index("search_history_created_idx").on(table.createdAt),
   uniqueIndex("uk_search_history_user_query").on(table.userId, table.queryHash)
+]);
+
+// ===== 文档评论模块 =====
+export const docComments = mysqlTable("doc_comments", {
+  id: id(),
+  docUid: varchar("doc_uid", { length: 32 }).notNull(),
+  parentId: int("parent_id"),  // 回复嵌套
+  userId: int("user_id").notNull(),
+  content: text("content").notNull(),  // 评论内容（Markdown）
+  selectionStart: int("selection_start"),  // 批注起始位置
+  selectionEnd: int("selection_end"),      // 批注结束位置
+  selectionText: varchar("selection_text", { length: 1000 }),  // 选中文本
+  status: varchar("status", { length: 16 }).notNull().default("active"),  // active | hidden | deleted
+  createdAt: ts("created_at").notNull(),
+  updatedAt: ts("updated_at").notNull()
+}, (table) => [
+  index("doc_comments_doc_uid_idx").on(table.docUid),
+  index("doc_comments_user_idx").on(table.userId),
+  index("doc_comments_parent_idx").on(table.parentId),
+  index("doc_comments_created_idx").on(table.createdAt)
+]);
+
+// 评论 Reactions（点赞等）
+export const docCommentReactions = mysqlTable("doc_comment_reactions", {
+  id: id(),
+  commentId: int("comment_id").notNull(),
+  userId: int("user_id").notNull(),
+  reaction: varchar("reaction", { length: 16 }).notNull().default("like"),  // like | dislike
+  createdAt: ts("created_at").notNull()
+}, (table) => [
+  index("doc_comment_reactions_comment_idx").on(table.commentId),
+  index("doc_comment_reactions_user_idx").on(table.userId),
+  uniqueIndex("uk_comment_reaction_user_comment").on(table.commentId, table.userId)
 ]);

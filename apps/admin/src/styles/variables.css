@@ -67,3 +67,118 @@
 
   font-family: var(--cd-font-sans);
 }
+
+/* ============================================
+   暗色模式变量覆盖
+   ============================================ */
+[data-theme="dark"] {
+  /* ChenDoc 暗色表面 */
+  --cd-bg: #0f1117;
+  --cd-bg-plain: #1a1d24;
+  --cd-surface: #1e222b;
+  --cd-panel: #252a35;
+  --cd-paper: #2a303c;
+  --cd-paper-soft: #1e222b;
+
+  /* 文字颜色 */
+  --cd-ink: #f1f5f9;
+  --cd-text: #e2e8f0;
+  --cd-text-secondary: #94a3b8;
+
+  /* 边框色系 */
+  --cd-border: #2d3548;
+  --cd-border-strong: #3d4556;
+
+  /* 辅助文字色 */
+  --cd-muted: #7c8ba1;
+  --cd-faint: #8b95a5;
+
+  /* 主色调 - 品牌蓝（暗色下更亮） */
+  --cd-primary: #3b82f6;
+  --cd-primary-hover: #60a5fa;
+  --cd-primary-soft: #1e3a5f;
+
+  /* 强调色 */
+  --cd-accent: #3b82f6;
+  --cd-accent-hover: #60a5fa;
+  --cd-accent-soft: #1e3a5f;
+
+  /* 品牌绿 */
+  --cd-brand-accent: #10b981;
+  --cd-brand-accent-soft: #1a3a32;
+
+  /* 紫罗兰色系 */
+  --cd-aura: #2d2847;
+  --cd-aura-strong: #a78bfa;
+  --cd-lilac: #2d2847;
+
+  /* 功能色 */
+  --cd-danger: #ef4444;
+  --cd-danger-soft: #3d1f1f;
+  --cd-warning: #f59e0b;
+  --cd-success: #10b981;
+  --cd-success-soft: #1a3a32;
+
+  /* 阴影系统（暗色下更柔和） */
+  --cd-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+  --cd-shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --cd-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.25);
+
+  /* 焦点样式 */
+  --cd-focus: rgba(59, 130, 246, 0.3);
+
+  /* 滚动条颜色 */
+  --cd-scrollbar-track: #1a1d24;
+  --cd-scrollbar-thumb: #3d4556;
+  --cd-scrollbar-thumb-hover: #4d5566;
+}
+
+/* ============================================
+   滚动条样式
+   ============================================ */
+:root {
+  --cd-scrollbar-track: #f1f5f9;
+  --cd-scrollbar-thumb: #cbd5e1;
+  --cd-scrollbar-thumb-hover: #94a3b8;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cd-scrollbar-track);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cd-scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cd-scrollbar-thumb-hover);
+}
+
+/* Firefox 滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cd-scrollbar-thumb) var(--cd-scrollbar-track);
+}
+
+/* ============================================
+   编辑器高亮颜色
+   ============================================ */
+:root {
+  /* 高亮背景色 */
+  --cd-highlight-yellow: #fef08a;
+  --cd-highlight-orange: #fed7aa;
+  --cd-highlight-green: #bbf7d0;
+  --cd-highlight-cyan: #a5f3fc;
+  --cd-highlight-blue: #bfdbfe;
+  --cd-highlight-purple: #e9d5ff;
+  --cd-highlight-pink: #fbcfe8;
+  --cd-highlight-red: #fecaca;
+  --cd-highlight-gray: #e5e7eb;
+}

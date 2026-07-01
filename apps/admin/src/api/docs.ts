@@ -38,6 +38,9 @@ export interface DocDetail extends DocSummary {
   summary?: string | null;
   tags?: string[] | string | null;
   share?: Record<string, unknown> | null;
+  scheduledAt?: string | null;
+  expiresAt?: string | null;
+  autoArchive?: boolean;
 }
 
 export type DocUpdateInput = Partial<Pick<DocDetail, "title" | "contentJson" | "contentHtml" | "coverUrl" | "summary" | "tags" | "pinned" | "status" | "sort">> & {
@@ -78,8 +81,62 @@ export function listDocsApi(options: { q?: string; page?: number; pageSize?: num
   return request<{ docs: DocSummary[]; pagination?: PageInfo }>(`/api/docs${query}`, { signal: options.signal });
 }
 
-export function searchDocsApi(q: string, signal?: AbortSignal) {
-  return request<{ docs: DocSummary[] }>(`/api/docs/search?q=${encodeURIComponent(q)}`, { signal });
+// 搜索选项接口
+export interface SearchOptions {
+  q: string;
+  page?: number;
+  pageSize?: number;
+  sort?: "relevance" | "updatedAt" | "createdAt" | "viewCount";
+  sortOrder?: "asc" | "desc";
+  includeHighlights?: boolean;
+  // 高级过滤
+  status?: "draft" | "published" | "archived";
+  tags?: string[];
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export function searchDocsApi(options: SearchOptions, signal?: AbortSignal) {
+  const params = new URLSearchParams();
+  params.set("q", options.q);
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("pageSize", String(options.pageSize));
+  if (options.sort) params.set("sort", options.sort);
+  if (options.sortOrder) params.set("sortOrder", options.sortOrder);
+  if (options.includeHighlights !== undefined) params.set("includeHighlights", String(options.includeHighlights));
+  if (options.status) params.set("status", options.status);
+  if (options.tags?.length) params.set("tags", options.tags.join(","));
+  if (options.dateFrom) params.set("dateFrom", options.dateFrom);
+  if (options.dateTo) params.set("dateTo", options.dateTo);
+  return request<{ docs: DocSummary[] }>(`/api/docs/search?${params}`, { signal });
+}
+
+// 快速搜索（仅标题摘要）
+export function searchDocsQuickApi(q: string, signal?: AbortSignal) {
+  return request<{ docs: DocSummary[] }>(`/api/docs/search/quick?q=${encodeURIComponent(q)}`, { signal });
+}
+
+// 搜索建议
+export function getSearchSuggestionsApi(q: string, limit?: number) {
+  const params = new URLSearchParams({ q });
+  if (limit) params.set("limit", String(limit));
+  return request<{ suggestions: Array<{ keyword: string; count: number }> }>(`/api/docs/search/suggestions?${params}`);
+}
+
+// 搜索历史
+export function getSearchHistoryApi(page?: number, pageSize?: number) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (pageSize) params.set("pageSize", String(pageSize));
+  return request<{ history: unknown[]; page: number; pageSize: number }>(`/api/docs/search/history?${params}`);
+}
+
+export function clearSearchHistoryApi() {
+  return request<{ ok: boolean }>("/api/docs/search/history", { method: "DELETE" });
+}
+
+export function deleteSearchHistoryItemApi(id: number) {
+  return request<{ ok: boolean }>(`/api/docs/search/history/${id}`, { method: "DELETE" });
 }
 
 export function listTrashDocsApi(options: { page?: number; pageSize?: number; signal?: AbortSignal } = {}) {
@@ -159,6 +216,34 @@ export async function bulkHardDeleteTrashDocsApi(docUids: string[]) {
 
 export function publishDocApi(docUid: string) {
   return request<{ doc: DocDetail }>(`/api/docs/${docUid}/publish`, { method: "POST" });
+}
+
+// 定时发布
+export interface DocSchedule {
+  scheduledAt: string | null;
+  expiresAt: string | null;
+  autoArchive: boolean;
+}
+
+export interface SetScheduleInput {
+  scheduledAt?: string | null;
+  expiresAt?: string | null;
+  autoArchive?: boolean;
+}
+
+export function getDocScheduleApi(docUid: string) {
+  return request<{ schedule: DocSchedule | null }>(`/api/docs/${docUid}/schedule`);
+}
+
+export function setDocScheduleApi(docUid: string, input: SetScheduleInput) {
+  return request<{ schedule: DocSchedule }>(`/api/docs/${docUid}/schedule`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteDocScheduleApi(docUid: string) {
+  return request<{ ok: true }>(`/api/docs/${docUid}/schedule`, { method: "DELETE" });
 }
 
 export function listDocVersionsApi(docUid: string) {

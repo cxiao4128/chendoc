@@ -24,7 +24,6 @@ const slugSchema = z
   .min(3)
   .max(48)
   .regex(/^[A-Za-z0-9_-]+$/)
-  .refine((value) => !/^\d+$/.test(value), "custom slug cannot be all digits")
   .transform((value) => value.toLowerCase());
 
 const ADMIN_SHARE_CODE_MIN = 111;
@@ -87,8 +86,27 @@ async function assertShareCodeAvailable(shareCode: number | null | undefined, cu
   if (existing && existing.id !== currentShareId) throw new BadRequestError("分享数字已被占用", "SHARE_CODE_TAKEN");
 }
 
-function assertNoCustomSlug(customSlug: string | null | undefined) {
-  if (customSlug) throw new BadRequestError("分享链接只允许使用数字码", "CUSTOM_SLUG_DISABLED");
+async function assertCustomSlugAvailable(customSlug: string, currentShareId?: number) {
+  // 自定义 slug 只允许管理员使用，且必须是字母数字组合
+  if (!/^[A-Za-z0-9_-]+$/.test(customSlug)) {
+    throw new BadRequestError("分享码只能使用字母、数字、下划线和连字符", "INVALID_CUSTOM_SLUG");
+  }
+  const lowerSlug = customSlug.toLowerCase();
+  // 检查是否已被占用（customSlug 列）
+  const existing = await dbGet<{ id: number }>(db.select({ id: shares.id }).from(shares).where(eq(shares.customSlug, lowerSlug)).limit(1));
+  if (existing && existing.id !== currentShareId) {
+    throw new BadRequestError("该分享码已被占用", "CUSTOM_SLUG_TAKEN");
+  }
+  // 检查是否和已有的数字 shareCode 冲突
+  const numericValue = Number(customSlug);
+  if (!isNaN(numericValue) && Number.isSafeInteger(numericValue)) {
+    const conflictByCode = await dbGet<{ id: number }>(
+      db.select({ id: shares.id }).from(shares).where(eq(shares.shareCode, numericValue)).limit(1)
+    );
+    if (conflictByCode && conflictByCode.id !== currentShareId) {
+      throw new BadRequestError("该数字码已被其他分享使用", "CUSTOM_SLUG_CONFLICTS_CODE");
+    }
+  }
 }
 
 function assertSystemAssignedShareCode(shareCode: number | null | undefined) {
@@ -247,7 +265,11 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
     throw new ForbiddenError("普通用户不能自定义分享链接", "SHARE_CUSTOM_CODE_FORBIDDEN");
   }
 
-  assertNoCustomSlug(body.customSlug);
+  // 管理员可以自定义分享码，但普通用户不能
+  if (body.customSlug && actor.role !== "admin") {
+    throw new ForbiddenError("普通用户不能自定义分享链接", "SHARE_CUSTOM_CODE_FORBIDDEN");
+  }
+  if (body.customSlug) assertCustomSlugAvailable(body.customSlug);
   assertSystemAssignedShareCode(body.shareCode);
 
   const isAdminDoc = !userOwned;
@@ -259,7 +281,7 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
     docId,
     shareCode,
     shareToken: await createUniqueShareToken(),
-    customSlug: null,
+    customSlug: body.customSlug ?? null,
     passwordHash: body.password ? await hashPassword(body.password) : null,
     isEnabled: isAdminDoc || isAdminApprovingUserDoc ? body.isEnabled ?? false : false,
     reviewStatus: isAdminDoc || isAdminApprovingUserDoc ? "approved" as const : "pending" as const,
@@ -323,9 +345,10 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
     if (body.shareCode !== undefined) {
       assertSystemAssignedShareCode(body.shareCode);
     }
+    // 管理员可以设置/更新自定义分享码
     if (body.customSlug !== undefined) {
-      assertNoCustomSlug(body.customSlug);
-      patch.customSlug = null;
+      if (body.customSlug) assertCustomSlugAvailable(body.customSlug);
+      patch.customSlug = body.customSlug ?? null;
     }
     if (userOwned && body.isEnabled) {
       patch.reviewStatus = "approved";
@@ -448,9 +471,10 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
     patch.shareCode = await randomUserShareCode();
   }
   if (isWeakShareToken(current.shareToken, current.shareCode)) patch.shareToken = await createUniqueShareToken(id);
+  // 管理员可以设置自定义分享码
   if (body.customSlug !== undefined) {
-    assertNoCustomSlug(body.customSlug);
-    patch.customSlug = null;
+    if (body.customSlug) assertCustomSlugAvailable(body.customSlug);
+    patch.customSlug = body.customSlug ?? null;
   }
 
   await dbTransaction(async (tx) => {
@@ -461,9 +485,15 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
 
 function shareWhere(key: string | number) {
   const value = String(key);
-  if (!/^\d+$/.test(value)) return eq(shares.shareCode, -1);
+  // 如果不是纯数字，尝试按 customSlug 查找
+  if (!/^\d+$/.test(value)) {
+    return eq(shares.customSlug, value.toLowerCase());
+  }
   const shareCode = Number(value);
-  if (!Number.isSafeInteger(shareCode) || !isValidPublicShareCode(shareCode)) return eq(shares.shareCode, -1);
+  if (!Number.isSafeInteger(shareCode) || !isValidPublicShareCode(shareCode)) {
+    // 无效数字码，尝试 customSlug（可能用户输入了纯字母的 slug）
+    return eq(shares.customSlug, value.toLowerCase());
+  }
   return eq(shares.shareCode, shareCode);
 }
 

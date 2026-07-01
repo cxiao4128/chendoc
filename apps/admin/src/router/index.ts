@@ -36,6 +36,7 @@ const router = createRouter({
         { path: "forms/:id", component: () => import("../pages/forms/FormEditorPage.vue"), meta: { admin: true } },
         { path: "forms/:id/submissions", component: () => import("../pages/forms/FormSubmissionsPage.vue"), meta: { admin: true } },
         { path: "share-reviews", component: () => import("../pages/reviews/ShareReviewPage.vue"), meta: { admin: true } },
+        { path: "comments", component: () => import("../pages/comments/CommentManagePage.vue"), meta: { admin: true } },
         { path: "security", component: () => import("../pages/settings/SecurityCenterPage.vue"), meta: { admin: true } },
         { path: "settings", component: () => import("../pages/settings/SettingsPage.vue"), meta: { admin: true } },
         { path: "settings/storage", component: () => import("../pages/settings/SettingsStoragePage.vue"), meta: { admin: true } },

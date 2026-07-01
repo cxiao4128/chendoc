@@ -3,18 +3,63 @@
 
 import { request } from "./request.js";
 
-// 预设颜色
+// 预设颜色（20 种）
 export const TAG_COLORS = [
+  // 蓝色系
   "#3b82f6", // 蓝色
+  "#60a5fa", // 浅蓝
+  "#1d4ed8", // 深蓝
+  // 绿色系
   "#10b981", // 绿色
+  "#34d399", // 浅绿
+  "#059669", // 深绿
+  // 黄色/橙色系
   "#f59e0b", // 橙色
+  "#fbbf24", // 黄色
+  "#d97706", // 深橙
+  "#f97316", // 橙红
+  // 红色系
   "#ef4444", // 红色
+  "#f87171", // 浅红
+  "#dc2626", // 深红
+  // 紫色系
   "#8b5cf6", // 紫色
+  "#a78bfa", // 浅紫
+  "#6366f1", // 靛蓝
+  // 其他
   "#ec4899", // 粉色
   "#06b6d4", // 青色
-  "#6366f1", // 靛蓝
   "#84cc16", // 酸橙
-  "#f97316", // 橙红
+  "#78716c", // 灰色
+] as const;
+
+// 预设图标（使用 Lucide 图标名称，避免 emoji）
+export const TAG_ICONS = [
+  "",           // 无图标
+  "FileText",   // 文档
+  "Folder",     // 文件夹
+  "Star",       // 收藏
+  "Heart",      // 喜欢
+  "Flag",       // 标记
+  "Book",       // 书籍
+  "BookOpen",   // 阅读
+  "Briefcase",  // 工作
+  "Code",       // 代码
+  "Database",   // 数据
+  "Globe",      // 地球
+  "Image",      // 图片
+  "Music",      // 音乐
+  "Video",      // 视频
+  "Camera",     // 相机
+  "Lock",       // 锁定
+  "Mail",       // 邮件
+  "Phone",      // 电话
+  "Settings",   // 设置
+  "Tag",        // 标签
+  "Zap",        // 闪电
+  "Lightbulb",  // 灯泡
+  "Rocket",     // 火箭
+  "Target",     // 目标
 ] as const;
 
 export type TagColor = typeof TAG_COLORS[number];
@@ -23,6 +68,7 @@ export interface Tag {
   id: number;
   name: string;
   color: string;
+  icon?: string;        // Lucide 图标名称
   parentId: number | null;
   ownerId: number;
   docCount: number;
@@ -36,12 +82,14 @@ export interface TagWithChildren extends Tag {
 export interface CreateTagInput {
   name: string;
   color?: string;
+  icon?: string;
   parentId?: number;
 }
 
 export interface UpdateTagInput {
   name?: string;
   color?: string;
+  icon?: string;
   parentId?: number | null;
 }
 

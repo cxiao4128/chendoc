@@ -27,6 +27,8 @@ import {
   restoreDocVersionAsCopyByUid,
   safeDocListPayload,
   safeDocPayload,
+  setDocumentSchedule,
+  getDocumentSchedule,
   softDeleteDocByUid,
   updateDocByUid
 } from "./docs.service.js";
@@ -54,7 +56,12 @@ export const searchQuerySchema = z.object({
   sort: z.enum(["relevance", "updatedAt", "createdAt", "viewCount"]).default("relevance"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
   includeHighlights: z.coerce.boolean().default(true),
-  mode: z.enum(["fulltext", "quick"]).default("fulltext")
+  mode: z.enum(["fulltext", "quick"]).default("fulltext"),
+  // 高级过滤
+  status: z.enum(["draft", "published", "archived"]).optional(),
+  tags: z.string().optional(), // 逗号分隔的标签列表
+  dateFrom: z.string().optional(), // ISO 日期格式
+  dateTo: z.string().optional()
 });
 export const suggestionsQuerySchema = z.object({
   q: z.string().min(1).max(255),
@@ -63,6 +70,11 @@ export const suggestionsQuerySchema = z.object({
 export const docUidParamSchema = z.object({ docUid: docUidSchema });
 export const trashBulkSchema = z.object({
   docUids: z.array(docUidSchema).min(1).max(200)
+});
+export const scheduleSchema = z.object({
+  scheduledAt: z.string().datetime().nullable().optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
+  autoArchive: z.boolean().optional()
 });
 
 function hashString(input: string): string {
@@ -83,6 +95,9 @@ export async function docsRoutes(app: FastifyInstance) {
     const user = request.user!;
     const ipHash = request.ip ? hashString(request.ip) : undefined;
 
+    // 解析逗号分隔的标签
+    const tags = query.tags ? query.tags.split(",").map(t => t.trim()).filter(Boolean) : undefined;
+
     const result = await searchDocsFullText(
       { id: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
       query.q,
@@ -91,7 +106,11 @@ export async function docsRoutes(app: FastifyInstance) {
         pageSize: query.pageSize,
         sortBy: query.sort,
         sortOrder: query.sortOrder,
-        includeHighlights: query.includeHighlights
+        includeHighlights: query.includeHighlights,
+        status: query.status,
+        tags,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo
       },
       ipHash
     );
@@ -371,6 +390,64 @@ export async function docsRoutes(app: FastifyInstance) {
       ...auditMetaFromRequest(request)
     });
     return { doc: safeDocPayload(doc) };
+  });
+  // 定时发布设置
+  app.get("/api/docs/:docUid/schedule", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const schedule = await getDocumentSchedule(params.docUid);
+    if (!schedule) {
+      return { schedule: null };
+    }
+    return {
+      schedule: {
+        scheduledAt: schedule.scheduledAt?.toISOString() ?? null,
+        expiresAt: schedule.expiresAt?.toISOString() ?? null,
+        autoArchive: schedule.autoArchive
+      }
+    };
+  });
+  app.put("/api/docs/:docUid/schedule", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    const body = scheduleSchema.parse(request.body);
+    const schedule = await setDocumentSchedule(
+      request.user!,
+      params.docUid,
+      {
+        scheduledAt: body.scheduledAt,
+        expiresAt: body.expiresAt,
+        autoArchive: body.autoArchive
+      }
+    );
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.schedule_update",
+      targetType: "doc",
+      targetId: params.docUid,
+      ...auditMetaFromRequest(request)
+    });
+    return {
+      schedule: {
+        scheduledAt: schedule.scheduledAt?.toISOString() ?? null,
+        expiresAt: schedule.expiresAt?.toISOString() ?? null,
+        autoArchive: schedule.autoArchive
+      }
+    };
+  });
+  app.delete("/api/docs/:docUid/schedule", { preHandler: authenticate }, async (request) => {
+    const params = docUidParamSchema.parse(request.params);
+    await setDocumentSchedule(
+      request.user!,
+      params.docUid,
+      { scheduledAt: null, expiresAt: null }
+    );
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: "doc.schedule_delete",
+      targetType: "doc",
+      targetId: params.docUid,
+      ...auditMetaFromRequest(request)
+    });
+    return { ok: true };
   });
   app.get("/api/docs/:docUid/versions", { preHandler: authenticate }, async (request) => {
     const params = docUidParamSchema.parse(request.params);

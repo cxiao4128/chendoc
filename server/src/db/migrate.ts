@@ -431,6 +431,10 @@ function migrateSqlite() {
   if (!hasColumn("tenant_key")) sqlite.exec("ALTER TABLE docs ADD COLUMN tenant_key TEXT NOT NULL DEFAULT 'default'");
   if (!hasColumn("deleted_by")) sqlite.exec("ALTER TABLE docs ADD COLUMN deleted_by INTEGER REFERENCES users(id)");
   if (!hasColumn("revision")) sqlite.exec("ALTER TABLE docs ADD COLUMN revision INTEGER NOT NULL DEFAULT 1");
+  // 定时发布和草稿过期
+  if (!hasColumn("scheduled_at")) sqlite.exec("ALTER TABLE docs ADD COLUMN scheduled_at INTEGER");
+  if (!hasColumn("expires_at")) sqlite.exec("ALTER TABLE docs ADD COLUMN expires_at INTEGER");
+  if (!hasColumn("auto_archive")) sqlite.exec("ALTER TABLE docs ADD COLUMN auto_archive INTEGER NOT NULL DEFAULT 0");
   const sqliteDocIdentityStats = backfillSqliteDocumentIdentity();
   const orphanOwnerCount = Number((sqlite.prepare("SELECT COUNT(*) AS count FROM docs WHERE owner_id IS NULL").get() as { count: number }).count);
   if (orphanOwnerCount > 0) {
@@ -472,6 +476,8 @@ function migrateSqlite() {
   sqlite.exec("CREATE INDEX IF NOT EXISTS idx_documents_super_admin_doc ON docs(is_super_admin_doc)");
   sqlite.exec("CREATE INDEX IF NOT EXISTS idx_documents_tenant_owner_doc ON docs(tenant_key, owner_id, doc_uid)");
   sqlite.exec("CREATE INDEX IF NOT EXISTS docs_pinned_idx ON docs(pinned)");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS docs_scheduled_idx ON docs(scheduled_at)");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS docs_expires_idx ON docs(expires_at)");
 
   const docVersionColumns = sqlite.prepare("PRAGMA table_info(doc_versions)").all() as Array<{ name: string }>;
   const hasDocVersionColumn = (name: string) => docVersionColumns.some((column) => column.name === name);
@@ -556,6 +562,10 @@ async function migrateMysql() {
   await addMysqlColumnIfMissing(databaseName, "docs", "tenant_key", "VARCHAR(64) NOT NULL DEFAULT 'default'");
   await addMysqlColumnIfMissing(databaseName, "docs", "deleted_by", "INT NULL");
   await addMysqlColumnIfMissing(databaseName, "docs", "revision", "INT NOT NULL DEFAULT 1");
+  // 定时发布和草稿过期
+  await addMysqlColumnIfMissing(databaseName, "docs", "scheduled_at", "DATETIME(3) NULL");
+  await addMysqlColumnIfMissing(databaseName, "docs", "expires_at", "DATETIME(3) NULL");
+  await addMysqlColumnIfMissing(databaseName, "docs", "auto_archive", "TINYINT(1) NOT NULL DEFAULT 0");
   const mysqlDocIdentityStats = await backfillMysqlDocumentIdentity();
   const [orphanOwnerRows] = await mysqlPool.query("SELECT COUNT(*) AS count FROM docs d LEFT JOIN users u ON u.id = d.owner_id WHERE d.owner_id IS NULL OR u.id IS NULL");
   const orphanOwnerCount = Number((orphanOwnerRows as Array<{ count: number }>)[0]?.count ?? 0);

@@ -7,6 +7,8 @@ import {
   FileText,
   FolderPlus,
   Grid3X3,
+  LayoutGrid,
+  List,
   ListFilter,
   MoreHorizontal,
   PanelRightClose,
@@ -19,6 +21,7 @@ import {
   UploadCloud
 } from "lucide-vue-next";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
+import KanbanBoard from "../../components/docs/KanbanBoard.vue";
 import { normalizeError } from "../../utils/error";
 import EmptyState from "../../components/common/EmptyState.vue";
 import { createShareApi } from "../../api/shares";
@@ -133,6 +136,8 @@ const bulkDeleteOpen = ref(false);
 const bulkDeleting = ref(false);
 const sortMode = ref<SortMode>((route.query.sort as SortMode) || "updatedDesc");
 const compactMode = ref(false);
+const viewMode = ref<"list" | "kanban">("list");
+const kanbanGroupBy = ref<"status" | "tag">("status");
 const actionMessage = ref("");
 const uploading = ref(false);
 const uploadInput = ref<HTMLInputElement | null>(null);
@@ -244,6 +249,10 @@ async function handleUpload(event: Event) {
 async function togglePinned(doc: { docUid: string; pinned?: boolean }) {
   await docs.saveDoc(doc.docUid, { pinned: !doc.pinned });
   await load();
+}
+
+function openKanbanDoc(docUid: string) {
+  router.push(docPath(docUid));
 }
 
 async function openShare(doc: { docUid: string; shareCode?: number | null; customSlug?: string | null }) {
@@ -615,7 +624,15 @@ watch(visibleDocs, (items) => {
               <option value="all">全部时间</option><option value="day">24 小时内</option><option value="week">7 天内</option><option value="month">30 天内</option>
             </select>
             <button class="cd-button" type="button" @click="resetFilters"><ListFilter :size="15" />重置筛选</button>
-            <button class="cd-button is-square" type="button" :class="{ 'is-active': compactMode }" aria-label="紧凑视图" @click="compactMode = !compactMode"><Grid3X3 :size="15" /></button>
+            <span class="doc-list-page__view-toggle">
+              <button class="cd-button is-square" type="button" :class="{ 'is-active': viewMode === 'list' }" title="列表视图" @click="viewMode = 'list'"><List :size="15" /></button>
+              <button class="cd-button is-square" type="button" :class="{ 'is-active': viewMode === 'kanban' }" title="看板视图" @click="viewMode = 'kanban'"><LayoutGrid :size="15" /></button>
+            </span>
+            <select v-if="viewMode === 'kanban'" v-model="kanbanGroupBy" class="cd-select" aria-label="看板分组">
+              <option value="status">按状态</option>
+              <option value="tag">按标签</option>
+            </select>
+            <button class="cd-button is-square" type="button" :class="{ 'is-active': compactMode && viewMode === 'list' }" aria-label="紧凑视图" @click="compactMode = !compactMode"><Grid3X3 :size="15" /></button>
             <button class="cd-button is-square" type="button" :aria-label="toolboxCollapsed ? '展开侧栏' : '折叠侧栏'" @click="toggleToolbox"><component :is="toolboxCollapsed ? PanelRightOpen : PanelRightClose" :size="16" /></button>
           </div>
           <div v-if="recentSearches.length" class="doc-list-page__recent-searches">
@@ -643,7 +660,8 @@ watch(visibleDocs, (items) => {
             </template>
           </EmptyState>
 
-          <div v-else class="doc-list-page__table" :class="{ 'is-compact': compactMode, 'has-owner': showOwnerColumn }">
+          <!-- 列表视图 -->
+          <div v-if="viewMode === 'list'" class="doc-list-page__table" :class="{ 'is-compact': compactMode, 'has-owner': showOwnerColumn }">
             <div class="doc-list-page__table-head" aria-hidden="true">
               <span></span>
               <span>文档名称</span>
@@ -683,6 +701,15 @@ watch(visibleDocs, (items) => {
               </span>
             </article>
           </div>
+
+          <!-- 看板视图 -->
+          <KanbanBoard
+            v-else
+            :docs="visibleDocs"
+            :group-by="kanbanGroupBy"
+            :on-doc-click="openKanbanDoc"
+            :on-doc-star="togglePinned"
+          />
           <button v-if="docs.listHasMore" class="cd-button doc-list-page__more" type="button" :disabled="docs.loadingList" @click="loadMore">
             {{ docs.loadingList ? "加载中..." : "加载更多" }}
           </button>

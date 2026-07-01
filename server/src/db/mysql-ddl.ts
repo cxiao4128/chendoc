@@ -364,6 +364,8 @@ export const MYSQL_INDEXES = [
   { table: "docs", name: "docs_owner_deleted_order_idx", columns: "`owner_id`, `deleted_at`, `pinned`, `updated_at`" },
   { table: "docs", name: "docs_admin_deleted_order_idx", columns: "`is_super_admin_doc`, `deleted_at`, `pinned`, `updated_at`" },
   { table: "docs", name: "docs_trash_idx", columns: "`deleted_at`, `updated_at`" },
+  { table: "docs", name: "docs_scheduled_idx", columns: "`scheduled_at`" },
+  { table: "docs", name: "docs_expires_idx", columns: "`expires_at`" },
   { table: "users", name: "users_role_idx", columns: "`role`" },
   { table: "users", name: "users_status_idx", columns: "`status`" },
   { table: "shares", name: "shares_review_idx", columns: "`review_status`, `created_at`" },

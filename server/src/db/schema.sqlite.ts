@@ -101,6 +101,10 @@ export const docs = sqliteTable("docs", {
   deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
   deletedBy: integer("deleted_by").references(() => users.id, { onDelete: "set null" }),
   revision: integer("revision").notNull().default(1),
+  // 定时发布和草稿过期
+  scheduledAt: integer("scheduled_at", { mode: "timestamp_ms" }),  // 定时发布时间
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }),      // 草稿过期时间
+  autoArchive: integer("auto_archive", { mode: "boolean" }).notNull().default(false),  // 过期后自动归档
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
 }, (table) => ({
@@ -110,6 +114,8 @@ export const docs = sqliteTable("docs", {
   docSpaceIdx: index("docs_space_idx").on(table.spaceId),
   docPinnedIdx: index("docs_pinned_idx").on(table.pinned),
   docStatusIdx: index("docs_status_idx").on(table.status),
+  docScheduledIdx: index("docs_scheduled_idx").on(table.scheduledAt),
+  docExpiresIdx: index("docs_expires_idx").on(table.expiresAt),
   docOwnerIdx: index("idx_documents_owner_id").on(table.ownerId),
   docSuperAdminIdx: index("idx_documents_super_admin_doc").on(table.isSuperAdminDoc),
   docTenantOwnerDocIdx: index("idx_documents_tenant_owner_doc").on(table.tenantKey, table.ownerId, table.docUid),
@@ -433,4 +439,37 @@ export const searchHistory = sqliteTable("search_history", {
   queryHashIdx: index("search_history_query_hash_idx").on(table.queryHash),
   createdIdx: index("search_history_created_idx").on(table.createdAt),
   userQueryUnique: uniqueIndex("uk_search_history_user_query").on(table.userId, table.queryHash)
+}));
+
+// ===== 文档评论模块 =====
+export const docComments = sqliteTable("doc_comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  docUid: text("doc_uid").notNull(),
+  parentId: integer("parent_id"),  // 回复嵌套
+  userId: integer("user_id").notNull().references(() => users.id),
+  content: text("content").notNull(),  // 评论内容（Markdown）
+  selectionStart: integer("selection_start"),  // 批注起始位置
+  selectionEnd: integer("selection_end"),      // 批注结束位置
+  selectionText: text("selection_text"),     // 选中文本
+  status: text("status", { enum: ["active", "hidden", "deleted"] }).notNull().default("active"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  docUidIdx: index("doc_comments_doc_uid_idx").on(table.docUid),
+  userIdx: index("doc_comments_user_idx").on(table.userId),
+  parentIdx: index("doc_comments_parent_idx").on(table.parentId),
+  createdIdx: index("doc_comments_created_idx").on(table.createdAt)
+}));
+
+// 评论 Reactions（点赞等）
+export const docCommentReactions = sqliteTable("doc_comment_reactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  commentId: integer("comment_id").notNull().references(() => docComments.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reaction: text("reaction").notNull().default("like"),  // like/dislike
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
+}, (table) => ({
+  commentIdx: index("doc_comment_reactions_comment_idx").on(table.commentId),
+  userIdx: index("doc_comment_reactions_user_idx").on(table.userId),
+  userCommentUnique: uniqueIndex("uk_comment_reaction_user_comment").on(table.commentId, table.userId)
 }));

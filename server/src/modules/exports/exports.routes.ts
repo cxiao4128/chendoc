@@ -104,19 +104,32 @@ export async function exportsRoutes(app: FastifyInstance) {
   // 获取导出文件内容（用于前端下载）
   app.get("/api/export/content", { preHandler: authHandler }, async (request) => {
     const query = z.object({
-      docId: z.coerce.number().int().positive(),
+      docId: z.coerce.number().int().positive().optional(),
+      docUid: z.string().optional(),
       format: z.enum(["markdown", "html", "json"]).default("markdown"),
       metadata: z.coerce.boolean().default(true),
     }).parse(request.query || {});
 
-    const actor = request.user!;
-    const docs = await getDocumentsForExport(actor, [query.docId]);
+    if (!query.docId && !query.docUid) {
+      return { error: "需要提供 docId 或 docUid" };
+    }
 
-    if (docs.length === 0) {
+    const actor = request.user!;
+    let doc;
+
+    if (query.docId) {
+      const docs = await getDocumentsForExport(actor, [query.docId]);
+      doc = docs[0];
+    } else {
+      // 通过 docUid 查找文档
+      const { getDocumentByUid } = await import("./exports.service.js");
+      doc = await getDocumentByUid(actor, query.docUid!);
+    }
+
+    if (!doc) {
       return { error: "文档不存在或无权访问" };
     }
 
-    const doc = docs[0];
     let content: string;
     let fileName: string;
 

@@ -16,7 +16,9 @@ import { captchaRoutes } from "./modules/captcha/captcha.routes.js";
 import { cryptoRoutes } from "./modules/crypto/crypto.routes.js";
 import { dangerRoutes } from "./modules/danger/danger.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
-import { purgeExpiredTrashDocs } from "./modules/docs/docs.service.js";
+import { purgeExpiredTrashDocs, processScheduledDocs, processExpiredDrafts } from "./modules/docs/docs.service.js";
+import { commentsRoutes } from "./modules/comments/comments.routes.js";
+import { exportsRoutes } from "./modules/exports/exports.routes.js";
 import { formsRoutes } from "./modules/forms/forms.routes.js";
 import { formsPublicRoutes } from "./modules/forms/forms.public.routes.js";
 import { runFormMaintenance } from "./modules/forms/forms.service.js";
@@ -76,6 +78,11 @@ export async function buildApp() {
     void purgeExpiredTrashDocs().catch((error) => app.log.error({ error }, "trash maintenance failed"));
   }, 6 * 60 * 60 * 1000);
   trashMaintenanceTimer.unref();
+  const scheduleMaintenanceTimer = setInterval(() => {
+    void processScheduledDocs().catch((error) => app.log.error({ error }, "schedule publish failed"));
+    void processExpiredDrafts().catch((error) => app.log.error({ error }, "draft expiration failed"));
+  }, 5 * 60 * 1000);
+  scheduleMaintenanceTimer.unref();
   app.addHook("onRequest", async (request) => {
     enterRequestTiming(request.id);
     request.headers["x-request-id"] = request.id;
@@ -83,6 +90,7 @@ export async function buildApp() {
   app.addHook("onClose", async () => {
     clearInterval(formMaintenanceTimer);
     clearInterval(trashMaintenanceTimer);
+    clearInterval(scheduleMaintenanceTimer);
     await shutdownAsyncLogQueue();
   });
   app.addHook("preValidation", unpackGatewayRequest);
@@ -167,6 +175,8 @@ export async function buildApp() {
   await app.register(formsRoutes);
   await app.register(settingsRoutes);
   await app.register(dangerRoutes);
+  await app.register(commentsRoutes);
+  await app.register(exportsRoutes);
 
   const adminRoot = resolve(env.paths.serverDir, "public/admin");
   if (existsSync(adminRoot)) {

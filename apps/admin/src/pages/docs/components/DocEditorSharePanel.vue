@@ -3,12 +3,13 @@ import { Copy, ExternalLink, Link2 } from "lucide-vue-next";
 
 const shareEnabled = defineModel<boolean>("shareEnabled", { required: true });
 const shareCodeInput = defineModel<string>("shareCodeInput", { required: true });
+const customSlugInput = defineModel<string>("customSlugInput", { required: true });
 const sharePassword = defineModel<string>("sharePassword", { required: true });
 
 defineProps<{
   isAdmin: boolean;
   mobile?: boolean;
-  share: { shareCode?: number | null; reviewStatus?: string | null } | null;
+  share: { shareCode?: number | null; customSlug?: string | null; reviewStatus?: string | null } | null;
   shareUrl: string;
   shareLoading: boolean;
   shareHasPassword: boolean;
@@ -42,8 +43,8 @@ defineEmits<{
     <span>{{ isAdmin ? "公开分享" : "申请公开分享" }}</span>
   </label>
   <label v-if="isAdmin">
-    <span>分享数字</span>
-    <input :value="shareCodeInput || (share?.shareCode ? String(share.shareCode) : '系统自动分配')" type="text" readonly />
+    <span>自定义分享码</span>
+    <input v-model="customSlugInput" type="text" placeholder="字母数字下划线，3-48位，留空系统分配" />
   </label>
   <label>
     <span>访问密码</span>

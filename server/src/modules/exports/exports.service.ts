@@ -123,6 +123,11 @@ function queryAccessWhere(actor: DocumentActor, docIds: number[]): ReturnType<ty
   return and(inArray(docs.id, docIds), eq(docs.ownerId, actor.id))!;
 }
 
+function queryAccessByUid(actor: DocumentActor): ReturnType<typeof eq> | ReturnType<typeof sql> {
+  if (actor.isSuperAdmin) return sql`1=1`;
+  return eq(docs.ownerId, actor.id);
+}
+
 // 获取要导出的文档
 export async function getDocumentsForExport(
   actor: DocumentActor,
@@ -156,6 +161,43 @@ export async function getDocumentsForExport(
       .orderBy(desc(docs.updatedAt))
   );
 
+  return decryptAndMapDocs(rows);
+}
+
+// 通过 docUid 获取文档
+export async function getDocumentByUid(
+  actor: DocumentActor,
+  docUid: string
+): Promise<ExportDocument | null> {
+  const accessWhere = queryAccessByUid(actor);
+
+  const rows = await dbAll(
+    db.select({
+      id: docs.id,
+      docUid: docs.docUid,
+      title: docs.title,
+      summary: docs.summary,
+      contentJsonCiphertext: docs.contentJsonCiphertext,
+      contentJsonIv: docs.contentJsonIv,
+      contentJsonTag: docs.contentJsonTag,
+      contentJsonKeyVersion: docs.contentJsonKeyVersion,
+      contentHtmlCiphertext: docs.contentHtmlCiphertext,
+      contentHtmlIv: docs.contentHtmlIv,
+      contentHtmlTag: docs.contentHtmlTag,
+      contentHtmlKeyVersion: docs.contentHtmlKeyVersion,
+      tags: docs.tags,
+      createdAt: docs.createdAt,
+      updatedAt: docs.updatedAt,
+    })
+      .from(docs)
+      .where(and(eq(docs.docUid, docUid), accessWhere, isNull(docs.deletedAt)))
+  );
+
+  const results = decryptAndMapDocs(rows);
+  return results[0] || null;
+}
+
+function decryptAndMapDocs(rows: any[]): ExportDocument[] {
   const results: ExportDocument[] = [];
 
   for (const row of rows) {

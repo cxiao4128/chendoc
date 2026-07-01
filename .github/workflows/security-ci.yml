@@ -38,6 +38,7 @@ jobs:
       - run: npm audit --omit=dev
       - run: npm run check:architecture
       - run: npm --prefix apps/admin run lint
+      - run: npm --prefix server run lint
       - run: npm --prefix apps/admin run typecheck
       - run: npm run env:check
       - run: npm --prefix server run test

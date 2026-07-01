@@ -18,8 +18,8 @@ type Actor = DocumentActor;
 type PageOptions = { page?: number; pageSize?: number };
 type DocOwnerRole = "user" | "doc_admin" | "super_admin";
 type DocScope = "user" | "admin" | "system";
-const VERSION_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
-const MAX_DOC_VERSIONS = 50;
+const VERSION_SNAPSHOT_INTERVAL_MS = 2 * 60 * 1000; // 2 分钟内多次保存只保留一个版本
+const MAX_DOC_VERSIONS = 50; // 每个文档最多保留版本数
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 50;
 const DOC_UID_RETRY_LIMIT = 5;
@@ -213,13 +213,46 @@ async function shouldCreateVersion(executor: any, docId: number, current: { titl
   const htmlChanged = next.contentHtml !== undefined && next.contentHtml !== current.contentHtml;
   if (!titleChanged && !jsonChanged && !htmlChanged) return false;
 
-  const latest = await dbGet<{ createdAt: Date }>(executor
-    .select({ createdAt: docVersions.createdAt })
+  // 获取最新版本，检查内容是否完全相同（去重）
+  const latest = await dbGet<{ createdAt: Date; title: string | null; contentJsonCiphertext: string | null; contentJsonIv: string | null; contentJsonTag: string | null; contentJsonKeyVersion: number | null; contentHtmlCiphertext: string | null; contentHtmlIv: string | null; contentHtmlTag: string | null; contentHtmlKeyVersion: number | null }>(executor
+    .select({
+      createdAt: docVersions.createdAt,
+      title: docVersions.title,
+      contentJsonCiphertext: docVersions.contentJsonCiphertext,
+      contentJsonIv: docVersions.contentJsonIv,
+      contentJsonTag: docVersions.contentJsonTag,
+      contentJsonKeyVersion: docVersions.contentJsonKeyVersion,
+      contentHtmlCiphertext: docVersions.contentHtmlCiphertext,
+      contentHtmlIv: docVersions.contentHtmlIv,
+      contentHtmlTag: docVersions.contentHtmlTag,
+      contentHtmlKeyVersion: docVersions.contentHtmlKeyVersion,
+    })
     .from(docVersions)
     .where(eq(docVersions.docId, docId))
     .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
     .limit(1));
+
+  // 无版本记录，直接创建
   if (!latest) return true;
+
+  // 内容去重：和最新版本完全相同则跳过
+  const newTitle = next.title ?? current.title;
+  const newContentJson = next.contentJson ?? current.contentJson;
+  const newContentHtml = next.contentHtml ?? current.contentHtml;
+
+  try {
+    const latestDecrypted = decryptDocumentRecord(latest as any);
+    if (latestDecrypted.title === newTitle &&
+        latestDecrypted.contentJson === newContentJson &&
+        latestDecrypted.contentHtml === newContentHtml) {
+      // 内容完全相同，跳过
+      return false;
+    }
+  } catch {
+    // 解密失败，按节流逻辑处理
+  }
+
+  // 节流：检查是否在间隔时间内
   return Date.now() - latest.createdAt.getTime() >= VERSION_SNAPSHOT_INTERVAL_MS;
 }
 
@@ -819,4 +852,174 @@ export async function purgeExpiredTrashDocs() {
     .where(and(isNotNull(docs.deletedAt), sql`${docs.deletedAt} <= ${cutoff}`)));
   if (!rows.length) return 0;
   return (await bulkHardDeleteTrashDocs(rows.map((row) => row.id), { id: 0, role: "admin", isSuperAdmin: true })).length;
+}
+
+// ===== 定时发布和草稿过期 =====
+export interface ScheduleInfo {
+  scheduledAt: Date | null;
+  expiresAt: Date | null;
+  autoArchive: boolean;
+}
+
+// 设置文档定时发布
+export async function setDocumentSchedule(
+  actor: Actor,
+  docUid: string,
+  input: {
+    scheduledAt?: string | null;
+    expiresAt?: string | null;
+    autoArchive?: boolean;
+  }
+): Promise<ScheduleInfo> {
+  const doc = await dbGet<{ id: number; ownerId: number; isSuperAdminDoc: boolean }>(
+    db.select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
+      .from(docs)
+      .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
+      .limit(1)
+  );
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  assertCanAccessDoc(actor, doc, "update");
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+
+  if (input.scheduledAt !== undefined) {
+    updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+  }
+  if (input.expiresAt !== undefined) {
+    updates.expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+  }
+  if (input.autoArchive !== undefined) {
+    updates.autoArchive = input.autoArchive;
+  }
+
+  await dbRun(db.update(docs).set(updates).where(eq(docs.id, doc.id)));
+
+  const updated = await dbGet<ScheduleInfo>(
+    db.select({
+      scheduledAt: docs.scheduledAt,
+      expiresAt: docs.expiresAt,
+      autoArchive: docs.autoArchive
+    })
+      .from(docs)
+      .where(eq(docs.id, doc.id))
+      .limit(1)
+  );
+
+  return {
+    scheduledAt: updated?.scheduledAt ?? null,
+    expiresAt: updated?.expiresAt ?? null,
+    autoArchive: updated?.autoArchive ?? false
+  };
+}
+
+// 获取文档定时信息
+export async function getDocumentSchedule(docUid: string): Promise<ScheduleInfo | null> {
+  const doc = await dbGet<ScheduleInfo>(
+    db.select({
+      scheduledAt: docs.scheduledAt,
+      expiresAt: docs.expiresAt,
+      autoArchive: docs.autoArchive
+    })
+      .from(docs)
+      .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
+      .limit(1)
+  );
+  if (!doc) return null;
+  return {
+    scheduledAt: doc.scheduledAt,
+    expiresAt: doc.expiresAt,
+    autoArchive: doc.autoArchive
+  };
+}
+
+// 处理定时发布的文档（定时任务调用）
+export async function processScheduledDocs() {
+  const now = new Date();
+  const rows = await dbAll<{ id: number; docUid: string }>(
+    db.select({ id: docs.id, docUid: docs.docUid })
+      .from(docs)
+      .where(and(
+        isNull(docs.deletedAt),
+        isNotNull(docs.scheduledAt),
+        sql`${docs.scheduledAt} <= ${now}`,
+        eq(docs.status, "draft")
+      ))
+  );
+
+  if (!rows.length) return { published: 0 };
+
+  const actor: Actor = { id: 0, role: "admin", isSuperAdmin: true };
+  let published = 0;
+
+  for (const row of rows) {
+    try {
+      await dbRun(
+        db.update(docs)
+          .set({
+            status: "published",
+            scheduledAt: null,
+            updatedAt: new Date()
+          })
+          .where(eq(docs.id, row.id))
+      );
+      published++;
+    } catch (error) {
+      console.error(`Failed to publish scheduled doc ${row.docUid}:`, error);
+    }
+  }
+
+  return { published };
+}
+
+// 处理过期的草稿（定时任务调用）
+export async function processExpiredDrafts() {
+  const now = new Date();
+  const rows = await dbAll<{ id: number; docUid: string; autoArchive: boolean }>(
+    db.select({ id: docs.id, docUid: docs.docUid, autoArchive: docs.autoArchive })
+      .from(docs)
+      .where(and(
+        isNull(docs.deletedAt),
+        isNotNull(docs.expiresAt),
+        sql`${docs.expiresAt} <= ${now}`,
+        eq(docs.status, "draft")
+      ))
+  );
+
+  if (!rows.length) return { expired: 0, archived: 0 };
+
+  let expired = 0;
+  let archived = 0;
+
+  for (const row of rows) {
+    try {
+      if (row.autoArchive) {
+        // 过期后归档
+        await dbRun(
+          db.update(docs)
+            .set({
+              status: "archived",
+              expiresAt: null,
+              updatedAt: new Date()
+            })
+            .where(eq(docs.id, row.id))
+        );
+        archived++;
+      } else {
+        // 仅标记过期
+        await dbRun(
+          db.update(docs)
+            .set({
+              expiresAt: null,
+              updatedAt: new Date()
+            })
+            .where(eq(docs.id, row.id))
+        );
+      }
+      expired++;
+    } catch (error) {
+      console.error(`Failed to process expired draft ${row.docUid}:`, error);
+    }
+  }
+
+  return { expired, archived };
 }

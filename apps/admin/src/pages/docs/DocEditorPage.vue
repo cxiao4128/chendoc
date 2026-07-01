@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
-import { ArrowLeft, BookOpen, Copy, ExternalLink, Eye, Link2, MoreHorizontal, PanelRightOpen, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-vue-next";
+import { ArrowLeft, BookOpen, Clock, Copy, Download, ExternalLink, Eye, Link2, MessageSquare, MoreHorizontal, PanelRightOpen, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-vue-next";
 import DocTree from "../../components/docs/DocTree.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 import DocEditorSharePanel from "./components/DocEditorSharePanel.vue";
+import ExportMenu from "../../components/docs/ExportMenu.vue";
+import CommentPanel from "../../components/comments/CommentPanel.vue";
+import SyncIndicator from "../../components/common/SyncIndicator.vue";
 import { useIsMobileViewport } from "../../composables/useViewport";
 import { useDocAutosave } from "../../composables/useDocAutosave";
 import { useDocShareState } from "../../composables/useDocShare";
 import { useDocVersionState } from "../../composables/useDocVersions";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
+import { useNetworkStatus } from "../../composables/useNetworkStatus";
+import { useSyncState } from "../../composables/useSyncState";
 import { nativeConfirm } from "../../services/nativeDialog";
-import { deleteDocApi, getDocVersionPreviewApi, listDocVersionsApi, restoreDocVersionApi, restoreDocVersionAsCopyApi, type DocVersion } from "../../api/docs";
+import { deleteDocApi, getDocVersionPreviewApi, getDocScheduleApi, listDocVersionsApi, restoreDocVersionApi, restoreDocVersionAsCopyApi, setDocScheduleApi, deleteDocScheduleApi, type DocVersion, type DocSchedule } from "../../api/docs";
 import { createShareApi, getShareByDocApi, updateShareApi, type SharePatch } from "../../api/shares";
 import { useAuthStore } from "../../stores/auth";
 import { useDocStore } from "../../stores/doc";
@@ -54,19 +59,35 @@ const auth = useAuthStore();
 const isMobile = useIsMobileViewport();
 const { docsPath, docPath } = useWorkspaceRoutes();
 
+// 网络状态感知
+const { status: networkStatus } = useNetworkStatus();
+
+// 同步状态
+const sync = useSyncState({
+  isDirty: () => dirty.value,
+  isSaving: () => saving,
+  saveError: () => saveError.value || null,
+  networkStatus: () => networkStatus.value,
+});
+
 const title = ref("");
 const draft = ref<{ contentJson: string; textLength: number } | null>(null);
 const saveState = ref<"idle" | "pending" | "saving" | "saved" | "error">("idle");
-const savedAt = ref("");
-const { share, shareLoading, shareEnabled, sharePassword, shareCodeInput, shareStatus, shareHasPassword, sharePanelOpen } = useDocShareState();
+const { share, shareLoading, shareEnabled, sharePassword, shareCodeInput, customSlugInput, shareStatus, shareHasPassword, sharePanelOpen } = useDocShareState();
 const copied = ref(false);
 const deleteOpen = ref(false);
+const schedulePanelOpen = ref(false);
+const scheduleLoading = ref(false);
+const scheduleError = ref("");
+const scheduleData = ref<DocSchedule | null>(null);
+const exportMenuOpen = ref(false);
+const commentPanelOpen = ref(false);
 const hydrating = ref(false);
 const dirty = ref(false);
 const toc = ref<TocItem[]>([]);
 const { versions, selectedVersion, versionPreview, versionPreviewLoading } = useDocVersionState();
 const editorRefresh = ref(0);
-const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions" | "more">(null);
+const mobileSheet = ref<null | "docs" | "toc" | "share" | "versions" | "more" | "export">(null);
 const localDetailError = ref("");
 const saveError = ref("");
 let shareSaveTimer: number | undefined;
@@ -76,6 +97,7 @@ let syncingShare = false;
 let localDraftTimer: number | undefined;
 
 const AUTO_SAVE_DELAY_MS = 1200;
+const MAX_SAVE_RETRIES = 3;
 
 const docUid = computed(() => String(route.params.docUid || ""));
 const current = computed(() => docs.current?.docUid === docUid.value ? docs.current : null);
@@ -84,7 +106,9 @@ const detailErrorText = computed(() => normalizeError((docs as unknown as DocSto
 const saveErrorText = computed(() => saveError.value || "保存失败，当前编辑内容仍保留在本地。");
 const shareUrl = computed(() => {
   if (!share.value?.isEnabled) return "";
-  return `${location.origin}/r/${share.value.shareCode}`;
+  // 优先使用自定义分享码
+  const shareKey = share.value.customSlug || share.value.shareCode;
+  return `${location.origin}/r/${shareKey}`;
 });
 const shareReviewText = computed(() => {
   if (!share.value?.reviewStatus || share.value.reviewStatus === "approved") return "";
@@ -92,11 +116,9 @@ const shareReviewText = computed(() => {
   return share.value.reviewNote ? `审核未通过：${share.value.reviewNote}` : "审核未通过，可修改后重新提交。";
 });
 const saveText = computed(() => {
-  if (saveState.value === "saving") return "保存中";
-  if (saveState.value === "pending") return "待保存";
+  // 无感保存：正常状态不显示文字，只有错误时才提示
   if (saveState.value === "error") return "保存失败";
-  if (savedAt.value) return `已保存 ${savedAt.value}`;
-  return "自动保存";
+  return "";
 });
 const documentWordCount = computed(() => {
   if (draft.value) return draft.value.textLength;
@@ -111,6 +133,7 @@ const mobileSheetTitle = computed(() => {
   if (mobileSheet.value === "share") return "发布设置";
   if (mobileSheet.value === "versions") return "历史版本";
   if (mobileSheet.value === "more") return "更多操作";
+  if (mobileSheet.value === "export") return "导出文档";
   return "";
 });
 const shareCanOpenPublicly = computed(() => !!shareUrl.value);
@@ -188,6 +211,7 @@ async function loadShare(docUidValue: string) {
   syncingShare = true;
   shareEnabled.value = !!share.value?.isEnabled || (!auth.isAdmin && share.value?.reviewStatus === "pending");
   shareCodeInput.value = share.value?.shareCode ? String(share.value.shareCode) : "";
+  customSlugInput.value = share.value?.customSlug || "";
   sharePassword.value = "";
   shareHasPassword.value = !!share.value?.hasPassword;
   shareStatus.value = shareReviewText.value || (shareHasPassword.value ? "当前已有密码，未确认新密码前不会改动" : "");
@@ -286,8 +310,14 @@ function onEditorChange(payload: { contentJson: string; textLength: number }) {
   markDirty();
 }
 
-async function save() {
+async function save(retryCount = 0) {
   if (!current.value || saving || !dirty.value) return;
+
+  // 断网时暂停保存，等待网络恢复
+  if (networkStatus.value === "offline") {
+    return;
+  }
+
   const targetDocUid = current.value.docUid;
   const titleSnapshot = title.value;
   const draftSnapshot = draft.value;
@@ -299,11 +329,11 @@ async function save() {
       title: titleSnapshot.trim() || "未命名文档",
       ...(draftSnapshot ? { contentJson: draftSnapshot.contentJson } : {})
     });
-    savedAt.value = new Date().toLocaleTimeString();
     if (current.value?.docUid === targetDocUid && title.value === titleSnapshot && draft.value === draftSnapshot) {
       draft.value = null;
       dirty.value = false;
-      saveState.value = "saved";
+      saveState.value = "idle";
+      sync.markSynced(); // 标记已同步
       void removeLocalDraft(targetDocUid);
     } else if (current.value?.docUid === targetDocUid) {
       dirty.value = true;
@@ -311,7 +341,17 @@ async function save() {
     }
     void loadVersions(targetDocUid);
   } catch (error) {
-    saveError.value = normalizeError(error) || "保存失败，请检查网络后重试。";
+    // 静默重试，最多3次
+    if (retryCount < MAX_SAVE_RETRIES) {
+      saving = false;
+      sync.markRetry(retryCount + 1); // 记录重试次数
+      // 延迟后重试，指数退避
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+      window.setTimeout(() => { void save(retryCount + 1); }, delay);
+      return;
+    }
+    // 3次都失败，只记录错误状态，不弹窗
+    saveError.value = normalizeError(error) || "保存失败，当前编辑内容已保留在本地。";
     dirty.value = true;
     saveState.value = "error";
   } finally {
@@ -368,12 +408,17 @@ async function saveShare(passwordConfirmed = false, clearPassword = false) {
     };
     if (passwordConfirmed && sharePassword.value.trim()) patch.password = sharePassword.value.trim();
     if (clearPassword) patch.password = null;
+    // 自定义分享码
+    if (customSlugInput.value.trim()) {
+      patch.customSlug = customSlugInput.value.trim();
+    }
     await updateShareApi(target.id, patch);
     const response = await getShareByDocApi(current.value.docUid);
     share.value = response.share;
     syncingShare = true;
     shareEnabled.value = !!share.value?.isEnabled || (!auth.isAdmin && share.value?.reviewStatus === "pending");
     shareCodeInput.value = share.value?.shareCode ? String(share.value.shareCode) : "";
+    customSlugInput.value = share.value?.customSlug || "";
     shareHasPassword.value = !!share.value?.hasPassword;
     sharePassword.value = "";
     syncingShare = false;
@@ -468,6 +513,63 @@ function resubmitRejectedShare() {
   void saveShare();
 }
 
+async function loadSchedule() {
+  if (!current.value) return;
+  scheduleLoading.value = true;
+  scheduleError.value = "";
+  try {
+    const res = await getDocScheduleApi(current.value.docUid);
+    scheduleData.value = res.schedule;
+  } catch (e: unknown) {
+    scheduleError.value = normalizeError(e, "加载定时设置失败");
+  } finally {
+    scheduleLoading.value = false;
+  }
+}
+
+async function saveSchedule(input: { scheduledAt?: string | null; expiresAt?: string | null; autoArchive?: boolean }) {
+  if (!current.value) return;
+  scheduleLoading.value = true;
+  scheduleError.value = "";
+  try {
+    const res = await setDocScheduleApi(current.value.docUid, input);
+    scheduleData.value = res.schedule;
+    schedulePanelOpen.value = false;
+  } catch (e: unknown) {
+    scheduleError.value = normalizeError(e, "保存定时设置失败");
+  } finally {
+    scheduleLoading.value = false;
+  }
+}
+
+async function clearSchedule() {
+  if (!current.value) return;
+  scheduleLoading.value = true;
+  scheduleError.value = "";
+  try {
+    await deleteDocScheduleApi(current.value.docUid);
+    scheduleData.value = null;
+    schedulePanelOpen.value = false;
+  } catch (e: unknown) {
+    scheduleError.value = normalizeError(e, "清除定时设置失败");
+  } finally {
+    scheduleLoading.value = false;
+  }
+}
+
+function openSchedulePanel() {
+  if (current.value) {
+    void loadSchedule();
+    schedulePanelOpen.value = true;
+  }
+}
+
+function formatScheduleDate(isoString: string | null) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  return d.toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 async function restoreVersion(version: DocVersion) {
   if (!current.value) return;
   if (dirty.value || saving) {
@@ -518,12 +620,29 @@ watch(() => route.fullPath, () => {
 });
 watch(title, markDirty);
 watch(shareEnabled, scheduleShareSave);
+watch(customSlugInput, scheduleShareSave);
+// 网络恢复时，自动同步未保存的内容
+watch(() => networkStatus.value, (newStatus, oldStatus) => {
+  if (oldStatus === "offline" && newStatus === "online" && dirty.value && !saving) {
+    void save();
+  }
+});
 
 onMounted(() => {
   void load();
   window.addEventListener("beforeunload", beforeUnload);
   window.addEventListener("pagehide", persistLocalDraft);
+  // 页面可见性变化时强制保存草稿
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 });
+
+// 处理页面可见性变化
+function handleVisibilityChange() {
+  if (document.visibilityState === "hidden" && dirty.value) {
+    // 页面隐藏时立即保存草稿
+    void persistLocalDraft();
+  }
+}
 
 onBeforeRouteLeave(async (_to, _from, next) => {
   if (!dirty.value && !saving) {
@@ -550,6 +669,7 @@ onBeforeUnmount(() => {
   if (localDraftTimer) window.clearTimeout(localDraftTimer);
   window.removeEventListener("beforeunload", beforeUnload);
   window.removeEventListener("pagehide", persistLocalDraft);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
   if (dirty.value) void save();
 });
 </script>
@@ -564,8 +684,9 @@ onBeforeUnmount(() => {
         <div class="doc-editor-page__mobile-headline">
           <span>文档编辑</span>
           <strong>{{ title || "未命名文档" }}</strong>
+          <SyncIndicator :state="sync.syncState.value" />
         </div>
-        <span class="doc-editor-page__mobile-save" :class="`is-${saveState}`">{{ saveText }}</span>
+        <span v-if="saveText" class="doc-editor-page__mobile-save" :class="`is-${saveState}`">{{ saveText }}</span>
       </header>
 
       <div v-if="docs.loadingDetail && !current" class="doc-editor-page__loading is-mobile">
@@ -665,6 +786,7 @@ onBeforeUnmount(() => {
             <DocEditorSharePanel
               v-model:share-enabled="shareEnabled"
               v-model:share-code-input="shareCodeInput"
+              v-model:custom-slug-input="customSlugInput"
               v-model:share-password="sharePassword"
               mobile
               :is-admin="auth.isAdmin"
@@ -710,8 +832,18 @@ onBeforeUnmount(() => {
             <button class="cd-button" type="button" @click="mobileSheet = 'docs'"><BookOpen :size="16" />切换文档</button>
             <button class="cd-button" type="button" @click="mobileSheet = 'toc'"><Link2 :size="16" />目录导航</button>
             <button class="cd-button" type="button" @click="mobileSheet = 'versions'"><RotateCcw :size="16" />历史版本</button>
+            <button class="cd-button" type="button" @click="mobileSheet = 'export'"><Download :size="16" />导出文档</button>
             <button class="cd-button" type="button" :disabled="shareLoading" @click="copyShare"><Copy :size="16" />{{ copied ? "已复制" : "复制分享信息" }}</button>
             <button class="cd-button danger" type="button" @click="deleteOpen = true"><Trash2 :size="16" />删除文档</button>
+          </div>
+
+          <div v-else-if="mobileSheet === 'export'" class="doc-editor-page__export">
+            <ExportMenu
+              v-if="current"
+              :doc-uid="current.docUid"
+              :doc-title="current.title"
+              @close="mobileSheet = 'more'"
+            />
           </div>
         </aside>
 
@@ -753,13 +885,23 @@ onBeforeUnmount(() => {
         <template v-else-if="current">
           <header class="doc-editor-page__bar">
             <input v-model="title" class="doc-editor-page__title" aria-label="文档标题" />
-            <span class="doc-editor-page__save" :class="`is-${saveState}`">{{ saveText }}</span>
+            <SyncIndicator :state="sync.syncState.value" />
+            <span v-if="saveText" class="doc-editor-page__save" :class="`is-${saveState}`">{{ saveText }}</span>
             <span class="doc-editor-page__metrics">{{ documentWordCount }} 字</span>
             <button class="cd-button" :class="{ primary: sharePanelOpen }" type="button" @click="sharePanelOpen = !sharePanelOpen">
               <PanelRightOpen :size="16" />分享
             </button>
             <button class="cd-button" type="button" :disabled="shareLoading" @click="copyShare">
               <Copy :size="16" />{{ copied ? "已复制" : "复制链接" }}
+            </button>
+            <button class="cd-button" :class="{ primary: commentPanelOpen }" type="button" @click="commentPanelOpen = !commentPanelOpen">
+              <MessageSquare :size="16" />评论
+            </button>
+            <button class="cd-button" :class="{ primary: scheduleData?.scheduledAt || scheduleData?.expiresAt }" type="button" @click="openSchedulePanel">
+              <Clock :size="16" />定时
+            </button>
+            <button class="cd-button" :class="{ primary: selectedVersion }" type="button" @click="sharePanelOpen = true; commentPanelOpen = false" title="查看版本历史">
+              <RotateCcw :size="16" />历史
             </button>
             <a v-if="shareCanOpenPublicly" class="cd-button" :href="shareUrl" target="_blank" rel="noopener noreferrer">
               <ExternalLink :size="16" />打开
@@ -769,11 +911,20 @@ onBeforeUnmount(() => {
                 <MoreHorizontal :size="17" />更多
               </summary>
               <div class="doc-editor-page__desktop-menu">
+                <button type="button" @click="exportMenuOpen = true">
+                  <Download :size="16" />导出文档
+                </button>
                 <button type="button" @click="openDesktopDelete">
                   <Trash2 :size="16" />删除文档
                 </button>
               </div>
             </details>
+            <ExportMenu
+              v-if="exportMenuOpen"
+              :doc-uid="current.docUid"
+              :doc-title="current.title"
+              @close="exportMenuOpen = false"
+            />
           </header>
 
           <div v-if="saveState === 'error'" class="doc-editor-page__save-error">
@@ -783,7 +934,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <div class="doc-editor-page__body" :class="{ 'has-aside': sharePanelOpen }">
+          <div class="doc-editor-page__body" :class="{ 'has-aside': sharePanelOpen || commentPanelOpen }">
             <div class="doc-editor-page__canvas">
               <ChendocEditor
                 :key="editorKey"
@@ -800,6 +951,7 @@ onBeforeUnmount(() => {
                 <DocEditorSharePanel
                   v-model:share-enabled="shareEnabled"
                   v-model:share-code-input="shareCodeInput"
+                  v-model:custom-slug-input="customSlugInput"
                   v-model:share-password="sharePassword"
                   :is-admin="auth.isAdmin"
                   :share="share"
@@ -817,6 +969,57 @@ onBeforeUnmount(() => {
                   @password-input="onPasswordInput"
                   @resubmit="resubmitRejectedShare"
                 />
+              </section>
+
+              <section v-if="commentPanelOpen">
+                <CommentPanel
+                  :doc-uid="current.docUid"
+                  @close="commentPanelOpen = false"
+                />
+              </section>
+
+              <section v-if="schedulePanelOpen">
+                <h2>
+                  <Clock :size="16" />定时发布
+                </h2>
+                <div v-if="scheduleLoading" class="doc-editor-page__loading">
+                  <span class="cd-skeleton" />
+                </div>
+                <p v-else-if="scheduleError" class="doc-editor-page__error-text">{{ scheduleError }}</p>
+                <div v-else class="doc-editor-page__schedule-form">
+                  <label class="doc-editor-page__schedule-field">
+                    <span>定时发布</span>
+                    <input
+                      type="datetime-local"
+                      class="cd-input"
+                      :value="scheduleData?.scheduledAt ? scheduleData.scheduledAt.slice(0, 16) : ''"
+                      @change="(e) => saveSchedule({ scheduledAt: (e.target as HTMLInputElement).value ? new Date((e.target as HTMLInputElement).value).toISOString() : null })"
+                    />
+                    <small v-if="scheduleData?.scheduledAt">将于 {{ formatScheduleDate(scheduleData.scheduledAt) }} 自动发布</small>
+                  </label>
+                  <label class="doc-editor-page__schedule-field">
+                    <span>草稿过期</span>
+                    <input
+                      type="datetime-local"
+                      class="cd-input"
+                      :value="scheduleData?.expiresAt ? scheduleData.expiresAt.slice(0, 16) : ''"
+                      @change="(e) => saveSchedule({ expiresAt: (e.target as HTMLInputElement).value ? new Date((e.target as HTMLInputElement).value).toISOString() : null })"
+                    />
+                    <small v-if="scheduleData?.expiresAt">将于 {{ formatScheduleDate(scheduleData.expiresAt) }} 自动处理</small>
+                  </label>
+                  <label class="doc-editor-page__schedule-field">
+                    <span>过期后归档</span>
+                    <input
+                      type="checkbox"
+                      :checked="scheduleData?.autoArchive"
+                      @change="(e) => saveSchedule({ autoArchive: (e.target as HTMLInputElement).checked })"
+                    />
+                    <small>过期时将草稿标记为已归档</small>
+                  </label>
+                  <div v-if="scheduleData?.scheduledAt || scheduleData?.expiresAt" class="doc-editor-page__schedule-actions">
+                    <button class="cd-button danger" type="button" :disabled="scheduleLoading" @click="clearSchedule">清除定时</button>
+                  </div>
+                </div>
               </section>
 
               <section>

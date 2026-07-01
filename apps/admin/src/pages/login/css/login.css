@@ -1,7 +1,7 @@
 .login-page {
   min-height: 100dvh;
   overflow: hidden;
-  background: #fff;
+  background: var(--cd-bg);
   color: var(--cd-ink);
 }
 
@@ -9,7 +9,7 @@
   display: grid;
   min-height: 100dvh;
   place-items: center;
-  background: #fff;
+  background: var(--cd-bg);
 }
 
 .login-page .auth-preload__logo {
@@ -17,9 +17,9 @@
   height: 54px;
   border: 1px solid var(--cd-border);
   border-radius: 50%;
-  background: #fff;
+  background: var(--cd-bg-plain);
   object-fit: cover;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--cd-shadow-card);
 }
 
 .login-page .auth-shell {
@@ -33,7 +33,7 @@
   inset: 0;
   z-index: -3;
   overflow: hidden;
-  background: #fff url("/site-assets/login-wallpaper-small.webp") center center / cover no-repeat;
+  background: var(--cd-bg-plain);
 }
 
 .login-page .auth-scene__image {
@@ -70,11 +70,11 @@
 .login-page .auth-top-brand__logo {
   width: 36px;
   height: 36px;
-  border: 1px solid rgba(219, 228, 240, 0.88);
+  border: 1px solid var(--cd-border);
   border-radius: var(--cd-radius);
-  background: #fff;
+  background: var(--cd-bg-plain);
   object-fit: cover;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--cd-shadow-card);
 }
 
 .login-page .auth-top-brand span {
@@ -115,7 +115,7 @@
   align-content: start;
   justify-items: start;
   min-height: calc(100dvh - 128px);
-  color: #8a84bd;
+  color: var(--cd-muted);
   padding-top: min(29vh, 300px);
 }
 
@@ -135,7 +135,7 @@
 
 .login-page .auth-hero__copy h1 {
   margin: 0;
-  color: #8e87c4;
+  color: var(--cd-aura-strong);
   font-family: var(--cd-font-serif);
   font-size: clamp(58px, 5vw, 82px);
   font-weight: 400;
@@ -144,7 +144,7 @@
 }
 
 .login-page .auth-hero__copy strong {
-  color: #8a84bd;
+  color: var(--cd-muted);
   font-family: var(--cd-font-serif);
   font-size: 28px;
   font-weight: 600;
@@ -154,12 +154,12 @@
   width: 160px;
   height: 1px;
   margin: 20px 0 10px;
-  background: rgba(74, 92, 132, 0.42);
+  background: var(--cd-border);
 }
 
 .login-page .auth-hero__copy p {
   margin: 0;
-  color: #9a96c5;
+  color: var(--cd-text-secondary);
   font-size: 18px;
   font-weight: 650;
   line-height: 1.85;
@@ -169,7 +169,7 @@
   position: absolute;
   left: 0;
   bottom: 18px;
-  color: #9d9ac5;
+  color: var(--cd-faint);
   font-size: 14px;
   font-weight: 600;
 }
@@ -187,10 +187,10 @@
   width: 100%;
   gap: 14px;
   min-height: 0;
-  border: 1px solid rgba(205, 213, 226, 0.95);
+  border: 1px solid var(--cd-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 8px rgba(42, 55, 82, 0.12);
+  background: var(--cd-bg-plain);
+  box-shadow: var(--cd-shadow-soft);
   padding: 32px;
 }
 
@@ -228,11 +228,11 @@
 .login-page .auth-brand__logo {
   width: 42px;
   height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--cd-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--cd-bg-plain);
   object-fit: cover;
-  box-shadow: 0 8px 22px rgba(90, 100, 150, 0.10);
+  box-shadow: var(--cd-shadow-soft);
 }
 
 .login-page .auth-brand__copy {
@@ -265,7 +265,7 @@
 
 .login-page .auth-heading__title {
   margin: 0;
-  color: #8179b8;
+  color: var(--cd-aura-strong);
   font-family: var(--cd-font-serif);
   font-size: 26px;
   font-weight: 600;
@@ -275,7 +275,7 @@
 
 .login-page .auth-heading__subtitle {
   margin: 0;
-  color: #858bad;
+  color: var(--cd-text-secondary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -324,18 +324,18 @@
   gap: 8px;
   align-items: center;
   min-height: 42px;
-  border: 1px solid rgba(160, 170, 210, 0.24);
+  border: 1px solid var(--cd-border);
   border-radius: 9px;
-  background: #fff;
-  color: #53627a;
+  background: var(--cd-bg-plain);
+  color: var(--cd-text);
   padding: 0 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   transition: border-color 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
 }
 
 .login-page .auth-input:focus-within {
-  border-color: rgba(125, 107, 232, 0.58);
-  background: rgba(255, 255, 255, 0.82);
+  border-color: var(--cd-primary);
+  background: var(--cd-bg-plain);
   box-shadow: 0 0 0 3px var(--cd-focus);
 }
 
@@ -350,14 +350,14 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: #4c5578;
+  color: var(--cd-text);
   font-size: 15px;
   font-weight: 650;
   text-align: center;
 }
 
 .login-page .auth-input input::placeholder {
-  color: #aaa7cc;
+  color: var(--cd-faint);
 }
 
 .login-page .auth-input button {
@@ -406,12 +406,12 @@
 .login-page .auth-links i {
   width: 1px;
   height: 16px;
-  background: #d8dbee;
+  background: var(--cd-border);
 }
 
 .login-page .auth-links a,
 .login-page .auth-register-link {
-  color: #8f88c6;
+  color: var(--cd-aura-strong);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
@@ -464,13 +464,13 @@
   justify-content: center;
   border: 0;
   border-radius: 10px;
-  background: #315fce;
+  background: var(--cd-primary);
   color: #fff;
   font-family: var(--cd-font-sans);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0;
-  box-shadow: 0 2px 6px rgba(49, 95, 206, 0.24);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.24);
   transition: filter 150ms ease-out, transform 150ms ease-out;
 }
 
@@ -509,17 +509,19 @@
 
 .login-page .cd-input {
   min-height: 40px;
-  border-color: rgba(160, 170, 210, 0.24);
-  background: rgba(255, 255, 255, 0.68);
-  color: var(--cd-ink);
+  border: 1px solid var(--cd-border);
+  border-radius: 9px;
+  background: var(--cd-bg-plain);
+  color: var(--cd-text);
   padding: 0 11px;
   font-size: 14px;
 }
 
 .login-page .captcha-input__image {
   height: 40px;
-  border-color: rgba(160, 170, 210, 0.24);
-  background: rgba(255, 255, 255, 0.70);
+  border: 1px solid var(--cd-border);
+  border-radius: 9px;
+  background: var(--cd-bg-plain);
 }
 
 .login-page .captcha-input__image img {
@@ -530,8 +532,9 @@
 .login-page .captcha-input__refresh {
   width: 40px;
   min-height: 40px;
-  border-color: rgba(160, 170, 210, 0.24);
-  background: rgba(255, 255, 255, 0.70);
+  border: 1px solid var(--cd-border);
+  border-radius: 9px;
+  background: var(--cd-bg-plain);
   padding: 0;
 }
 

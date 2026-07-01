@@ -1,7 +1,24 @@
 <script setup lang="ts">
 // ChenDoc v2.10.0 - 标签管理组件
 import { ref, computed, onMounted } from "vue";
-import { listTags, createTag, updateTag, deleteTag, TAG_COLORS, type Tag } from "../../api/tags.js";
+import {
+  FileText, Folder, Star, Heart, Flag, Book, BookOpen,
+  Briefcase, Code, Database, Globe, Image, Music, Video,
+  Camera, Lock, Mail, Phone, Settings, Tag as LucideTag, Zap,
+  Lightbulb, Rocket, Target, X
+} from "lucide-vue-next";
+import {
+  listTags, createTag, updateTag, deleteTag,
+  TAG_COLORS, TAG_ICONS, type Tag
+} from "../../api/tags.js";
+
+// 图标映射
+const iconMap: Record<string, any> = {
+  FileText, Folder, Star, Heart, Flag, Book, BookOpen,
+  Briefcase, Code, Database, Globe, Image, Music, Video,
+  Camera, Lock, Mail, Phone, Settings, Tag: LucideTag, Zap,
+  Lightbulb, Rocket, Target
+};
 
 const emit = defineEmits<{
   (e: "select", tag: Tag): void;
@@ -19,9 +36,11 @@ const error = ref("");
 const editingId = ref<number | null>(null);
 const editName = ref("");
 const editColor = ref("");
+const editIcon = ref("");
 const showCreateForm = ref(false);
 const newTagName = ref("");
 const newTagColor = ref<string>(TAG_COLORS[0]);
+const newTagIcon = ref("");
 
 // 计算属性
 const sortedTags = computed(() => {
@@ -72,6 +91,7 @@ function startEdit(tag: Tag) {
   editingId.value = tag.id;
   editName.value = tag.name;
   editColor.value = tag.color;
+  editIcon.value = tag.icon || "";
 }
 
 // 保存编辑
@@ -82,6 +102,7 @@ async function saveEdit(tag: Tag) {
     await updateTag(tag.id, {
       name: editName.value.trim(),
       color: editColor.value,
+      icon: editIcon.value || undefined,
     });
     editingId.value = null;
     await loadTags();
@@ -96,6 +117,7 @@ function cancelEdit() {
   editingId.value = null;
   editName.value = "";
   editColor.value = "";
+  editIcon.value = "";
 }
 
 // 删除标签
@@ -116,6 +138,11 @@ async function handleDelete(tag: Tag) {
 // 选择标签
 function selectTag(tag: Tag) {
   emit("select", tag);
+}
+
+// 获取图标组件
+function getIconComponent(iconName: string) {
+  return iconName ? iconMap[iconName] : null;
 }
 
 // 初始化
@@ -142,6 +169,7 @@ onMounted(() => {
         maxlength="32"
         @keyup.enter="handleCreate"
       />
+      <div class="tag-manager__section-label">颜色</div>
       <div class="tag-manager__colors">
         <button
           v-for="color in TAG_COLORS"
@@ -151,6 +179,19 @@ onMounted(() => {
           :style="{ backgroundColor: color }"
           @click="newTagColor = color"
         />
+      </div>
+      <div class="tag-manager__section-label">图标</div>
+      <div class="tag-manager__icons">
+        <button
+          v-for="iconName in TAG_ICONS"
+          :key="iconName"
+          class="tag-manager__icon"
+          :class="{ active: newTagIcon === iconName }"
+          @click="newTagIcon = iconName"
+        >
+          <component v-if="iconName && iconMap[iconName]" :is="iconMap[iconName]" :size="16" />
+          <X v-else :size="16" />
+        </button>
       </div>
       <button class="cd-button primary" @click="handleCreate">创建</button>
     </div>
@@ -193,6 +234,18 @@ onMounted(() => {
               @click="editColor = color"
             />
           </div>
+          <div class="tag-manager__icons">
+            <button
+              v-for="iconName in TAG_ICONS"
+              :key="iconName"
+              class="tag-manager__icon"
+              :class="{ active: editIcon === iconName }"
+              @click="editIcon = iconName"
+            >
+              <component v-if="iconName && iconMap[iconName]" :is="iconMap[iconName]" :size="16" />
+              <X v-else :size="16" />
+            </button>
+          </div>
           <button class="cd-button primary" @click="saveEdit(tag)">保存</button>
           <button class="cd-button" @click="cancelEdit">取消</button>
         </template>
@@ -200,6 +253,9 @@ onMounted(() => {
         <!-- 查看模式 -->
         <template v-else>
           <div class="tag-manager__tag" @click="selectTag(tag)">
+            <span class="tag-manager__icon-wrap" :style="{ color: tag.color }">
+              <component v-if="tag.icon && getIconComponent(tag.icon)" :is="getIconComponent(tag.icon)" :size="14" />
+            </span>
             <span
               class="tag-manager__dot"
               :style="{ backgroundColor: tag.color }"
@@ -268,6 +324,54 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.tag-manager__section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cd-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+
+.tag-manager__icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-manager__icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--cd-border);
+  border-radius: 6px;
+  background: var(--cd-panel);
+  color: var(--cd-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tag-manager__icon:hover {
+  border-color: var(--cd-border-strong);
+  color: var(--cd-text);
+  background: var(--cd-paper-soft);
+}
+
+.tag-manager__icon.active {
+  border-color: var(--cd-primary);
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary);
+}
+
+.tag-manager__icon-wrap {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 .tag-manager__color {

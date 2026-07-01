@@ -8,6 +8,7 @@ export function useDocShareState() {
     shareEnabled: ref(false),
     sharePassword: ref(""),
     shareCodeInput: ref(""),
+    customSlugInput: ref(""),
     shareStatus: ref(""),
     shareHasPassword: ref(false),
     sharePanelOpen: ref(false)
