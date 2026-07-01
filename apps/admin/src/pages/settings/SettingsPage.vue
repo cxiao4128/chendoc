@@ -53,6 +53,7 @@ import LogsSettingsSection from "./components/LogsSettingsSection.vue";
 import MaintenanceSettingsSection from "./components/MaintenanceSettingsSection.vue";
 import SiteSettingsSection from "./components/SiteSettingsSection.vue";
 import StorageSettingsSection from "./components/StorageSettingsSection.vue";
+import ThemeSettingsSection from "./components/ThemeSettingsSection.vue";
 import UsersSettingsSection from "./components/UsersSettingsSection.vue";
 import "./css/settings.css";
 
@@ -60,7 +61,7 @@ type ActivePanel = "overview" | "logs" | "appearance" | "recovery" | "users" | "
 type UserDetailTab = "info" | "roles" | "login" | "actions";
 type UpdateState = "idle" | "checking" | "latest" | "outdated" | "error";
 
-const APP_VERSION = "v3.0.0";
+const APP_VERSION = "v3.0.1";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const GITHUB_API_BASE = "https://api.github.com/repos/cxiao4128/chendoc";
 const GITHUB_RAW_PACKAGE_URL = "https://raw.githubusercontent.com/cxiao4128/chendoc/main/package.json";
@@ -883,6 +884,8 @@ onBeforeUnmount(() => {
       <p class="settings-page__hint">为空则不展示，会显示在公开分享页正文下方。</p>
       <p v-if="message" class="settings-page__save-message">{{ message }}</p>
     </SiteSettingsSection>
+
+    <ThemeSettingsSection v-if="activePanel === 'appearance'" />
 
     <form v-if="activePanel === 'recovery'" class="settings-page__panel settings-page__appearance" @submit.prevent="save">
       <div class="settings-page__panel-head">

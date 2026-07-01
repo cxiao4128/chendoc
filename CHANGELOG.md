@@ -4,6 +4,24 @@
 
 ## 中文
 
+### 3.0.1
+
+版本号：`3.0.1`
+
+展示版本：`v3.0.1`
+
+**Bug 修复**
+
+- 修复自定义分享码为纯数字时被错误拒绝的问题，管理员可设置如"21221"这样的纯数字分享码。
+- 修复评论功能数据库表缺失问题，新增 `doc_comments` 表用于存储文档评论。
+
+**功能完善**
+
+- 优化文档编辑器的分享面板，支持自定义分享码输入和密码管理。
+- 分享页专属信息（shareFooterText）正确显示在分享页正文下方。
+
+更新时间：2026-07-02 +08:00
+
 ### 3.0.0
 
 版本号：`3.0.0`
@@ -379,6 +397,24 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 3.0.1
+
+Version: `3.0.1`
+
+Display version: `v3.0.1`
+
+**Bug Fixes**
+
+- Fixed custom share codes with pure numbers being incorrectly rejected; admins can now set share codes like "21221".
+- Fixed missing `doc_comments` database table for document comments feature.
+
+**Enhancements**
+
+- Optimized document editor share panel with custom share code input and password management.
+- Share page exclusive info (shareFooterText) correctly displays below content.
+
+Updated at: 2026-07-02 +08:00
 
 ### 3.0.0
 

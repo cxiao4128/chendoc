@@ -1,18 +1,16 @@
 {
   "name": "chendoc",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "type": "module",
   "description": "ChenDoc / Chen Shu commercial document management and knowledge publishing platform.",
-  "dependencies": {
-    "pm2": "7.0.1"
-  },
+  "dependencies": {},
   "workspaces": [
     "apps/admin",
     "server"
   ],
   "scripts": {
-    "dev": "set NODE_ENV=production&& set DATABASE_PROVIDER=sqlite&& set DATABASE_URL=./data/chendoc.sqlite&& set CHENDOC_ALLOW_SQLITE_RUNTIME=true&& npm run build && npm run start",
+    "dev": "npm run build && npm run start",
     "dev:server": "npm --prefix server run dev",
     "dev:admin": "npm --prefix apps/admin run build && node scripts/copy-admin-dist.js",
     "build": "npm --prefix apps/admin run build && node scripts/copy-admin-dist.js && npm --prefix server run build",
@@ -35,14 +33,16 @@
     "security:audit": "npm audit --omit=dev",
     "security:audit:signatures": "npm audit signatures",
     "html:resanitize": "npm --prefix server run html:resanitize",
-    "admin:init": "set CHENDOC_E2E_TESTING=true&& set CHENDOC_ALLOW_WEAK_ADMIN_PASSWORD=true&& npm --prefix server run admin:init",
+    "admin:init": "cross-env CHENDOC_E2E_TESTING=true CHENDOC_ALLOW_WEAK_ADMIN_PASSWORD=true npm --prefix server run admin:init",
     "r2:import": "npm --prefix server run r2:import",
     "r2:backup": "node scripts/backup-r2.js",
     "uploads:cleanup": "npm --prefix server run uploads:cleanup"
   },
   "devDependencies": {
     "@playwright/test": "1.61.0",
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "pm2": "^7.0.1"
   },
   "overrides": {
     "atomic-sleep": "1.0.0",
