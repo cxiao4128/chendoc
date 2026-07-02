@@ -476,7 +476,7 @@ function calculateRelevanceScore(
 }
 
 /**
- * 获取文档访问次数
+ * 获取文档访问次数（单个）
  */
 async function getDocViewCount(docId: number): Promise<number> {
   const result = await dbAll(sql`
@@ -485,6 +485,26 @@ async function getDocViewCount(docId: number): Promise<number> {
     WHERE doc_id = ${docId}
   `);
   return (result[0]?.total_views as number) || 0;
+}
+
+/**
+ * 批量获取文档访问次数（解决 N+1 查询问题）
+ */
+async function getDocViewCountsBatch(docIds: number[]): Promise<Map<number, number>> {
+  if (docIds.length === 0) return new Map();
+
+  const results = await dbAll(sql`
+    SELECT doc_id, COALESCE(SUM(view_count), 0) as total_views
+    FROM shares
+    WHERE doc_id IN (${sql.join(docIds.map(id => sql`${id}`), sql`, `)})
+    GROUP BY doc_id
+  `);
+
+  const map = new Map<number, number>();
+  for (const row of results as Array<{ doc_id: number; total_views: number }>) {
+    map.set(row.doc_id, row.total_views);
+  }
+  return map;
 }
 
 // 全文搜索：搜索文档标题、摘要、标签和内容
@@ -555,7 +575,11 @@ export async function searchDocsFullText(
     return { results: [], total: 0, hasMore: false, searchTime };
   }
 
-  // 第二步：批量解密并搜索内容，计算相关性分数
+  // 第二步：批量获取访问次数（优化 N+1 查询）
+  const candidateIds = candidates.map(c => c.id);
+  const viewCountMap = await getDocViewCountsBatch(candidateIds);
+
+  // 第三步：批量解密并搜索内容，计算相关性分数
   interface CandidateResult extends SearchResult {
     relevanceScore: number;
   }
@@ -593,8 +617,8 @@ export async function searchDocsFullText(
           keywords
         );
 
-        // 获取访问次数
-        const viewCount = await getDocViewCount(candidate.id);
+        // 从批量查询结果中获取访问次数
+        const viewCount = viewCountMap.get(candidate.id) || 0;
 
         matchedResults.push({
           id: candidate.id,
@@ -619,7 +643,7 @@ export async function searchDocsFullText(
     }
   }
 
-  // 第三步：排序
+  // 第四步：排序
   matchedResults.sort((a, b) => {
     let comparison = 0;
     switch (sortBy) {
@@ -639,7 +663,7 @@ export async function searchDocsFullText(
     return sortOrder === "asc" ? -comparison : comparison;
   });
 
-  // 第四步：分页
+  // 第五步：分页
   const total = matchedResults.length;
   const offset = (page - 1) * pageSize;
   const pagedResults = matchedResults.slice(offset, offset + pageSize);

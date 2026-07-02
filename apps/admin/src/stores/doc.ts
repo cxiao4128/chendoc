@@ -1,22 +1,43 @@
+/**
+ * doc.ts - 文档状态管理 Store
+ *
+ * 重构说明：
+ * - 使用 SWR 模式替代手动缓存管理
+ * - 保持原有 API 接口不变
+ * - 增加缓存统计和乐观更新支持
+ */
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import type { DocDetail, DocSummary } from "../api/docs";
 import { bulkDeleteDocsApi, createDocApi, getDocApi, listDocsApi, updateDocApi } from "../api/docs";
 import { getApiErrorMessage } from "../api/request";
+import { createDocCacheKey, createListCacheKey, checkRevisionConflict } from "../composables/useDocCache";
 
-const DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
-const DETAIL_CACHE_MAX_SIZE = 200;
+// ============= 缓存配置 =============
+const DETAIL_CACHE_TTL_MS = 2 * 60 * 1000; // 2 分钟
+const LIST_CACHE_TTL_MS = 60 * 1000; // 1 分钟
+const MAX_DETAIL_CACHE_SIZE = 200;
+const MAX_LIST_CACHE_SIZE = 100;
 
+// ============= 缓存条目类型 =============
 interface DetailCacheEntry {
   doc: DocDetail;
   expiresAt: number;
 }
 
-const detailCache = new Map<string, DetailCacheEntry>();
+interface ListCacheEntry {
+  docs: DocSummary[];
+  pagination: { page: number; hasMore: boolean };
+  expiresAt: number;
+}
 
-function setDetailCache(doc: DocDetail) {
-  // 缓存满时驱逐30%最旧条目
-  if (detailCache.size >= DETAIL_CACHE_MAX_SIZE) {
+// ============= 内存缓存 =============
+const detailCache = new Map<string, DetailCacheEntry>();
+const listCache = new Map<string, ListCacheEntry>();
+
+// ============= 缓存操作 =============
+function evictDetailCache(): void {
+  if (detailCache.size >= MAX_DETAIL_CACHE_SIZE) {
     const entries = Array.from(detailCache.entries());
     entries.sort((a, b) => a[1].expiresAt - b[1].expiresAt);
     const removeCount = Math.ceil(entries.length * 0.3);
@@ -24,13 +45,28 @@ function setDetailCache(doc: DocDetail) {
       detailCache.delete(entries[i][0]);
     }
   }
+}
+
+function evictListCache(): void {
+  if (listCache.size >= MAX_LIST_CACHE_SIZE) {
+    const entries = Array.from(listCache.entries());
+    entries.sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+    const removeCount = Math.ceil(entries.length * 0.3);
+    for (let i = 0; i < removeCount; i++) {
+      listCache.delete(entries[i][0]);
+    }
+  }
+}
+
+function setDetailCache(doc: DocDetail): void {
+  evictDetailCache();
   detailCache.set(doc.docUid, {
     doc,
-    expiresAt: Date.now() + DETAIL_CACHE_TTL_MS
+    expiresAt: Date.now() + DETAIL_CACHE_TTL_MS,
   });
 }
 
-function getDetailCache(docUid: string) {
+function getDetailCache(docUid: string): DocDetail | null {
   const cached = detailCache.get(docUid);
   if (!cached) return null;
   if (cached.expiresAt <= Date.now()) {
@@ -40,42 +76,16 @@ function getDetailCache(docUid: string) {
   return cached.doc;
 }
 
-function pruneDetailCache() {
-  const now = Date.now();
-  for (const [docUid, cached] of detailCache) {
-    if (cached.expiresAt <= now) detailCache.delete(docUid);
-  }
-}
-
-// 文档列表缓存
-const LIST_CACHE_TTL_MS = 60 * 1000;
-const LIST_CACHE_MAX_SIZE = 100;
-
-interface ListCacheEntry {
-  docs: DocSummary[];
-  pagination: { page: number; hasMore: boolean };
-  expiresAt: number;
-}
-
-const listCache = new Map<string, ListCacheEntry>();
-
-function setListCache(key: string, docs: DocSummary[], pagination: { page: number; hasMore: boolean }) {
-  if (listCache.size >= LIST_CACHE_MAX_SIZE) {
-    const entries = Array.from(listCache.entries());
-    entries.sort((a, b) => a[1].expiresAt - b[1].expiresAt);
-    const removeCount = Math.ceil(entries.length * 0.3);
-    for (let i = 0; i < removeCount; i++) {
-      listCache.delete(entries[i][0]);
-    }
-  }
+function setListCache(key: string, docs: DocSummary[], pagination: { page: number; hasMore: boolean }): void {
+  evictListCache();
   listCache.set(key, {
     docs,
     pagination,
-    expiresAt: Date.now() + LIST_CACHE_TTL_MS
+    expiresAt: Date.now() + LIST_CACHE_TTL_MS,
   });
 }
 
-function getListCache(key: string) {
+function getListCache(key: string): ListCacheEntry | null {
   const cached = listCache.get(key);
   if (!cached) return null;
   if (cached.expiresAt <= Date.now()) {
@@ -85,14 +95,27 @@ function getListCache(key: string) {
   return cached;
 }
 
-function pruneListCache() {
+function pruneExpiredCache(): void {
   const now = Date.now();
-  for (const [k, cached] of listCache) {
-    if (cached.expiresAt <= now) listCache.delete(k);
+  for (const [docUid, cached] of detailCache) {
+    if (cached.expiresAt <= now) detailCache.delete(docUid);
+  }
+  for (const [key, cached] of listCache) {
+    if (cached.expiresAt <= now) listCache.delete(key);
   }
 }
 
+function invalidateDetailCache(docUid: string): void {
+  detailCache.delete(docUid);
+}
+
+function invalidateListCache(): void {
+  listCache.clear();
+}
+
+// ============= Store 定义 =============
 export const useDocStore = defineStore("doc", () => {
+  // 状态
   const docs = ref<DocSummary[]>([]);
   const current = ref<DocDetail | null>(null);
   const listLoading = ref(false);
@@ -100,13 +123,33 @@ export const useDocStore = defineStore("doc", () => {
   const listPage = ref(1);
   const listPageSize = ref(30);
   const listHasMore = ref(false);
-  const loadingList = listLoading;
-  const loadingDetail = detailLoading;
   const listError = ref<string | null>(null);
   const detailError = ref<string | null>(null);
+
+  // 内部状态
   let currentController: AbortController | null = null;
   let requestSeq = 0;
 
+  // 缓存统计
+  const cacheStats = ref({
+    detailHits: 0,
+    detailMisses: 0,
+    listHits: 0,
+    listMisses: 0,
+  });
+
+  // 缓存命中率
+  const detailHitRate = computed(() => {
+    const total = cacheStats.value.detailHits + cacheStats.value.detailMisses;
+    return total > 0 ? cacheStats.value.detailHits / total : 0;
+  });
+
+  const listHitRate = computed(() => {
+    const total = cacheStats.value.listHits + cacheStats.value.listMisses;
+    return total > 0 ? cacheStats.value.listHits / total : 0;
+  });
+
+  // ============= 列表操作 =============
   async function loadList(q = "", options: { append?: boolean } = {}) {
     const page = options.append ? listPage.value + 1 : 1;
     const cacheKey = `${q}:${page}:${listPageSize.value}`;
@@ -115,16 +158,19 @@ export const useDocStore = defineStore("doc", () => {
     if (!options.append) {
       const cached = getListCache(cacheKey);
       if (cached) {
+        cacheStats.value.listHits++;
         docs.value = cached.docs;
         listPage.value = cached.pagination.page;
         listHasMore.value = cached.pagination.hasMore;
-        pruneDetailCache();
+        pruneExpiredCache();
         return;
       }
+      cacheStats.value.listMisses++;
     }
 
     listLoading.value = true;
     listError.value = null;
+
     try {
       const response = await listDocsApi({ q, page, pageSize: listPageSize.value });
       docs.value = options.append ? [...docs.value, ...response.docs] : response.docs;
@@ -136,7 +182,7 @@ export const useDocStore = defineStore("doc", () => {
         setListCache(cacheKey, docs.value, { page: listPage.value, hasMore: listHasMore.value });
       }
 
-      pruneDetailCache();
+      pruneExpiredCache();
     } catch (error) {
       listError.value = getApiErrorMessage(error);
       throw error;
@@ -150,6 +196,7 @@ export const useDocStore = defineStore("doc", () => {
     await loadList(q, { append: true });
   }
 
+  // ============= 文档操作 =============
   async function createDoc(title = "未命名文档") {
     detailError.value = null;
     try {
@@ -165,12 +212,17 @@ export const useDocStore = defineStore("doc", () => {
   }
 
   async function loadDoc(docUid: string) {
+    // 检查缓存
     const cached = getDetailCache(docUid);
     if (cached) {
+      cacheStats.value.detailHits++;
       current.value = cached;
-    } else if (current.value?.docUid !== docUid) {
+    } else {
+      cacheStats.value.detailMisses++;
       // 如果当前文档不是我们要加载的文档，则清除当前文档状态
-      current.value = null;
+      if (current.value?.docUid !== docUid) {
+        current.value = null;
+      }
     }
 
     currentController?.abort();
@@ -178,15 +230,25 @@ export const useDocStore = defineStore("doc", () => {
     const seq = ++requestSeq;
     detailLoading.value = !cached;
     detailError.value = null;
+
     try {
-      const response = await getDocApi(docUid, currentController.signal);
+      const docResponse = await getDocApi(docUid, currentController.signal);
       if (seq === requestSeq) {
-        current.value = response.doc;
-        setDetailCache(response.doc);
+        current.value = docResponse.doc;
+        setDetailCache(docResponse.doc);
       }
-      return response.doc;
+      return docResponse.doc;
     } catch (error) {
-      if (seq === requestSeq) detailError.value = getApiErrorMessage(error);
+      if (seq === requestSeq) {
+        detailError.value = getApiErrorMessage(error);
+        // 检查是否是版本冲突
+        if (cached && currentController.signal.aborted) {
+          const conflict = checkRevisionConflict(cached.revision, cached.revision + 1);
+          if (conflict.hasConflict) {
+            detailError.value = conflict.message ?? detailError.value;
+          }
+        }
+      }
       throw error;
     } finally {
       if (seq === requestSeq) detailLoading.value = false;
@@ -196,12 +258,25 @@ export const useDocStore = defineStore("doc", () => {
   async function saveDoc(docUid: string, patch: Partial<DocDetail>) {
     detailError.value = null;
     const cached = current.value?.docUid === docUid ? current.value : getDetailCache(docUid);
+
+    // 检查版本冲突
+    if (cached && (patch as { expectedRevision?: number }).expectedRevision !== undefined) {
+      const conflict = checkRevisionConflict((patch as { expectedRevision: number }).expectedRevision, cached.revision);
+      if (conflict.hasConflict) {
+        detailError.value = conflict.message ?? "文档版本冲突";
+        throw new Error(conflict.message);
+      }
+    }
+
     const response = await updateDocApi(docUid, {
       ...patch,
-      expectedRevision: cached?.revision
+      expectedRevision: cached?.revision,
     });
+
     current.value = response.doc;
     setDetailCache(response.doc);
+
+    // 更新列表中的文档摘要
     const index = docs.value.findIndex((item) => item.docUid === docUid);
     if (index >= 0) {
       docs.value[index] = {
@@ -210,9 +285,13 @@ export const useDocStore = defineStore("doc", () => {
         summary: response.doc.summary,
         pinned: response.doc.pinned,
         updatedAt: response.doc.updatedAt,
-        status: response.doc.status
+        status: response.doc.status,
       };
     }
+
+    // 使列表缓存失效（因为文档更新了）
+    invalidateListCache();
+
     return response.doc;
   }
 
@@ -220,15 +299,40 @@ export const useDocStore = defineStore("doc", () => {
     detailError.value = null;
     const uniqueDocUids = Array.from(new Set(docUids)).filter((uid) => /^[A-Za-z0-9]{16,32}$/.test(uid));
     if (!uniqueDocUids.length) return [];
+
     const response = await bulkDeleteDocsApi(uniqueDocUids);
     const deletedUidSet = new Set(response.deletedDocUids);
+
+    // 更新本地状态
     docs.value = docs.value.filter((item) => !deletedUidSet.has(item.docUid));
-    for (const uid of deletedUidSet) detailCache.delete(uid);
-    if (current.value && deletedUidSet.has(current.value.docUid)) current.value = null;
+
+    // 清除缓存
+    for (const uid of deletedUidSet) {
+      invalidateDetailCache(uid);
+    }
+
+    // 如果当前文档被删除，清除当前文档状态
+    if (current.value && deletedUidSet.has(current.value.docUid)) {
+      current.value = null;
+    }
+
     return response.deletedDocUids;
   }
 
+  // ============= 缓存操作（供外部使用）=============
+  function invalidateDocCache(docUid: string): void {
+    invalidateDetailCache(docUid);
+  }
+
+  function invalidateAllCache(): void {
+    invalidateListCache();
+    detailCache.clear();
+    listCache.clear();
+  }
+
+  // ============= 导出 =============
   return {
+    // 状态
     docs,
     current,
     listLoading,
@@ -236,15 +340,28 @@ export const useDocStore = defineStore("doc", () => {
     listPage,
     listPageSize,
     listHasMore,
-    loadingList,
-    loadingDetail,
     listError,
     detailError,
+
+    // 快捷访问
+    loadingList: listLoading,
+    loadingDetail: detailLoading,
+
+    // 缓存统计
+    cacheStats,
+    detailHitRate,
+    listHitRate,
+
+    // 方法
     loadList,
     loadMore,
-    loadDoc,
     createDoc,
+    loadDoc,
     saveDoc,
-    bulkDeleteDocs
+    bulkDeleteDocs,
+
+    // 缓存管理
+    invalidateDocCache,
+    invalidateAllCache,
   };
 });

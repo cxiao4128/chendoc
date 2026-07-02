@@ -11,7 +11,10 @@
     "build": "npm run typecheck && npm run build:vite && node scripts/check-build.mjs",
     "build:test": "vite build --mode test",
     "check": "npm run lint && npm run build",
-    "preview": "vite preview --host 0.0.0.0 --port 4175"
+    "preview": "vite preview --host 0.0.0.0 --port 4175",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@tiptap/core": "^3.27.1",
@@ -43,14 +46,19 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@testing-library/vue": "^8.1.0",
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.1",
+    "@vitest/coverage-v8": "^3.2.0",
+    "@vue/test-utils": "^2.4.6",
     "eslint": "^10.5.0",
     "eslint-plugin-vue": "^10.9.2",
     "globals": "^17.6.0",
+    "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.61.1",
     "vite": "^7.1.12",
+    "vitest": "^3.2.0",
     "vue-tsc": "^3.1.1"
   }
 }

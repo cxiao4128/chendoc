@@ -1197,3 +1197,19 @@
   color: var(--cd-muted);
   font-size: 11px;
 }
+
+/* ÊÓÍ¼ÇÐ»»¹ý¶É¶¯»­ */
+.view-switch-enter-active,
+.view-switch-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.view-switch-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.view-switch-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}

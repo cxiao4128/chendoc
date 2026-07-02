@@ -49,7 +49,7 @@ type DocStoreCompat = {
   listError?: unknown;
 };
 
-type DocViewFilter = "all" | "published" | "draft" | "review" | "shared" | "unshared";
+type DocViewFilter = "all" | "published" | "draft" | "review" | "shared" | "unshared" | "kanban";
 type SortMode = "updatedDesc" | "createdDesc" | "titleAsc";
 
 const route = useRoute();
@@ -703,13 +703,15 @@ watch(visibleDocs, (items) => {
           </div>
 
           <!-- 看板视图 -->
-          <KanbanBoard
-            v-else
-            :docs="visibleDocs"
-            :group-by="kanbanGroupBy"
-            :on-doc-click="openKanbanDoc"
-            :on-doc-star="togglePinned"
-          />
+          <Transition name="view-switch" mode="out-in">
+            <KanbanBoard
+              v-if="activeView === 'kanban'"
+              :docs="visibleDocs"
+              :group-by="kanbanGroupBy"
+              :on-doc-click="openKanbanDoc"
+              :on-doc-star="togglePinned"
+            />
+          </Transition>
           <button v-if="docs.listHasMore" class="cd-button doc-list-page__more" type="button" :disabled="docs.loadingList" @click="loadMore">
             {{ docs.loadingList ? "加载中..." : "加载更多" }}
           </button>
