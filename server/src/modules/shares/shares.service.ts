@@ -15,6 +15,7 @@ import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { generateShareToken, isWeakShareToken } from "../../utils/shareToken.js";
 import { canAccessDocument } from "../docs/documentAccess.js";
+import { BoundedMemoryCache } from "./bounded-memory-cache.js";
 import { getDocWithOwner, getShareById } from "./shares.repo.js";
 
 type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
@@ -479,6 +480,15 @@ type PublicDocRecord = {
   summary: string | null;
   coverUrl: string | null;
   contentHtml: string;
+  revision: number;
+  updatedAt: Date;
+  status: "draft" | "published" | "archived";
+  deletedAt: Date | null;
+  ownerRole: "user" | "doc_admin" | "super_admin" | null;
+};
+
+type PublicDocDatabaseRecord = PublicDocRecord & {
+  createdAt: Date;
   contentJson: string;
   contentJsonCiphertext: string | null;
   contentJsonIv: string | null;
@@ -488,10 +498,6 @@ type PublicDocRecord = {
   contentHtmlIv: string | null;
   contentHtmlTag: string | null;
   contentHtmlKeyVersion: string | null;
-  updatedAt: Date;
-  status: "draft" | "published" | "archived";
-  deletedAt: Date | null;
-  ownerRole: "user" | "doc_admin" | "super_admin" | null;
 };
 
 export type PublicShareResolution =
@@ -518,6 +524,7 @@ function publicDocSelect() {
     contentHtmlIv: docs.contentHtmlIv,
     contentHtmlTag: docs.contentHtmlTag,
     contentHtmlKeyVersion: docs.contentHtmlKeyVersion,
+    revision: docs.revision,
     updatedAt: docs.updatedAt,
     status: docs.status,
     deletedAt: docs.deletedAt,
@@ -525,40 +532,34 @@ function publicDocSelect() {
   };
 }
 
-// ===== 分享页秒开优化：缓存解密结果 =====
-interface DecryptedDocCache {
-  doc: PublicDocRecord;
-  decryptedAt: number;
-}
-
 const DECRYPT_CACHE_TTL_MS = 30 * 1000; // 30秒解密缓存
 const DECRYPT_CACHE_MAX_SIZE = 200;
-const decryptedDocCache = new Map<number, DecryptedDocCache>();
+const DECRYPT_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+const decryptedDocCache = new BoundedMemoryCache<number, PublicDocRecord>({
+  maxEntries: DECRYPT_CACHE_MAX_SIZE,
+  maxBytes: DECRYPT_CACHE_MAX_BYTES,
+  ttlMs: DECRYPT_CACHE_TTL_MS,
+  sizeOf: (doc) => 1_024 + Object.values(doc).reduce<number>((total, value) => (
+    total + (typeof value === "string" ? value.length * 2 : 16)
+  ), 0)
+});
 
-function getCachedDecryptedDoc(docId: number): PublicDocRecord | null {
+function getCachedDecryptedDoc(docId: number, freshRecord: Pick<PublicDocRecord, "revision" | "updatedAt">): PublicDocRecord | null {
   const cached = decryptedDocCache.get(docId);
   if (!cached) return null;
-  if (Date.now() - cached.decryptedAt > DECRYPT_CACHE_TTL_MS) {
+  if (cached.revision !== freshRecord.revision || cached.updatedAt.getTime() !== freshRecord.updatedAt.getTime()) {
     decryptedDocCache.delete(docId);
     return null;
   }
-  return cached.doc;
+  return cached;
 }
 
 function setCachedDecryptedDoc(docId: number, doc: PublicDocRecord) {
-  if (decryptedDocCache.size >= DECRYPT_CACHE_MAX_SIZE) {
-    const entries = Array.from(decryptedDocCache.entries());
-    entries.sort((a, b) => a[1].decryptedAt - b[1].decryptedAt);
-    const deleteCount = Math.ceil(entries.length * 0.3);
-    for (let i = 0; i < deleteCount; i++) {
-      decryptedDocCache.delete(entries[i][0]);
-    }
-  }
-  decryptedDocCache.set(docId, { doc, decryptedAt: Date.now() });
+  decryptedDocCache.set(docId, doc);
 }
 
 function invalidateDecryptedDocCache(docId?: number) {
-  if (docId) {
+  if (docId !== undefined) {
     decryptedDocCache.delete(docId);
   } else {
     decryptedDocCache.clear();
@@ -566,6 +567,25 @@ function invalidateDecryptedDocCache(docId?: number) {
 }
 
 export { invalidateDecryptedDocCache };
+
+function decryptPublicDoc(record: PublicDocDatabaseRecord): PublicDocRecord {
+  const decrypted = decryptDocumentRecord(record as Parameters<typeof decryptDocumentRecord>[0]);
+  return {
+    id: record.id,
+    docUid: record.docUid,
+    ownerId: record.ownerId,
+    ownerStatus: record.ownerStatus,
+    title: record.title,
+    summary: record.summary,
+    coverUrl: record.coverUrl,
+    contentHtml: decrypted.contentHtml,
+    revision: record.revision,
+    updatedAt: record.updatedAt,
+    status: record.status,
+    deletedAt: record.deletedAt,
+    ownerRole: record.ownerRole
+  };
+}
 
 export async function resolvePublicShare(shareKey: string | number): Promise<PublicShareResolution> {
   // ===== 分享页秒开优化：并行查询 shares 和 docs =====
@@ -575,7 +595,7 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
       .from(shares)
       .where(shareWhere(shareKey))
       .limit(1)),
-    dbGet(db
+    dbGet<PublicDocDatabaseRecord>(db
       .select(publicDocSelect())
       .from(docs)
       .leftJoin(users, eq(docs.ownerId, users.id))
@@ -600,7 +620,7 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
 
   // 检查缓存
   const docId = share.docId;
-  const cachedDoc = getCachedDecryptedDoc(docId);
+  const cachedDoc = getCachedDecryptedDoc(docId, docRecord);
 
   if (cachedDoc && !cachedDoc.deletedAt) {
     // 缓存命中且未删除，直接使用
@@ -610,7 +630,7 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
   }
 
   // 解密并缓存
-  const decryptedDoc = decryptDocumentRecord(docRecord as any) as unknown as PublicDocRecord;
+  const decryptedDoc = decryptPublicDoc(docRecord);
   setCachedDecryptedDoc(docId, decryptedDoc);
 
   if (decryptedDoc.deletedAt) return { ok: false, reason: "deleted" };

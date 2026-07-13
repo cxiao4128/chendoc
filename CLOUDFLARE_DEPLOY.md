@@ -114,7 +114,7 @@ PUBLIC_SITE_URL=https://d.w92.pw
 CHENDOC_API_ORIGIN=https://api.w92.pw
 CHENDOC_ADMIN_ORIGINS=https://d.w92.pw
 CHENDOC_R2_CORS_ORIGINS=https://d.w92.pw
-CHENDOC_SERVE_ADMIN=true
+CHENDOC_SERVE_ADMIN=false
 CHENDOC_FORCE_HTTPS=true
 CHENDOC_TRUST_PROXY=127.0.0.1
 ```
@@ -123,7 +123,7 @@ CHENDOC_TRUST_PROXY=127.0.0.1
 
 - Origin 必须精确为 `https://d.w92.pw`，不能写 `*`、路径或末尾 `/`。
 - `CHENDOC_API_ORIGIN` 防止 API 请求被重定向到前端域名。
-- 第一次切换先保留 `CHENDOC_SERVE_ADMIN=true`；Pages 验收完成后改成 `false` 并重启后端。
+- 使用 `backend.zip` 时固定 `CHENDOC_SERVE_ADMIN=false`；部署脚本会再次强制覆盖并验证前端路由未被服务。
 - 数据库、JWT、配置加密、文档加密、备份加密和 R2 密钥只留服务器。
 
 健康检查：
@@ -207,13 +207,14 @@ https://d.w92.pw/f/example
 7. 浏览器网络面板中动态请求发往 `https://api.w92.pw`。
 8. Pages 资源中不存在 `.env`、数据库连接串、JWT、R2 Secret 或加密密钥。
 
-全部通过后，将服务器配置改为：
+同时确认 API 域名不提供前端：
 
-```env
-CHENDOC_SERVE_ADMIN=false
+```bash
+curl -o /dev/null -s -w '%{http_code}\n' https://api.w92.pw/
+curl -o /dev/null -s -w '%{http_code}\n' https://api.w92.pw/login
 ```
 
-此时 `api.w92.pw` 只提供 API；`d.w92.pw` 负责所有页面。
+两次都必须返回 `404`。此时 `api.w92.pw` 只提供 API；`d.w92.pw` 负责所有页面。
 
 ## 八、手动发布包与回滚
 
@@ -226,12 +227,19 @@ npm run package:deployments -- --backend-origin=https://api.w92.pw --public-orig
 生成：
 
 ```text
-release/chendoc-3.3.0-cloudflare-pages.zip
-release/chendoc-3.3.0-server.zip
-release/chendoc-3.3.0-SHA256SUMS.txt
+release/chendoc-3.3.1-cloudflare-pages.zip
+release/chendoc-3.3.1-backend.zip
+release/chendoc-3.3.1-server.zip
+release/chendoc-3.3.1-SHA256SUMS.txt
 ```
 
-Pages 回滚：在 `Deployments` 中选择上一个成功部署并回滚。服务器回滚：恢复上一个服务器包。临时恢复一体化入口时，设 `CHENDOC_SERVE_ADMIN=true`，再将展示域名切回服务器。
+其中 `backend.zip` 是 `api.w92.pw` 的纯后端包。它不含 `apps/`、`server/public/` 或任何前端构建产物。覆盖旧一体化目录部署时，脚本会先保留旧构建、旧依赖和静态目录；只有新 API 通过健康检查且 `/`、`/login` 都确认返回 404 后，才删除旧前端目录。新版本启动失败会自动恢复旧一体化构建，但仍强制使用 API-only 模式并复查这两个前端地址为 404。服务器解压后执行：
+
+```bash
+bash ./deploy-backend.sh
+```
+
+`server.zip` 是保留前端的正常一体化回退包，使用 `bash ./deploy.sh`。Pages 回滚：在 `Deployments` 中选择上一个成功部署并回滚。服务器回滚：恢复上一个对应部署包。
 
 ## 官方文档
 

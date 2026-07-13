@@ -52,7 +52,7 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Package Cloudflare and server deployments
+      - name: Package Cloudflare, backend, and server deployments
         if: steps.existing.outputs.found == 'false'
         env:
           VERSION: ${{ steps.version.outputs.value }}
@@ -63,7 +63,15 @@ jobs:
           npm ci --workspaces --include-workspace-root
           node scripts/release.js --backend-origin="$BACKEND_ORIGIN" --public-origin="$PUBLIC_ORIGIN"
           unzip -Z1 "release/chendoc-$VERSION-cloudflare-pages.zip" | grep -qx 'index.html'
+          unzip -Z1 "release/chendoc-$VERSION-backend.zip" | grep -qx 'deploy-backend.sh'
           unzip -Z1 "release/chendoc-$VERSION-server.zip" | grep -qx 'deploy.sh'
+          rm -rf release/backend-verify
+          mkdir -p release/backend-verify
+          unzip -q "release/chendoc-$VERSION-backend.zip" -d release/backend-verify
+          (
+            cd release/backend-verify
+            npm ci --dry-run --ignore-scripts --workspace @chendoc/server
+          )
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
           const version = process.env.VERSION;
@@ -87,6 +95,7 @@ jobs:
         run: >-
           gh release create "$TAG"
           "release/chendoc-$VERSION-cloudflare-pages.zip"
+          "release/chendoc-$VERSION-backend.zip"
           "release/chendoc-$VERSION-server.zip"
           "release/chendoc-$VERSION-SHA256SUMS.txt"
           --target "$TARGET"

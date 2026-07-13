@@ -17,7 +17,7 @@ import { renderContentJsonToHtml, sanitizeDocumentHtml } from "../../utils/sanit
 import { canAccessDocument, type DocumentAction, type DocumentActor } from "./documentAccess.js";
 import { docs, shares } from "./docs.repo.js";
 import { invalidateDecryptedDocCache } from "../shares/public-api.js";
-import { invalidateShareHtmlCache } from "../public/public-api.js";
+import { invalidateShareHtmlCache } from "../public/share-html-cache.js";
 import { dbTransaction } from "./docs.repo.js";
 import * as docRepo from "./docs.repo.js";
 
@@ -643,6 +643,9 @@ export async function restoreDocVersion(docId: number, versionId: number, userId
     } : undefined, current.revision);
     if (result.changes !== 1) throw new ConflictError("文档已在其他窗口更新，请刷新后重试", "DOC_REVISION_CONFLICT");
   });
+  invalidateShareHtmlCache(current.share?.shareCode);
+  invalidateShareHtmlCache(current.share?.customSlug ?? undefined);
+  invalidateDecryptedDocCache(docId);
   return await getDoc(docId, actor);
 }
 

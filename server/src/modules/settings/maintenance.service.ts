@@ -24,7 +24,7 @@ import { getSiteConfig } from "./site.service.js";
 import { getR2Config } from "./storage.service.js";
 import { listSettings } from "./core.service.js";
 
-const APP_VERSION = "3.3.0";
+const APP_VERSION = "3.3.1";
 const DATABASE_SCHEMA_VERSION = "20260620.1";
 
 function startOfLocalDay(offsetDays = 0) {

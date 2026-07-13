@@ -4,6 +4,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PM2="$(pwd)/node_modules/.bin/pm2"
 if [ ! -x "$PM2" ]; then
+  PM2="$(pwd)/server/node_modules/.bin/pm2"
+fi
+if [ ! -x "$PM2" ]; then
   echo "Pinned local PM2 is missing; nothing to stop."
   exit 0
 fi

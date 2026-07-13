@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 mkdir -p logs
 MAX_BYTES="${CHENDOC_PM2_LOG_MAX_BYTES:-20971520}"
 
-for log_file in logs/chendoc-out.log logs/chendoc-error.log logs/maintenance.log; do
+for log_file in logs/chendoc-out.log logs/chendoc-error.log logs/chendoc-backend-out.log logs/chendoc-backend-error.log logs/maintenance.log; do
   [ -f "$log_file" ] || continue
   size="$(wc -c < "$log_file")"
   if [ "$size" -lt "$MAX_BYTES" ]; then continue; fi

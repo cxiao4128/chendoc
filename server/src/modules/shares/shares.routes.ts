@@ -20,13 +20,23 @@ import {
   verifyShareAccessToken,
   verifySharePassword
 } from "./shares.service.js";
-import { invalidateShareHtmlCache } from "../public/public.service.js";
+import { invalidateShareHtmlCache } from "../public/share-html-cache.js";
 
 function invalidateShareKeys(shareCode?: number | null, ...slugs: Array<string | null | undefined>) {
   if (shareCode) invalidateShareHtmlCache(shareCode);
   for (const slug of slugs) {
     if (slug) invalidateShareHtmlCache(slug);
   }
+}
+
+function ifNoneMatchHit(value: string | string[] | undefined, etag: string) {
+  const header = Array.isArray(value) ? value.join(",") : value;
+  if (!header) return false;
+  const current = etag.replace(/^W\//, "");
+  return header.split(",").some((candidate) => {
+    const token = candidate.trim();
+    return token === "*" || token.replace(/^W\//, "") === current;
+  });
 }
 
 export async function sharesRoutes(app: FastifyInstance) {
@@ -123,7 +133,7 @@ export async function sharesRoutes(app: FastifyInstance) {
     const data = await getPublicShare(params.shareKey);
     if (!data) {
       enqueueSecurityLog({ action: "share.public.unavailable", targetType: "share", targetId: params.shareKey, ip: request.ip, statusCode: 404, message: "public share unavailable" });
-      return reply.code(404).send({ message: "分享不存在或已关闭" });
+      return reply.header("Cache-Control", "no-store").code(404).send({ message: "分享不存在或已关闭" });
     }
     const authToken = request.headers.authorization?.startsWith("Bearer ")
       ? request.headers.authorization.slice("Bearer ".length)
@@ -133,14 +143,15 @@ export async function sharesRoutes(app: FastifyInstance) {
     if (canReadContent) {
       await recordPublicShareView(data.share.id);
       const etag = `"${createHash("sha1").update(`${payloadData.doc.id}:${payloadData.doc.updatedAt.getTime()}`).digest("base64url")}"`;
-      if (request.headers["if-none-match"] === etag) return reply.code(304).send();
       reply.header("ETag", etag);
       reply.header("Last-Modified", payloadData.doc.updatedAt.toUTCString());
-      reply.header("Cache-Control", data.protected ? "private, no-store" : "public, max-age=30, stale-while-revalidate=120");
+      reply.header("Cache-Control", data.protected ? "private, no-store" : "private, no-cache, must-revalidate");
+      if (data.protected) reply.header("Vary", "Authorization");
+      if (ifNoneMatchHit(request.headers["if-none-match"], etag)) return reply.code(304).send();
     } else {
       reply.header("Cache-Control", "no-store");
+      reply.header("Vary", "Authorization");
     }
-    if (data.protected) reply.header("Vary", "Authorization");
     enqueueSecurityLog({ action: "share.public.access", targetType: "share", targetId: params.shareKey, ip: request.ip, statusCode: 200, message: data.protected ? "protected share access" : "public share access" });
     return {
       doc: publicDocPayload(payloadData, canReadContent),

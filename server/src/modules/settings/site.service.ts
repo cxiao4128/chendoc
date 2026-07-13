@@ -5,6 +5,8 @@ import { setSetting } from "./core.service.js";
 import { settingValues, booleanFromSettings, valueFromSettings } from "./core.repo.js";
 import { env } from "../../config/env.js";
 import type { SiteConfig } from "./types.js";
+import { invalidateShareHtmlCache } from "../public/share-html-cache.js";
+import { invalidateSiteBrandCache } from "../public/site-brand-cache.js";
 
 const siteConfigSchema = z.object({
   brandName: z.string().trim().min(1).max(80).default("陈书 / ChensDoc"),
@@ -144,18 +146,27 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   };
 }
 
+export function invalidateSitePresentationCaches() {
+  invalidateSiteBrandCache();
+  invalidateShareHtmlCache();
+}
+
 export async function saveSiteConfig(input: unknown): Promise<SiteConfig> {
   const body = siteConfigSchema.parse(input);
   const logoUrl = body.logoUrl ? await validateRemoteAssetUrl(body.logoUrl, "logo") : "";
   const wallpaperUrl = body.authWallpaperUrl ? await validateRemoteAssetUrl(body.authWallpaperUrl, "wallpaper") : "";
-  await setSetting("site.brand_name", body.brandName);
-  await setSetting("site.short_name", body.shortName);
-  await setSetting("site.logo_url", logoUrl);
-  await setSetting("site.auth_wallpaper_url", wallpaperUrl);
-  await setSetting("site.prefer_remote_logo", String(body.preferRemoteLogo && !!logoUrl), "boolean");
-  await setSetting("site.prefer_remote_wallpaper", String(body.preferRemoteWallpaper && !!wallpaperUrl), "boolean");
-  await setSetting("site.copyright", body.copyright);
-  await setSetting("site.recovery_contact", body.recoveryContact);
-  await setSetting("site.share_footer_text", body.shareFooterText);
+  try {
+    await setSetting("site.brand_name", body.brandName);
+    await setSetting("site.short_name", body.shortName);
+    await setSetting("site.logo_url", logoUrl);
+    await setSetting("site.auth_wallpaper_url", wallpaperUrl);
+    await setSetting("site.prefer_remote_logo", String(body.preferRemoteLogo && !!logoUrl), "boolean");
+    await setSetting("site.prefer_remote_wallpaper", String(body.preferRemoteWallpaper && !!wallpaperUrl), "boolean");
+    await setSetting("site.copyright", body.copyright);
+    await setSetting("site.recovery_contact", body.recoveryContact);
+    await setSetting("site.share_footer_text", body.shareFooterText);
+  } finally {
+    invalidateSitePresentationCaches();
+  }
   return await getSiteConfig();
 }

@@ -21,12 +21,13 @@ const { migrate } = await import("../../db/migrate.js");
 await migrate();
 
 const { db, sqlite } = await import("../../db/client.js");
-const { docVersions, operationLogs, shares, users } = await import("../../db/schema.js");
+const { docs, docVersions, operationLogs, shares, users } = await import("../../db/schema.js");
 const { decryptDocumentRecord } = await import("../../utils/documentCrypto.js");
 const { createDoc, getDoc, listDocs, publishDoc, restoreDocVersion, softDeleteDoc, updateDoc } = await import("../docs/docs.service.js");
 const {
   createOrGetShare,
   getPublicShare,
+  invalidateDecryptedDocCache,
   publicDocPayload,
   reviewUserShare,
   updateShare,
@@ -40,6 +41,7 @@ const userId = 2;
 const otherUserId = 3;
 
 beforeEach(() => {
+  invalidateDecryptedDocCache();
   sqlite.exec(`
     DELETE FROM operation_logs;
     DELETE FROM shares;
@@ -149,6 +151,21 @@ describe("share public access boundary", () => {
     const nextDoc = await createDocument();
     const nextShare = await createShare(nextDoc.id, { isEnabled: true });
     expect(nextShare.shareCode).toBe(112);
+  });
+
+  test("does not reuse decrypted content after the database revision changes", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true });
+    const cached = await getPublicShare(share.shareCode);
+    expect(cached?.doc.title).toBe("Security doc");
+
+    db.update(docs).set({
+      title: "Fresh database title",
+      revision: (cached?.doc.revision ?? 1) + 1,
+      updatedAt: new Date(Date.now() + 1_000)
+    }).where(eq(docs.id, doc.id)).run();
+
+    expect((await getPublicShare(share.shareCode))?.doc.title).toBe("Fresh database title");
   });
 
   test("concurrent admin share creation retries share code collisions", async () => {
@@ -320,6 +337,8 @@ describe("share public access boundary", () => {
   test("restoring a version keeps the current state as a rollback version", async () => {
     const doc = await createDocument();
     const version = db.select().from(docVersions).where(eq(docVersions.docId, doc.id)).limit(1).get();
+    const share = await createShare(doc.id, { isEnabled: true });
+    expect((await renderSharePage(share.shareCode)).html).toContain("private content");
 
     expect(version?.contentHtml).toBe("[encrypted]");
     expect(decryptDocumentRecord(version!).contentHtml).toBe("<p></p>");
@@ -330,6 +349,7 @@ describe("share public access boundary", () => {
     const versions = db.select().from(docVersions).where(eq(docVersions.docId, doc.id)).all();
     expect(restored.contentHtml).toBe("<p></p>");
     expect(versions.some((item) => decryptDocumentRecord(item).contentHtml === "<p>private content</p>")).toBe(true);
+    expect((await renderSharePage(share.shareCode)).html).not.toContain("private content");
   });
 
   test("public payload never exposes document or database identifiers", async () => {

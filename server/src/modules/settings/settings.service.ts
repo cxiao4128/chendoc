@@ -1,5 +1,5 @@
 // Version constant for architecture check (actual logic in maintenance.service.ts)
-const APP_VERSION = "3.3.0";
+const APP_VERSION = "3.3.1";
 export { APP_VERSION };
 
 import type { FastifyInstance } from "fastify";
@@ -9,7 +9,7 @@ import { requireSuperAdmin } from "../../middleware/requireSuperAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
 import { auditMetaFromRequest, writeAuditLog } from "../../utils/auditLog.js";
 import { listSettings, setSetting } from "./core.service.js";
-import { getSiteConfig, saveSiteConfig } from "./site.service.js";
+import { getSiteConfig, invalidateSitePresentationCaches, saveSiteConfig } from "./site.service.js";
 import { getR2Config, saveR2Config, testR2Connection } from "./storage.service.js";
 import {
   deleteManagedUser, disableManagedUser, enableManagedUser, getManagedUser,
@@ -125,7 +125,12 @@ export async function settingsRoutes(app: FastifyInstance) {
         type: z.enum(["string", "json", "number", "boolean"]).default("string")
       }))
     }).parse(request.body);
-    for (const item of body.items) await setSetting(item.key, item.value, item.type);
+    const updatesSitePresentation = body.items.some((item) => item.key.startsWith("site."));
+    try {
+      for (const item of body.items) await setSetting(item.key, item.value, item.type);
+    } finally {
+      if (updatesSitePresentation) invalidateSitePresentationCaches();
+    }
     await writeAuditLog({ userId: request.user!.id, action: "settings.bulk_update", targetType: "settings", targetId: `count:${body.items.length}`, ...auditMetaFromRequest(request) });
     return { ok: true };
   });

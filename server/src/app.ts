@@ -5,7 +5,6 @@ import { performance } from "node:perf_hooks";
 import Fastify from "fastify";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
-import fastifyStatic from "@fastify/static";
 import { env } from "./config/env.js";
 import { packGatewayReply, unpackGatewayRequest } from "./gateway/middleware.js";
 import { gatewayRoutes } from "./gateway/routes.js";
@@ -23,7 +22,6 @@ import { formsRoutes } from "./modules/forms/forms.routes.js";
 import { formsPublicRoutes } from "./modules/forms/forms.public.routes.js";
 import { runFormMaintenance } from "./modules/forms/forms.service.js";
 import { invitesRoutes } from "./modules/invites/invites.routes.js";
-import { publicRoutes } from "./modules/public/public.routes.js";
 import { settingsRoutes } from "./modules/settings/settings.routes.js";
 import { sharesRoutes } from "./modules/shares/shares.routes.js";
 import { spacesRoutes } from "./modules/spaces/spaces.routes.js";
@@ -177,7 +175,10 @@ export async function buildApp() {
     return reply.header("Cache-Control", "no-store").send({ ok: true, database: "ok" });
   });
 
-  if (env.serveAdmin) await app.register(publicRoutes);
+  if (env.serveAdmin) {
+    const { publicRoutes } = await import("./modules/public/public.routes.js");
+    await app.register(publicRoutes);
+  }
   await app.register(formsPublicRoutes, { serveLegacyPages: env.serveAdmin });
   await app.register(cryptoRoutes);
   await app.register(captchaRoutes);
@@ -199,6 +200,7 @@ export async function buildApp() {
 
   const adminRoot = resolve(env.paths.serverDir, "public/admin");
   if (env.serveAdmin && existsSync(adminRoot)) {
+    const { default: fastifyStatic } = await import("@fastify/static");
     await app.register(fastifyStatic, {
       root: adminRoot,
       prefix: "/",

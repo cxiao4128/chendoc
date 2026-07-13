@@ -4,6 +4,22 @@
 
 ## 中文
 
+### 3.3.1
+
+版本号：`3.3.1`
+
+展示版本：`v3.3.1`
+
+**真正的纯后端部署包**
+
+- 新增 `backend.zip`，只包含 API 服务、数据库维护脚本和后端部署入口，不含任何管理端源码或静态产物。
+- 纯后端部署会清理旧一体化包残留的 `apps/` 与 `server/public/`，避免服务器继续占用前端磁盘资源。
+- 后端包预编译 API，部署时只安装运行依赖，强制 `CHENDOC_SERVE_ADMIN=false`，并验证 `/`、`/login` 均为 404。
+- 保留 `server.zip` 作为正常一体化部署包，Cloudflare Pages 与服务器前端可随时切换。
+- MySQL 备份增加 `--no-tablespaces`，无需 `PROCESS` 权限；恢复验证按备份实际表结构执行，支持安全验证迁移前旧版本数据库。
+
+更新时间：2026-07-13 +08:00
+
 ### 3.3.0
 
 版本号：`3.3.0`
@@ -500,6 +516,22 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 3.3.1
+
+Version: `3.3.1`
+
+Display version: `v3.3.1`
+
+**True backend-only deployment package**
+
+- Added `backend.zip` containing only the API service, database maintenance scripts, and backend deployment entry points, with no admin source or static assets.
+- Backend-only deployment removes stale `apps/` and `server/public/` directories left by older all-in-one packages, eliminating frontend disk usage on the API server.
+- The backend package ships a precompiled API and installs runtime dependencies only, forces `CHENDOC_SERVE_ADMIN=false`, and verifies that `/` and `/login` both return 404.
+- Retained `server.zip` as the normal all-in-one package so the Cloudflare Pages and server-hosted frontend modes remain switchable.
+- Added `--no-tablespaces` to MySQL backups and changed restore verification to follow the dump's actual table set, allowing safe verification of pre-migration databases without `PROCESS` privilege.
+
+Updated: 2026-07-13 +08:00
 
 ### 3.3.0
 

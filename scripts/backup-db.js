@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import mysql from "mysql2/promise";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,27 +32,40 @@ function readEnvFile(path) {
 
 function timestamp(date = new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+  const milliseconds = String(date.getMilliseconds()).padStart(3, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}-${milliseconds}-${randomBytes(3).toString("hex")}`;
 }
 
-async function protectAndRotateBackup(sqlPath, env) {
+async function fileSha256(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function protectAndRotateBackup(sqlPath, env, details = {}) {
   const secret = String(env.CHENDOC_BACKUP_ENCRYPTION_KEY || "");
   if (Buffer.byteLength(secret, "utf8") < 32) throw new Error("CHENDOC_BACKUP_ENCRYPTION_KEY must be at least 32 bytes.");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", createHash("sha256").update(secret).digest(), iv);
   const target = `${sqlPath}.gz.enc`;
-  writeFileSync(target, Buffer.concat([Buffer.from("CDBK1"), iv]));
-  await pipeline(createReadStream(sqlPath), createGzip({ level: 9 }), cipher, createWriteStream(target, { flags: "a" }));
-  appendFileSync(target, cipher.getAuthTag());
+  try {
+    writeFileSync(target, Buffer.concat([Buffer.from("CDBK1"), iv]));
+    await pipeline(createReadStream(sqlPath), createGzip({ level: 9 }), cipher, createWriteStream(target, { flags: "a" }));
+    appendFileSync(target, cipher.getAuthTag());
+  } catch (error) {
+    if (existsSync(target)) rmSync(target);
+    throw error;
+  }
   rmSync(sqlPath);
-  const bytes = readFileSync(target);
+  const size = statSync(target).size;
   const metadata = {
     version: 1,
     provider: "mysql",
     createdAt: new Date().toISOString(),
     fileName: target.split(/[\\/]/).pop(),
-    size: bytes.byteLength,
-    sha256: createHash("sha256").update(bytes).digest("hex")
+    size,
+    sha256: await fileSha256(target),
+    ...details
   };
   writeFileSync(`${target}.json`, `${JSON.stringify(metadata, null, 2)}\n`);
 
@@ -87,6 +101,7 @@ async function mysqlBackup(env) {
   const args = [
     "--single-transaction",
     "--quick",
+    "--no-tablespaces",
     "--routines",
     "--triggers",
     "--default-character-set=utf8mb4",
@@ -97,21 +112,36 @@ async function mysqlBackup(env) {
     database
   ];
 
-  const result = spawnSync("mysqldump", args, {
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      MYSQL_PWD: decodeURIComponent(url.password)
+  let protectedPath;
+  try {
+    const result = spawnSync("mysqldump", args, {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        MYSQL_PWD: decodeURIComponent(url.password)
+      }
+    });
+    if (result.error) {
+      throw new Error(`mysqldump failed: ${result.error.message}. Install MySQL client tools before deployment.`);
     }
-  });
-
-  if (result.error) {
-    throw new Error(`mysqldump failed: ${result.error.message}. Install MySQL client tools before deployment.`);
+    if (result.status !== 0) {
+      throw new Error(`mysqldump exited with status ${result.status}.`);
+    }
+    const sourceConnection = await mysql.createConnection(databaseUrl);
+    let sourceTables;
+    try {
+      const [tableRows] = await sourceConnection.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' ORDER BY table_name"
+      );
+      sourceTables = tableRows.map((row) => String(row.TABLE_NAME ?? row.table_name));
+    } finally {
+      await sourceConnection.end();
+    }
+    if (!sourceTables.length) throw new Error("MySQL source database contains no tables after dump.");
+    protectedPath = await protectAndRotateBackup(out, env, { tables: sourceTables });
+  } finally {
+    if (existsSync(out)) rmSync(out);
   }
-  if (result.status !== 0) {
-    throw new Error(`mysqldump exited with status ${result.status}.`);
-  }
-  const protectedPath = await protectAndRotateBackup(out, env);
   const markerDir = resolve(root, "backups");
   mkdirSync(markerDir, { recursive: true });
   writeFileSync(resolve(markerDir, ".latest-db-backup"), `${protectedPath}\n`);

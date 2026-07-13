@@ -15,7 +15,7 @@ import VersionSettingsSection from "./components/VersionSettingsSection.vue";
 import { useSettingsPage } from "./hooks/useSettingsPage";
 import "./css/settings.css";
 
-const APP_VERSION = "v3.3.0";
+const APP_VERSION = "v3.3.1";
 const GITHUB_REPO_URL = "https://github.com/cxiao4128/chendoc";
 const isMobile = useIsMobileViewport();
 const {

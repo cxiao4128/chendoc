@@ -2,7 +2,7 @@
 
 > 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
 
-当前版本 / Current version: `v3.3.0`
+当前版本 / Current version: `v3.3.1`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -66,7 +66,7 @@ CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN=https://d.w92.pw
 
 现有 Direct Upload 项目不能原地转成 Git Integration；需新建 Git 集成项目并迁移 `d.w92.pw`。完整步骤见 `CLOUDFLARE_DEPLOY.md`。
 
-### 双部署包
+### 三种部署包
 
 ```bash
 npm run package:deployments -- --backend-origin=https://api.w92.pw --public-origin=https://d.w92.pw
@@ -74,11 +74,12 @@ npm run package:deployments -- --backend-origin=https://api.w92.pw --public-orig
 
 生成：
 
-- `release/chendoc-3.3.0-cloudflare-pages.zip`：Cloudflare Pages 完整 SPA，包含后台、分享页和公开表单。
-- `release/chendoc-3.3.0-server.zip`：正常一体化服务器部署包。
-- `release/chendoc-3.3.0-SHA256SUMS.txt`：两包校验值。
+- `release/chendoc-3.3.1-cloudflare-pages.zip`：Cloudflare Pages 完整 SPA，包含后台、分享页和公开表单。
+- `release/chendoc-3.3.1-backend.zip`：纯 API 后端包，不含、不会安装、不会构建或托管前端。
+- `release/chendoc-3.3.1-server.zip`：正常一体化服务器部署包，保留前端回退能力。
+- `release/chendoc-3.3.1-SHA256SUMS.txt`：三包校验值。
 
-Cloudflare Pages 前端与 API 的 CORS、R2 来源和唯一展示域名配置见 `CLOUDFLARE_DEPLOY.md`。正常包继续使用同源部署，不需要配置跨域来源。
+Cloudflare Pages 架构在服务器解压 `backend.zip` 后运行 `bash ./deploy-backend.sh`。正常一体化包继续运行 `bash ./deploy.sh`。CORS、R2 来源和唯一展示域名配置见 `CLOUDFLARE_DEPLOY.md`。
 
 ### 生产部署
 
@@ -98,13 +99,21 @@ DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=replace_with_strong_password
 ```
 
-部署命令：
+Cloudflare Pages + 纯后端部署命令：
+
+```bash
+bash ./deploy-backend.sh
+```
+
+纯后端包已预编译，脚本只安装 API 运行依赖，清理旧一体化包残留的 `apps/` 与 `server/public/`，并强制 `CHENDOC_SERVE_ADMIN=false`。`/` 与 `/login` 必须返回 404。
+
+一体化服务器包部署命令：
 
 ```bash
 bash ./deploy.sh
 ```
 
-`deploy.sh` 会检查 Node.js、生产密钥、MySQL 配置、端口、依赖审计、数据库备份、数据库迁移、构建和 PM2 启动。
+`deploy-backend.sh` 和 `deploy.sh` 都会检查 Node.js、生产密钥、MySQL 配置、依赖审计、数据库备份、数据库迁移、构建和 PM2 启动；前者不会接触前端工作区。
 
 反向代理目标：
 
@@ -275,7 +284,15 @@ DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=replace_with_strong_password
 ```
 
-Deploy:
+Cloudflare Pages + backend-only deploy:
+
+```bash
+bash ./deploy-backend.sh
+```
+
+The backend is precompiled. This installs API runtime dependencies only, removes stale `apps/` and `server/public/` directories from older all-in-one deployments, forces `CHENDOC_SERVE_ADMIN=false`, and requires both `/` and `/login` to return 404.
+
+Normal all-in-one server deploy:
 
 ```bash
 bash ./deploy.sh
@@ -298,13 +315,13 @@ CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN=https://d.w92.pw
 
 Each push to `main` then deploys automatically. A Direct Upload project cannot be converted in place; create a Git-integrated project and move `d.w92.pw` after verification. See `CLOUDFLARE_DEPLOY.md`.
 
-### Dual deployment packages
+### Three deployment packages
 
 ```bash
 npm run package:deployments -- --backend-origin=https://api.w92.pw --public-origin=https://d.w92.pw
 ```
 
-This produces a complete Cloudflare Pages SPA ZIP, a normal all-in-one server ZIP, and a SHA-256 checksum file. The Pages SPA serves every visible route from `d.w92.pw`; dynamic requests go to `api.w92.pw`. See `CLOUDFLARE_DEPLOY.md` for deployment and exact-origin CORS/R2 settings.
+This produces a complete Cloudflare Pages SPA ZIP, a backend-only ZIP, a normal all-in-one server ZIP, and one SHA-256 checksum file. The backend ZIP contains no admin source or static assets and never installs, builds, or serves the frontend. See `CLOUDFLARE_DEPLOY.md` for deployment and exact-origin CORS/R2 settings.
 
 ### Changelog
 

@@ -7,8 +7,17 @@ import { now } from "../../utils/date.js";
 import { getSiteConfig } from "../settings/site.service.js";
 import { resolvePublicShare, verifyShareAccessToken } from "../shares/shares.service.js";
 import { renderShareHtml, renderSharePasswordHtml, renderShareUnavailableHtml } from "./renderShareHtml.js";
+import { checkShareHtmlCache, getCachedShareHtml, invalidateShareHtmlCache, setCachedShareHtml } from "./share-html-cache.js";
+import { getCachedSiteBrand, invalidateSiteBrandCache } from "./site-brand-cache.js";
 
 const bundledLogoUrl = "/site-assets/chendoc-logo-192.webp";
+const CSP_NONCE_PLACEHOLDER = "__CHENDOC_CSP_NONCE__";
+
+function materializeScriptNonce(html: string, scriptNonce?: string) {
+  if (!scriptNonce) return html.replaceAll(` nonce="${CSP_NONCE_PLACEHOLDER}"`, "");
+  if (!/^[A-Za-z0-9+/_=-]{1,128}$/.test(scriptNonce)) throw new Error("Invalid CSP nonce.");
+  return html.replaceAll(CSP_NONCE_PLACEHOLDER, scriptNonce);
+}
 
 type SharePageResponse = {
   statusCode: number;
@@ -21,78 +30,13 @@ type SharePageResponse = {
 };
 
 // ===== 分享页秒开优化：站点配置内存缓存 =====
-interface CachedSiteBrand {
-  siteName: string;
-  logoUrl: string;
-  shareFooterText: string;
-  cachedAt: number;
-}
-
-const SITE_CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5分钟缓存
-let cachedSiteBrand: CachedSiteBrand | null = null;
-
-async function getCachedSiteBrand(): Promise<CachedSiteBrand> {
-  const nowMs = Date.now();
-  if (cachedSiteBrand && (nowMs - cachedSiteBrand.cachedAt) < SITE_CONFIG_CACHE_TTL_MS) {
-    return cachedSiteBrand;
-  }
+async function loadSiteBrand() {
   const config = await getSiteConfig();
-  cachedSiteBrand = {
+  return {
     siteName: config.shortName?.trim() || config.brandName?.trim() || "陈书",
     logoUrl: config.preferRemoteLogo && config.logoUrl ? config.logoUrl : bundledLogoUrl,
-    shareFooterText: config.shareFooterText || "",
-    cachedAt: nowMs
+    shareFooterText: config.shareFooterText || ""
   };
-  return cachedSiteBrand;
-}
-
-function invalidateSiteBrandCache() {
-  cachedSiteBrand = null;
-}
-
-// ===== 分享页秒开优化：HTML 预渲染缓存 =====
-interface CachedShareHtml {
-  html: string;
-  contentHash: string;
-  etag: string;
-  lastModified: Date;
-  cachedAt: number;
-}
-
-const SHARE_HTML_CACHE_MAX_SIZE = 500;
-const SHARE_HTML_CACHE_TTL_MS = 2 * 60 * 1000; // 2分钟缓存（允许快速内容更新）
-const shareHtmlCache = new Map<string, CachedShareHtml>();
-
-function getCachedShareHtml(shareKey: string | number, accessToken?: string): CachedShareHtml | null {
-  if (accessToken) return null; // 有 token 的不缓存（密码保护场景）
-  const cached = shareHtmlCache.get(String(shareKey));
-  if (!cached) return null;
-  if (Date.now() - cached.cachedAt > SHARE_HTML_CACHE_TTL_MS) {
-    shareHtmlCache.delete(String(shareKey));
-    return null;
-  }
-  return cached;
-}
-
-function setCachedShareHtml(shareKey: string | number, html: CachedShareHtml) {
-  if (shareHtmlCache.size >= SHARE_HTML_CACHE_MAX_SIZE) {
-    // 简单的 LRU：删除最早的 20%
-    const entries = Array.from(shareHtmlCache.entries());
-    entries.sort((a, b) => a[1].cachedAt - b[1].cachedAt);
-    const deleteCount = Math.ceil(entries.length * 0.2);
-    for (let i = 0; i < deleteCount; i++) {
-      shareHtmlCache.delete(entries[i][0]);
-    }
-  }
-  shareHtmlCache.set(String(shareKey), html);
-}
-
-function invalidateShareHtmlCache(shareKey?: string | number) {
-  if (shareKey) {
-    shareHtmlCache.delete(String(shareKey));
-  } else {
-    shareHtmlCache.clear();
-  }
 }
 
 function buildShareUrl(pathKey: string | number) {
@@ -121,35 +65,11 @@ function unavailableShareMessage() {
 }
 
 async function sharePageBrand() {
-  return await getCachedSiteBrand();
-}
-
-// ===== 分享页秒开优化：检查缓存并返回 =====
-export function checkShareHtmlCache(shareKey: string | number, accessToken?: string, ifNoneMatch?: string, ifModifiedSince?: Date): {
-  cached: CachedShareHtml;
-  hit304: boolean;
-} | null {
-  const cached = getCachedShareHtml(shareKey, accessToken);
-  if (!cached) return null;
-
-  // ETag 检查
-  if (ifNoneMatch) {
-    const clientEtag = ifNoneMatch.replace(/^W\//, "").replace(/^["']|["']$/g, "");
-    if (clientEtag === cached.etag.replace(/^"|"$/g, "")) {
-      return { cached, hit304: true };
-    }
-  }
-
-  // Last-Modified 检查
-  if (ifModifiedSince && cached.lastModified && cached.lastModified.getTime() <= ifModifiedSince.getTime()) {
-    return { cached, hit304: true };
-  }
-
-  return { cached, hit304: false };
+  return await getCachedSiteBrand(loadSiteBrand);
 }
 
 // ===== 分享页秒开优化：导出缓存失效函数供外部调用 =====
-export { invalidateSiteBrandCache, invalidateShareHtmlCache };
+export { checkShareHtmlCache, invalidateSiteBrandCache, invalidateShareHtmlCache };
 
 export async function renderSharePage(shareKey: string | number, accessToken?: string, scriptNonce?: string): Promise<SharePageResponse> {
   const [brand, resolved] = await Promise.all([
@@ -190,16 +110,20 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
   }
 
   // ===== 分享页秒开优化：尝试从缓存获取 =====
-  const cached = getCachedShareHtml(shareKey, accessToken);
+  let cached = getCachedShareHtml(shareKey, accessToken);
+  if (cached && cached.lastModified.getTime() !== resolved.doc.updatedAt.getTime()) {
+    invalidateShareHtmlCache(shareKey);
+    cached = null;
+  }
   if (cached && !accessToken) {
     // 缓存命中，返回缓存的 HTML（包含 ETag 和 Last-Modified）
     return {
       statusCode: 200,
-      cacheControl: "public, max-age=60, stale-while-revalidate=300",
+      cacheControl: "private, no-cache, must-revalidate",
       contentHash: cached.contentHash,
       etag: cached.etag,
       lastModified: cached.lastModified,
-      html: cached.html,
+      html: materializeScriptNonce(cached.html, scriptNonce),
       recordView: () => recordSharePageView(resolved.share.id)
     };
   }
@@ -212,7 +136,7 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
     contentHtml: resolved.doc.contentHtml,
     shareUrl,
     ...brand,
-    scriptNonce,
+    scriptNonce: CSP_NONCE_PLACEHOLDER,
     updatedAt: resolved.doc.updatedAt
   });
   const contentHash = hashShareHtml(html);
@@ -231,11 +155,11 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
 
   return {
     statusCode: 200,
-    cacheControl: accessToken ? "private, no-store" : "public, max-age=60, stale-while-revalidate=300",
+    cacheControl: accessToken ? "private, no-store" : "private, no-cache, must-revalidate",
     contentHash,
     etag,
     lastModified: resolved.doc.updatedAt,
-    html,
+    html: materializeScriptNonce(html, scriptNonce),
     recordView: () => recordSharePageView(resolved.share.id)
   };
 }

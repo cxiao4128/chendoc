@@ -2,6 +2,14 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+if [ -d "/www/server/nodejs" ]; then
+  NODE_BIN="$(find /www/server/nodejs -maxdepth 3 -type f -name node 2>/dev/null | sort -V | tail -n 1 | xargs dirname || true)"
+  if [ -n "${NODE_BIN:-}" ] && [ -d "$NODE_BIN" ]; then
+    export PATH="$NODE_BIN:$PATH"
+  fi
+fi
+
 mkdir -p logs
 
 case "${1:-}" in

@@ -18,10 +18,9 @@
 // ===== 分享页渲染服务 =====
 export {
   renderSharePage,
-  checkShareHtmlCache,
   invalidateSiteBrandCache,
-  invalidateShareHtmlCache,
 } from "./public.service.js";
+export { checkShareHtmlCache, invalidateShareHtmlCache } from "./share-html-cache.js";
 
 // ===== 分享页 HTML 模板 =====
 export {

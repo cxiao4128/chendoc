@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from "fastify";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { renderFormPage } from "./forms.public.js";
 import { getFormByUid, incrementFormView, submitForm } from "./forms.service.js";
 import { clientIpFromRequest } from "../../utils/requestIp.js";
 import { getSiteConfig } from "../settings/site.service.js";
@@ -103,6 +102,7 @@ export async function formsPublicRoutes(
     app.get("/f/:formUid", async (request, reply) => {
     const params = formUidSchema.parse(request.params);
     submitterIdentity(request, reply, "/f/");
+    const { renderFormPage } = await import("./forms.public.js");
     const page = await renderFormPage(params.formUid);
     const scriptPolicy = page.nonce ? `'self' 'nonce-${page.nonce}'` : "'none'";
     return reply

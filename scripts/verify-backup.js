@@ -25,38 +25,46 @@ function readEnvFile(path) {
   return env;
 }
 
-const expectedTables = [
-  "users",
-  "spaces",
-  "invites",
-  "captchas",
-  "crypto_keys",
-  "auth_sessions",
-  "docs",
-  "shares",
-  "forms",
-  "form_submissions",
-  "uploads",
-  "doc_versions",
-  "settings",
-  "operation_logs",
-  "login_failures",
-  "danger_verifications",
-  "audit_logs",
-  "logs",
-  "access_logs",
-  "doc_comment_reactions",
-  "doc_comments",
-  "jwt_keys",
-  "search_history",
-  "tag_hierarchy",
-  "tags",
-  "templates",
-  "totp_failures"
-];
+const requiredDataTables = ["users", "docs"];
 
 function isVerificationDatabase(database) {
   return /(?:^|[_-])(?:restore|recovery|verify|verification|test)(?:[_-]|$)/i.test(database);
+}
+
+function mysqlTarget(value, name) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid mysql:// URL.`);
+  }
+  if (parsed.protocol !== "mysql:") throw new Error(`${name} must be a valid mysql:// URL.`);
+  const rawHost = parsed.hostname.toLowerCase();
+  const host = rawHost === "localhost" || rawHost === "::1" || rawHost === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(rawHost)
+    ? "loopback"
+    : rawHost;
+  const database = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+  if (!database) throw new Error(`${name} must include a database name.`);
+  return { parsed, identity: `${host}:${parsed.port || "3306"}/${database.toLowerCase()}`, database };
+}
+
+async function mysqlRuntimeTarget(connection) {
+  const [rows] = await connection.query(
+    "SELECT DATABASE() AS database_name, @@hostname AS server_hostname, @@port AS server_port, @@server_id AS server_id"
+  );
+  const row = rows[0] || {};
+  let serverUuid = "";
+  try {
+    const [uuidRows] = await connection.query("SELECT @@server_uuid AS server_uuid");
+    serverUuid = String(uuidRows[0]?.server_uuid || "").toLowerCase();
+  } catch {
+    // MariaDB does not consistently expose @@server_uuid; hostname/port/server_id remains the fallback identity.
+  }
+  return {
+    database: String(row.database_name || "").toLowerCase(),
+    serverUuid,
+    fallbackServer: `${String(row.server_hostname || "").toLowerCase()}:${String(row.server_port || "")}:${String(row.server_id || "")}`
+  };
 }
 
 function countValueTuples(values, table) {
@@ -86,8 +94,20 @@ function countValueTuples(values, table) {
   return rows;
 }
 
-function dumpRowCounts(sql) {
-  const counts = new Map(expectedTables.map((table) => [table, 0n]));
+function dumpTableNames(sql) {
+  const tables = [...sql.matchAll(/^CREATE TABLE(?: IF NOT EXISTS)? `([^`]+)`/gm)]
+    .map((match) => match[1]);
+  if (!tables.length) throw new Error("Backup contains no MySQL tables.");
+  const uniqueTables = [...new Set(tables)];
+  const missingRequired = requiredDataTables.filter((table) => !uniqueTables.includes(table));
+  if (missingRequired.length) {
+    throw new Error(`Backup is missing required data tables: ${missingRequired.join(", ")}`);
+  }
+  return uniqueTables;
+}
+
+function dumpRowCounts(sql, tables) {
+  const counts = new Map(tables.map((table) => [table, 0n]));
   const insertPattern = /^INSERT INTO `([^`]+)`(?: \([^\r\n]+\))? VALUES (.*);\r?$/gm;
   for (const match of sql.matchAll(insertPattern)) {
     if (!counts.has(match[1])) continue;
@@ -103,11 +123,18 @@ const runtimeEnv = {
   ...process.env
 };
 const databaseUrl = runtimeEnv.CHENDOC_BACKUP_VERIFY_DATABASE_URL;
+const sourceDatabaseUrl = runtimeEnv.DATABASE_URL;
 const secret = runtimeEnv.CHENDOC_BACKUP_ENCRYPTION_KEY || "";
 if (!backupPath || !databaseUrl) throw new Error("Usage: CHENDOC_BACKUP_VERIFY_DATABASE_URL=mysql://... npm run db:backup:verify -- backup.sql.gz.enc");
+if (!sourceDatabaseUrl) throw new Error("DATABASE_URL is required to prove the verification database is separate from production.");
 if (Buffer.byteLength(secret, "utf8") < 32) throw new Error("CHENDOC_BACKUP_ENCRYPTION_KEY must be at least 32 bytes.");
-const url = new URL(databaseUrl);
-const database = url.pathname.replace(/^\/+/, "");
+const sourceTarget = mysqlTarget(sourceDatabaseUrl, "DATABASE_URL");
+const verificationTarget = mysqlTarget(databaseUrl, "CHENDOC_BACKUP_VERIFY_DATABASE_URL");
+if (sourceTarget.identity === verificationTarget.identity) {
+  throw new Error("CHENDOC_BACKUP_VERIFY_DATABASE_URL must point to a different host/port/database target than DATABASE_URL.");
+}
+const url = verificationTarget.parsed;
+const database = verificationTarget.database;
 if (!isVerificationDatabase(database)) {
   throw new Error("Verification database name must contain a standalone restore/recovery/verify/test marker.");
 }
@@ -123,9 +150,31 @@ const tag = input.subarray(input.length - 16);
 const decipher = createDecipheriv("aes-256-gcm", createHash("sha256").update(secret).digest(), iv);
 decipher.setAuthTag(tag);
 const sql = gunzipSync(Buffer.concat([decipher.update(input.subarray(17, -16)), decipher.final()]));
-const expectedRowCounts = dumpRowCounts(sql.toString("utf8"));
-const resetConnection = await mysql.createConnection(databaseUrl);
+const sqlText = sql.toString("utf8");
+const expectedTables = dumpTableNames(sqlText);
+if (Array.isArray(metadata.tables)) {
+  const metadataTables = [...new Set(metadata.tables.map((table) => String(table)))].sort();
+  const dumpTables = [...expectedTables].sort();
+  if (metadataTables.length !== dumpTables.length || metadataTables.some((table, index) => table !== dumpTables[index])) {
+    throw new Error("Backup table manifest does not match the encrypted MySQL dump.");
+  }
+}
+const expectedRowCounts = dumpRowCounts(sqlText, expectedTables);
+const [sourceConnection, resetConnection] = await Promise.all([
+  mysql.createConnection(sourceDatabaseUrl),
+  mysql.createConnection(databaseUrl)
+]);
 try {
+  const [sourceRuntime, verificationRuntime] = await Promise.all([
+    mysqlRuntimeTarget(sourceConnection),
+    mysqlRuntimeTarget(resetConnection)
+  ]);
+  const sameServer = sourceRuntime.serverUuid && verificationRuntime.serverUuid
+    ? sourceRuntime.serverUuid === verificationRuntime.serverUuid
+    : sourceRuntime.fallbackServer === verificationRuntime.fallbackServer;
+  if (sameServer && sourceRuntime.database === verificationRuntime.database) {
+    throw new Error("Backup verification refused: runtime checks show the verification database is the production database.");
+  }
   const [existingTables] = await resetConnection.query(
     "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
   );
@@ -136,7 +185,7 @@ try {
   }
   await resetConnection.query("SET FOREIGN_KEY_CHECKS=1");
 } finally {
-  await resetConnection.end();
+  await Promise.all([sourceConnection.end(), resetConnection.end()]);
 }
 const imported = spawnSync("mysql", ["--host", url.hostname, "--port", url.port || "3306", "--user", decodeURIComponent(url.username), database], {
   input: sql,

@@ -27,7 +27,8 @@ function ifModifiedSinceHit(value: string | string[] | undefined, lastModified: 
   const header = joinedHeader(value);
   if (!header) return false;
   const since = Date.parse(header);
-  return Number.isFinite(since) && lastModified.getTime() <= since;
+  return Number.isFinite(since)
+    && Math.floor(lastModified.getTime() / 1000) <= Math.floor(since / 1000);
 }
 
 function parseIfModifiedSince(header: string | string[] | undefined): Date | undefined {

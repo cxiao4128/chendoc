@@ -183,6 +183,24 @@ function checkPublicSiteUrl(env) {
   }
 }
 
+function mysqlTargetIdentity(value, name) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "mysql:") throw new Error();
+    const rawHost = url.hostname.toLowerCase();
+    const host = rawHost === "localhost" || rawHost === "::1" || rawHost === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(rawHost)
+      ? "loopback"
+      : rawHost;
+    const database = decodeURIComponent(url.pathname.replace(/^\/+/, "")).toLowerCase();
+    if (!database) throw new Error();
+    return `${host}:${url.port || "3306"}/${database}`;
+  } catch {
+    fail(`${name} must be a valid mysql:// URL with a database name.`);
+    return "";
+  }
+}
+
 async function checkPort(port, host) {
   return new Promise((resolveCheck) => {
     const server = net.createServer();
@@ -219,8 +237,13 @@ checkSecret(env, "CHENDOC_DOCUMENT_ENCRYPTION_KEY", 32);
 checkSecret(env, "CHENDOC_BACKUP_ENCRYPTION_KEY", 32);
 checkAdminPassword(env);
 checkPublicSiteUrl(env);
-requireValue(env, "CHENDOC_BACKUP_VERIFY_DATABASE_URL");
+const backupVerifyDatabaseUrl = requireValue(env, "CHENDOC_BACKUP_VERIFY_DATABASE_URL");
 requireValue(env, "CHENDOC_BACKUP_OFFSITE_DIR");
+const sourceDatabaseTarget = mysqlTargetIdentity(env.DATABASE_URL, "DATABASE_URL");
+const verificationDatabaseTarget = mysqlTargetIdentity(backupVerifyDatabaseUrl, "CHENDOC_BACKUP_VERIFY_DATABASE_URL");
+if (sourceDatabaseTarget && verificationDatabaseTarget && sourceDatabaseTarget === verificationDatabaseTarget) {
+  fail("CHENDOC_BACKUP_VERIFY_DATABASE_URL must not point to the same host/port/database target as DATABASE_URL.");
+}
 
 if (env.CHENDOC_REQUIRE_UPLOAD_SCAN === undefined || flagEnabled(env.CHENDOC_REQUIRE_UPLOAD_SCAN)) {
   requireValue(env, "CHENDOC_UPLOAD_SCAN_WEBHOOK");
