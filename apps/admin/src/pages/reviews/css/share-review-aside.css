@@ -1,0 +1,61 @@
+.share-review-page__aside {
+  position: sticky;
+  top: calc(var(--cd-header) + 22px);
+  display: grid;
+  gap: 20px;
+}
+
+.share-review-page__aside section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--cd-border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 22px;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.share-review-page__aside strong {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--cd-ink);
+  font-size: 17px;
+}
+
+.share-review-page__aside a,
+.share-review-page__aside button {
+  border: 0;
+  background: transparent;
+  color: var(--cd-primary-hover);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.share-review-page__aside p {
+  margin: 0;
+  color: var(--cd-muted);
+}
+
+.share-review-page__donut {
+  display: grid;
+  width: 124px;
+  height: 124px;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#7d6be8 0 56%, #6aa9ff 56% 76%, #ffb44c 76% 90%, #ef476f 90%);
+}
+
+.share-review-page__donut span {
+  display: grid;
+  width: 82px;
+  height: 82px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--cd-ink);
+  text-align: center;
+  font-weight: 900;
+}

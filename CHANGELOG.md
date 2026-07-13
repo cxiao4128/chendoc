@@ -4,6 +4,109 @@
 
 ## 中文
 
+### 3.3.0
+
+版本号：`3.3.0`
+
+展示版本：`v3.3.0`
+
+**Cloudflare Pages Git 自动部署**
+
+- 新增 Pages 专用构建命令，GitHub `main` 推送后可由 Cloudflare 自动构建 `apps/admin/dist`。
+- Pages 构建强制注入独立 API 与展示域名，统一生成运行时配置、SPA 回退、安全响应头和 CSP。
+- Pages 与发布 ZIP 复用同一套来源校验和配置生成器，拒绝示例域名、HTTP 来源、源码、环境文件、source map 和服务端密钥赋值进入静态产物。
+- 固定 Pages 构建环境为 Node.js `22.16.0`，CI 同步验证专用 Pages 构建。
+- 增加 Direct Upload 向 Git Integration 迁移、自动更新、域名迁移与回滚说明。
+
+更新时间：2026-07-13 +08:00
+
+### 3.2.1
+
+版本号：`3.2.1`
+
+展示版本：`v3.2.1`
+
+**Cloudflare Pages 完整前端剥离**
+
+- `d.w92.pw` 统一承载登录、后台、公开分享和公开表单等全部 Vue SPA 页面。
+- `api.w92.pw` 仅承载 Gateway、认证、数据库、文档、分享数据、表单提交和 R2 预签名等动态 API。
+- 公开分享与表单页面改为独立懒加载前端路由，继续保持 `/r/{分享码}` 与 `/f/{表单码}` 地址格式。
+- 保持现有 Gateway 协议、action code、分享码规则、数据库结构、权限体系和 R2 直传链路不变。
+- Cloudflare Pages 包分别写入 API Base URL 与 Public Site URL，并保留服务器静态前端回退开关。
+
+更新时间：2026-07-12 +08:00
+
+### 3.2.0
+
+版本号：`3.2.0`
+
+展示版本：`v3.2.0`
+
+**双部署支持**
+
+- 新增 Cloudflare Pages 静态管理端包和正常一体化服务器包，统一生成 SHA-256 校验文件。
+- 增加运行时 API/公开页来源配置；Gateway、公钥、挑战、普通 API、分享和收集表链接均支持独立后端来源。
+- 后端增加精确来源 CORS、凭据预检和 API-only 模式，保持加密 Gateway 与内存 JWT 方向不变。
+- R2 浏览器来源与 `PUBLIC_SITE_URL` 解耦，静态管理端可完成预签名直传。
+- 修复旧发布脚本路径重复嵌套、PowerShell/Node/CI 三套规则不一致和默认执行 Git 发布的问题。
+- 发布包改为源码路径白名单，清除含凭据的调试脚本，并阻断示例域名直接进入生产。
+- 分享链接码与访问密码隔离浏览器账号自动填充，自动保存不再携带被污染的凭据字段。
+
+更新时间：2026-07-12 +08:00
+
+### 3.1.1
+
+版本号：`3.1.1`
+
+展示版本：`v3.1.1`
+
+**Bug 修复**
+
+- 修复开启或关闭公开分享后文档修订号漂移，导致后续自动保存持续冲突失败的问题。
+- 公开分享首次开启时一次完成分享码分配与启用，并在分享面板明确显示系统分享码。
+- 修复载入已有分享时触发无效自动更新、可能清空自定义链接码的问题。
+- 上传缺少 R2 配置时显示可执行的配置提示。
+- 修复文档版本加密占位符测试与当前存储格式不一致的问题。
+- 合并相互依赖的认证核心分包，消除构建时循环 chunk 警告。
+- 清理文档 store 的旧 API 直连，恢复架构边界检查。
+- 修复本地草稿显示、跨文档保存竞态、历史恢复旧缓存、列表缓存和字数同步。
+- 修复分享连续切换竞态、自定义链接码冲突、纯数字分享码与系统码命名空间冲突。
+- 分享密码变化后立即废止旧访问令牌，搜索建议和定时发布补齐权限隔离。
+- 补齐搜索、定时发布、版本、评论、标签、模板、统计的加密网关动作映射。
+- 注册标签、模板、统计路由，并补齐 SQLite/MySQL 功能表迁移。
+- 修复登录未写恢复 Cookie、HTTP 环境刷新 Cookie 错误标记 Secure。
+- 修复 R2 脱敏密钥被覆盖、配置半保存、上传完成竞态误删对象、请求取消信号失效。
+- R2 测试不再要求桶管理权限，改为真实对象读写；上传测试同时验证预签名 PUT 与浏览器 CORS。
+- 修复 Playwright 测试端口与启动端口不一致，并补充桌面端、移动端登录冒烟测试。
+- E2E 按桌面/移动场景分配项目，避免把桌面专属用例错误重复到所有移动设备。
+- 清除被跟踪测试环境文件中的真实密钥，发布包统一排除除 `.env.example` 外的全部 `.env*`。
+- GitHub Release 与 PowerShell 打包链路同步阻断所有非模板 `.env*` 文件。
+- 发布包恢复携带锁文件和站点运行图片；修正 PM2 安装提示，保证部署依赖可复现。
+- 取消错误的测试、运行配置和源码图片忽略规则；CI 与根测试纳入前端测试。
+- 本地双包改为顶层白名单扫描，未跟踪的旁路目录不再混入发布包。
+- 补齐备份恢复验证的新功能表清单，以及 MySQL 会话并发刷新所需的 `version` schema。
+- 部署预检校验完整 R2 配置、数据库覆盖值及配置/RSA 密钥可解密性。
+- 修复静态资源自定义缓存头被框架覆盖，哈希资源恢复一年 immutable 缓存。
+- 修复公开分享缓存绕过禁用/过期检查、SQLite 并发事务和版本恢复覆盖新保存。
+
+更新时间：2026-07-09 +08:00
+
+### 3.1.0
+
+版本号：`3.1.0`
+
+展示版本：`v3.1.0`
+
+**架构重构**
+
+- 新增 `修改架构.md`，记录模块化重构任务、阶段进度、风险、验证和回滚方式。
+- 新增前端模块化骨架：`services/http`、`services/api`、`features`、`hooks`、`layouts`、`types`。
+- 新增基础 hooks、app/route store、Loading/Error/Forbidden/PermissionGuard 状态组件。
+- 上传、导出、GitHub 版本检查下沉到独立 service，页面和组件减少直接业务请求。
+- Gateway 补齐导出动作码，导出接口继续走加密 packet layer。
+
+更新时间：2026-07-04 +08:00
+
 ### 3.0.1
 
 版本号：`3.0.1`
@@ -397,6 +500,109 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 3.3.0
+
+Version: `3.3.0`
+
+Display version: `v3.3.0`
+
+**Automatic Cloudflare Pages deployment from GitHub**
+
+- Added a Pages-only build command so Cloudflare can build `apps/admin/dist` automatically after pushes to GitHub `main`.
+- Made the Pages build require separate API/public origins and generate runtime configuration, SPA fallback, security headers, and CSP.
+- Reused one validated configuration generator for Git builds and release ZIPs, blocking example/HTTP origins, sources, environment files, source maps, and server-secret assignments from static output.
+- Pinned the Pages build image to Node.js `22.16.0` and added the dedicated Pages build to CI validation.
+- Documented Direct Upload migration, automated updates, custom-domain transfer, and rollback.
+
+Updated: 2026-07-13 +08:00
+
+### 3.2.1
+
+Version: `3.2.1`
+
+Display version: `v3.2.1`
+
+**Complete Cloudflare Pages frontend separation**
+
+- `d.w92.pw` now serves every Vue SPA surface, including login, admin, public shares, and public forms.
+- `api.w92.pw` is limited to dynamic Gateway, authentication, database, document, share-data, form-submit, and R2-presign APIs.
+- Public share and form views are independently lazy-loaded while retaining `/r/{shareCode}` and `/f/{formCode}` URLs.
+- Existing Gateway packets, action codes, share-code rules, database schema, permissions, and direct-to-R2 uploads remain unchanged.
+- The Pages package now carries separate API and public-site origins while retaining the server-hosted frontend rollback switch.
+
+Updated: 2026-07-12 +08:00
+
+### 3.2.0
+
+Version: `3.2.0`
+
+Display version: `v3.2.0`
+
+**Dual deployment support**
+
+- Added a Cloudflare Pages static-admin package, a normal all-in-one server package, and SHA-256 checksums.
+- Added runtime API/public origins across Gateway, key/challenge, direct API, share links, and public-form links.
+- Added exact-origin credentialed CORS and API-only backend mode without weakening the encrypted Gateway or in-memory JWT model.
+- Separated browser R2 origins from `PUBLIC_SITE_URL` for split-origin presigned uploads.
+- Replaced divergent broken packaging paths with one verified package source and removed implicit Git publishing.
+- Switched release contents to a source-path allowlist, removed credential-bearing debug scripts, and rejected placeholder production domains.
+- Isolated share slug/password fields from account autofill and blocked polluted fields from automatic persistence.
+
+Updated: 2026-07-12 +08:00
+
+### 3.1.1
+
+Version: `3.1.1`
+
+Display version: `v3.1.1`
+
+**Bug fixes**
+
+- Prevented share visibility changes from advancing document revisions and breaking later autosaves.
+- Made first-time public sharing allocate and enable the system share code atomically, with the code shown in the share panel.
+- Prevented share hydration from issuing an unintended update that could clear a custom slug.
+- Added actionable guidance when uploads are blocked by missing R2 configuration.
+- Updated the encrypted document-version placeholder test to match the current storage format.
+- Merged mutually dependent authentication core chunks to remove the circular build warning.
+- Removed legacy API imports from the document store and restored clean architecture checks.
+- Fixed local-draft rendering, cross-document save races, stale version-restore caches, list caches, and word counts.
+- Serialized rapid share changes and prevented custom-slug and numeric system-code namespace collisions.
+- Invalidated old public tokens after password changes; tightened search-suggestion and schedule permissions.
+- Completed encrypted Gateway mappings for search, schedules, versions, comments, tags, templates, and stats.
+- Registered tags, templates, and stats routes; added missing SQLite/MySQL feature-table migrations.
+- Restored login cookies and fixed Secure-cookie handling for local HTTP refreshes.
+- Preserved masked R2 credentials, made R2 settings atomic, fixed upload completion races, and preserved abort signals.
+- Reworked R2 tests to use real object operations without bucket-admin permission and verify presigned PUT plus browser CORS.
+- Aligned the Playwright and server test ports and added desktop/mobile login smoke coverage.
+- Scoped E2E projects by desktop/mobile intent instead of replaying desktop-only suites on every device.
+- Removed real secrets from tracked test environment data and excluded every `.env*` file except `.env.example` from releases.
+- Applied the same `.env*` release guard to GitHub archives and the PowerShell packaging path.
+- Restored the lockfile and runtime site images in release packages and corrected the PM2 installation guidance.
+- Stopped ignoring tests, runtime configs, and source images; frontend tests now run in CI and the root test command.
+- Restricted local release packaging to an explicit top-level allowlist so unrelated untracked directories cannot leak into archives.
+- Updated backup verification for all feature tables and added the MySQL auth-session `version` schema.
+- Deployment preflight now validates complete/effective R2 settings and decryptability of stored configuration and RSA keys.
+- Prevented the static plugin from overriding custom long-lived cache headers for hashed assets.
+- Fixed public-share cache validation, SQLite transaction serialization, and concurrent version restoration.
+
+Updated: 2026-07-09 +08:00
+
+### 3.1.0
+
+Version: `3.1.0`
+
+Display version: `v3.1.0`
+
+**Architecture Refactor**
+
+- Added `修改架构.md` to track modular refactor tasks, progress, risks, validation, and rollback notes.
+- Added the first frontend modular architecture layer: `services/http`, `services/api`, `features`, `hooks`, `layouts`, and `types`.
+- Added base hooks, app/route stores, and Loading/Error/Forbidden/PermissionGuard state components.
+- Moved upload, export, and GitHub version-check logic behind domain services.
+- Added Gateway export action mappings so export APIs continue through the encrypted packet layer.
+
+Updated at: 2026-07-04 +08:00
 
 ### 3.0.1
 

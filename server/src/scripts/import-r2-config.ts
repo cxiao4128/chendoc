@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { closeDatabase } from "../db/client.js";
 import { migrate } from "../db/migrate.js";
-import { saveR2Config } from "../modules/settings/settings.service.js";
+import { saveR2Config } from "../modules/settings/storage.service.js";
 
 const defaultPath = "D:\\desktop\\bixu\\js\\r2对象存储文件.txt";
 const sourcePath = process.argv[2] ? resolve(process.argv[2]) : defaultPath;

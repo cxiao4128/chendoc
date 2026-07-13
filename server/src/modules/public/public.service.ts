@@ -4,7 +4,7 @@ import { env } from "../../config/env.js";
 import { db, dbRun } from "../../db/client.js";
 import { shares } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
-import { getSiteConfig } from "../settings/settings.service.js";
+import { getSiteConfig } from "../settings/site.service.js";
 import { resolvePublicShare, verifyShareAccessToken } from "../shares/shares.service.js";
 import { renderShareHtml, renderSharePasswordHtml, renderShareUnavailableHtml } from "./renderShareHtml.js";
 
@@ -63,10 +63,6 @@ const SHARE_HTML_CACHE_MAX_SIZE = 500;
 const SHARE_HTML_CACHE_TTL_MS = 2 * 60 * 1000; // 2分钟缓存（允许快速内容更新）
 const shareHtmlCache = new Map<string, CachedShareHtml>();
 
-function getShareCacheKey(shareKey: string | number, accessToken?: string): string {
-  return accessToken ? `${shareKey}:tokenized` : String(shareKey);
-}
-
 function getCachedShareHtml(shareKey: string | number, accessToken?: string): CachedShareHtml | null {
   if (accessToken) return null; // 有 token 的不缓存（密码保护场景）
   const cached = shareHtmlCache.get(String(shareKey));
@@ -119,13 +115,6 @@ function recordSharePageView(shareId: number) {
   }).where(eq(shares.id, shareId))).catch(() => undefined);
 }
 
-function messageForReason(reason: "missing" | "disabled" | "expired" | "deleted") {
-  if (reason === "disabled") return "这个分享已经被关闭。";
-  if (reason === "expired") return "这个分享已经过期。";
-  if (reason === "deleted") return "这篇文档已经被移除。";
-  return "分享不存在。";
-}
-
 // ===== 分享页秒开优化：并行获取品牌配置 =====
 function unavailableShareMessage() {
   return "分享暂不可用或不存在。";
@@ -140,7 +129,6 @@ export function checkShareHtmlCache(shareKey: string | number, accessToken?: str
   cached: CachedShareHtml;
   hit304: boolean;
 } | null {
-  const cacheKey = getShareCacheKey(shareKey, accessToken);
   const cached = getCachedShareHtml(shareKey, accessToken);
   if (!cached) return null;
 
@@ -182,7 +170,7 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
     };
   }
 
-  const pathKey = String(resolved.share.shareCode);
+  const pathKey = resolved.share.customSlug || String(resolved.share.shareCode);
   const shareUrl = buildShareUrl(pathKey);
 
   // 密码保护分享：需要验证 token，不缓存

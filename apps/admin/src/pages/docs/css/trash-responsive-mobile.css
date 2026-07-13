@@ -1,0 +1,210 @@
+/* ========================================
+   移动端 max-width: 680px
+   ======================================== */
+@media (max-width: 680px) {
+  .trash-page {
+    padding: 0;
+  }
+
+  .trash-page__head {
+    align-items: stretch;
+    flex-direction: column;
+    background: #fff;
+    padding: 16px 16px 12px;
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  .trash-page__head h1 {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+
+  .trash-page__head p {
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .trash-page__head-actions {
+    width: 100%;
+    padding: 16px 16px 20px;
+    display: flex;
+    gap: 10px;
+  }
+
+  .trash-page__head-actions .cd-button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 14px;
+    border-radius: 22px;
+    background: #fff;
+    border: 1.5px solid #e8eaed;
+    color: var(--cd-text);
+  }
+
+  .trash-page__head-actions .cd-button.danger {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-color: #fca5a5;
+    color: #dc2626;
+  }
+
+  .trash-page__stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 0 16px 16px;
+    padding: 16px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .trash-page__stats article {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: auto;
+    border: none;
+    border-radius: 12px;
+    background: #f8f9fa;
+    padding: 14px 8px;
+    box-shadow: none;
+  }
+
+  .trash-page__stats article > span {
+    width: 42px;
+    height: 42px;
+    grid-row: auto;
+    border-radius: 12px;
+    margin-bottom: 10px;
+  }
+
+  .trash-page__stats strong {
+    font-size: 26px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .trash-page__stats b {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .trash-page__stats small {
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .trash-page__filters {
+    display: flex;
+    gap: 6px;
+    margin: 0 16px 12px;
+    padding: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .trash-page__filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .trash-page__filters button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    border-radius: 16px;
+    background: #f0f2f5;
+    color: var(--cd-text-secondary);
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .trash-page__filters button.is-active {
+    background: var(--cd-primary);
+    color: #fff;
+  }
+
+  .trash-page__toolbar {
+    display: none;
+  }
+
+  .trash-page__table {
+    margin: 0 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .trash-page__bulkbar {
+    display: none;
+  }
+
+  .trash-page__row {
+    grid-template-columns: 40px 1fr;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #fff;
+    border-bottom: 1px solid #f0f2f5;
+    min-height: auto;
+  }
+
+  .trash-page__row:last-child {
+    border-bottom: none;
+  }
+
+  .trash-page__row > span,
+  .trash-page__row > small,
+  .trash-page__row > div:not(.trash-page__actions):not(.trash-page__select) {
+    grid-column: 2;
+    font-size: 12px;
+  }
+
+  .trash-page__row strong {
+    font-size: 15px;
+    color: var(--cd-ink);
+    font-weight: 600;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 2px;
+  }
+
+  .trash-page__row > div:not(.trash-page__actions) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .trash-page__actions {
+    grid-column: span 2;
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .trash-page__actions .cd-button {
+    flex: 1;
+    min-height: 38px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .trash-page__aside {
+    display: none;
+  }
+
+  .trash-page__empty {
+    margin: 16px;
+    border-radius: 16px;
+    padding: 32px 20px;
+    background: #fff;
+  }
+
+  .trash-page__skeleton span {
+    height: 80px;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+}

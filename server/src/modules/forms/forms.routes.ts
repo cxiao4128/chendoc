@@ -16,7 +16,6 @@ import {
   updateForm,
   getFormIpStats
 } from "./forms.service.js";
-import { renderFormPage, renderFormUnavailablePage } from "./forms.public.js";
 
 export async function formsRoutes(app: FastifyInstance) {
   // ===== 认证路由 =====
@@ -43,7 +42,6 @@ export async function formsRoutes(app: FastifyInstance) {
 
   // 表单列表
   app.get("/api/forms", { preHandler: authHandler }, async (request) => {
-    const user = request.user!;
     const forms = await listForms(actorFromRequest(request));
     return { forms };
   });
@@ -51,7 +49,6 @@ export async function formsRoutes(app: FastifyInstance) {
   // 获取表单详情
   app.get("/api/forms/:id", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = request.user!;
     const form = await getForm(params.id, actorFromRequest(request));
     return { form };
   });
@@ -59,7 +56,6 @@ export async function formsRoutes(app: FastifyInstance) {
   // 更新表单
   app.put("/api/forms/:id", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = request.user!;
     const form = await updateForm(params.id, actorFromRequest(request), request.body);
     return { form };
   });
@@ -104,7 +100,6 @@ export async function formsRoutes(app: FastifyInstance) {
       page: z.coerce.number().int().positive().optional(),
       pageSize: z.coerce.number().int().positive().max(100).optional()
     }).parse(request.query);
-    const user = request.user!;
     const result = await listFormSubmissions(params.id, actorFromRequest(request), query);
     return result;
   });
@@ -129,7 +124,6 @@ export async function formsRoutes(app: FastifyInstance) {
   // IP统计
   app.get("/api/forms/:id/ip-stats", { preHandler: authHandler }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const user = request.user!;
     const stats = await getFormIpStats(params.id, actorFromRequest(request));
     return { stats };
   });

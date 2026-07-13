@@ -1,0 +1,16 @@
+.editor-toolbar select {
+  flex: 0 0 auto;
+  height: 34px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 0 9px;
+  font-size: 13px;
+  outline: none;
+}
+
+.editor-toolbar select:focus {
+  border-color: var(--cd-primary);
+  box-shadow: 0 0 0 3px var(--cd-focus);
+}

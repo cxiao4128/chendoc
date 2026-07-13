@@ -1,0 +1,103 @@
+.settings-page__profile-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 18px;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.settings-page__profile-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.settings-page__profile-facts dl {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  border-right: 1px solid var(--cd-border);
+  padding: 0 24px 0 0;
+}
+
+.settings-page__profile-facts dl + dl {
+  padding-left: 24px;
+}
+
+.settings-page__profile-facts dl:last-child {
+  border-right: 0;
+}
+
+.settings-page__profile-facts dt,
+.settings-page__profile-facts dd,
+.settings-page__security-score li,
+.settings-page__profile-section p,
+.settings-page__side-list dt,
+.settings-page__side-list dd {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.settings-page__profile-facts dd {
+  margin: 6px 0 0;
+  color: #354263;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.settings-page__security-score {
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 16px;
+}
+
+.settings-page__security-score h4,
+.settings-page__profile-section h3,
+.settings-page__profile-side h3 {
+  margin: 0;
+  color: var(--cd-ink);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.settings-page__security-score h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-page__security-score strong {
+  display: block;
+  margin-top: 12px;
+  color: var(--cd-ink);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.settings-page__security-score strong span {
+  color: var(--cd-success);
+  font-size: 12px;
+}
+
+.settings-page__security-score ul {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-page__security-score li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-page__security-score li svg {
+  color: var(--cd-success);
+}

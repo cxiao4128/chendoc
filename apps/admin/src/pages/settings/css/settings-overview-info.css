@@ -1,0 +1,69 @@
+.settings-page__info-panel {
+  align-content: start;
+  min-height: 256px;
+}
+
+.settings-page__info-panel header > svg {
+  flex: 0 0 auto;
+  color: var(--cd-primary-hover);
+}
+
+.settings-page__definition-grid {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.settings-page__definition-grid div {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-page__definition-grid dt {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.settings-page__definition-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--cd-text);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.settings-page__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--cd-border);
+  padding-top: 12px;
+}
+
+.settings-page__chips span {
+  border-radius: 999px;
+  background: #f7f5ff;
+  color: var(--cd-primary-hover);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.settings-page__progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eaf4;
+}
+
+.settings-page__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cd-accent), #4f7cff);
+}

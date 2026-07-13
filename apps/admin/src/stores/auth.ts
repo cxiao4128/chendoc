@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import type { UserProfile } from "../api/auth";
+import { fetchProfileApi, restoreSessionApi } from "../services/api/auth.api";
+import type { UserProfile } from "../services/api/auth.api";
 import { clearAuthSession, getAuthToken, saveAuthSession } from "../security/sessionToken";
 
 const ME_CACHE_TTL_MS = 30 * 1000;
@@ -44,14 +45,13 @@ export const useAuthStore = defineStore("auth", () => {
 
     const execute = async () => {
       try {
-        const { a2: fetchProfile, a4: restoreSession } = await import("../api/auth");
         if (!getAuthToken()) {
-          const restored = await restoreSession();
+          const restored = await restoreSessionApi();
           setSession(restored.user, restored.token, restored.expiresAt);
           resolveMe!(restored.user);
           return;
         }
-        const response = await fetchProfile();
+        const response = await fetchProfileApi();
         user.value = response.user;
         lastFetchedAt = Date.now();
         resolveMe!(response.user);

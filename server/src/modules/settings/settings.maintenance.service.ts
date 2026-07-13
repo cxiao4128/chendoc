@@ -1,3 +1,3 @@
 export {
   exportSystemConfig, getSystemOverview, runSystemMaintenanceAction
-} from "./settings.service.js";
+} from "./maintenance.service.js";

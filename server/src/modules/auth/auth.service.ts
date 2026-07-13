@@ -1,7 +1,5 @@
-import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { db, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { invites, users } from "../../db/schema.js";
+import { getUserById as getUserByIdFromRepo, getUserByUsername, updateUserPassword, createUserAndConsumeInvite } from "./auth.repo.js";
 import { now } from "../../utils/date.js";
 import { hashPassword, validatePassword, validateUserRegistration, verifyPassword } from "../../utils/password.js";
 import { verifyCaptcha } from "../captcha/captcha.service.js";
@@ -84,7 +82,7 @@ export async function login(input: unknown, meta: {
 } = {}) {
   const body = loginPayloadSchema.parse(input);
   const password = body.password;
-  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.username, body.username)).limit(1));
+  const user = await getUserByUsername(body.username);
   if (!user) {
     const riskInput = { username: body.username, scope: "user" as const, ip: meta.ip };
     await recordLoginFailure(riskInput);
@@ -136,47 +134,19 @@ export async function register(input: unknown) {
   }
 
   const passwordHash = await hashPassword(password);
-  const result = await dbTransaction(async (tx) => {
-    const invite = await dbGet<typeof invites.$inferSelect>(tx
-      .select()
-      .from(invites)
-      .where(and(eq(invites.code, body.inviteCode.toUpperCase()), eq(invites.status, "unused")))
-      .limit(1));
+  let userId: number;
+  try {
+    const result = await createUserAndConsumeInvite(body.username, passwordHash, body.inviteCode, now());
+    userId = result.userId;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "INVITE_INVALID") throw new BadRequestError("注册卡密不存在、已使用或已过期", "INVITE_INVALID");
+    if (msg === "USERNAME_UNAVAILABLE") throw new BadRequestError("注册失败，请更换账号或稍后重试", "USERNAME_UNAVAILABLE");
+    if (msg === "INVITE_USED") throw new BadRequestError("注册卡密已被使用，请更换卡密", "INVITE_USED");
+    throw err;
+  }
 
-    if (!invite || invite.usedAt || invite.expireAt && invite.expireAt.getTime() <= Date.now()) {
-      throw new BadRequestError("注册卡密不存在、已使用或已过期", "INVITE_INVALID");
-    }
-
-    const exists = await dbGet<{ id: number }>(tx.select({ id: users.id }).from(users).where(eq(users.username, body.username)).limit(1));
-    if (exists) {
-      throw new BadRequestError("注册失败，请更换账号或稍后重试", "USERNAME_UNAVAILABLE");
-    }
-
-    const createdAt = now();
-    const insert = await dbRun(tx.insert(users).values({
-      username: body.username,
-      passwordHash,
-      role: "user",
-      status: "active",
-      createdAt,
-      updatedAt: createdAt
-    }));
-
-    const userId = Number(insert.lastInsertRowid);
-    const inviteUpdate = await dbRun(tx.update(invites).set({
-      status: "used",
-      usedBy: userId,
-      usedAt: now(),
-      updatedAt: now()
-    }).where(and(eq(invites.id, invite.id), eq(invites.status, "unused"), isNull(invites.usedAt))));
-    if (inviteUpdate.changes !== 1) {
-      throw new BadRequestError("注册卡密已被使用，请更换卡密", "INVITE_USED");
-    }
-
-    return { userId };
-  });
-
-  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, result.userId)).limit(1));
+  const user = await getUserByIdFromRepo(userId);
   if (!user) {
     throw new Error("注册失败，请稍后重试");
   }
@@ -187,7 +157,7 @@ export async function changePassword(userId: number, input: unknown) {
   const body = changePasswordPayloadSchema.parse(input);
   const currentPassword = body.currentPassword;
   const newPassword = body.newPassword;
-  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, userId)).limit(1));
+  const user = await getUserByIdFromRepo(userId);
   if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
     throw new BadRequestError("当前密码不正确", "CURRENT_PASSWORD_INVALID");
   }
@@ -196,7 +166,15 @@ export async function changePassword(userId: number, input: unknown) {
   if (validationMessage) throw new BadRequestError(validationMessage, "INVALID_PASSWORD");
 
   const passwordHash = await hashPassword(newPassword);
-  await dbRun(db.update(users).set({ passwordHash, updatedAt: now() }).where(eq(users.id, userId)));
+  const updatedAt = now();
+  await updateUserPassword(userId, passwordHash, updatedAt);
   await clearLoginFailuresForUsername(user.username);
   await revokeUserAuthSessions(userId);
+}
+
+/**
+ * 根据用户 ID 获取用户记录
+ */
+export async function getUserById(userId: number) {
+  return getUserByIdFromRepo(userId);
 }

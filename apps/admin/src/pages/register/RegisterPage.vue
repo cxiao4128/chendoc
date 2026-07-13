@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { Eye, EyeOff, KeyRound, LockKeyhole, UserRound } from "lucide-vue-next";
 import CaptchaInput from "../../components/auth/CaptchaInput.vue";
-import { getPublicSiteConfigApi } from "../../api/settings";
+import { getPublicSiteConfigApi } from "@/services/api";
 import { bundledLogoUrl, bundledWallpaperUrl, preloadImageAsset, withBundledSiteAssets } from "../../config/site-assets";
 import "./css/register.css";
 
@@ -138,7 +138,12 @@ onMounted(async () => {
           <div class="auth-input">
             <LockKeyhole :size="18" />
             <input v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" placeholder="至少 12 位" required />
-            <button type="button" aria-label="切换密码显示" @click="showPassword = !showPassword">
+            <button
+              type="button"
+              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              :aria-pressed="showPassword"
+              @click="showPassword = !showPassword"
+            >
               <EyeOff v-if="showPassword" :size="18" />
               <Eye v-else :size="18" />
             </button>

@@ -1,0 +1,11 @@
+/**
+ * doc-editor-base.css - 文档编辑基础样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./doc-editor-base-shell.css";
+@import "./doc-editor-base-states.css";
+@import "./doc-editor-base-mobile-states.css";
+@import "./doc-editor-base-indicators.css";
+@import "./doc-editor-base-save-error.css";

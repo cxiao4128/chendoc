@@ -8,8 +8,8 @@
  * - 布局控制
  */
 import { computed } from "vue";
-import type { DocDetail, DocVersion } from "../../../api/docs";
-import type { DocSchedule } from "../../../api/docs";
+import type { DocVersion } from "@/services/api";
+import type { DocSchedule } from "@/services/api";
 
 const props = defineProps<{
   sharePanelOpen: boolean;
@@ -61,17 +61,17 @@ const emit = defineEmits<{
 }>();
 
 // 共享 props
-const shareEnabled = computed({
+const _shareEnabled = computed({
   get: () => props.shareEnabled,
   set: (v) => emit("update:shareEnabled", v)
 });
 
-const sharePasswordComputed = computed({
+const _sharePasswordComputed = computed({
   get: () => props.sharePassword,
   set: (v) => emit("update:sharePassword", v)
 });
 
-const customSlugInput = computed({
+const _customSlugInput = computed({
   get: () => props.customSlugInput,
   set: (v) => emit("update:customSlugInput", v)
 });

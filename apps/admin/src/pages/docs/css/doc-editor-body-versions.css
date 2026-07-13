@@ -1,0 +1,68 @@
+/* 历史版本 */
+.doc-editor-page__versions {
+  display: grid;
+  gap: 6px;
+}
+
+.doc-editor-page__versions button {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc-editor-page__versions button:hover {
+  border-color: var(--cd-accent);
+  background: var(--cd-accent-soft);
+}
+
+.doc-editor-page__versions small {
+  grid-column: 2;
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+/* 版本预览 */
+.doc-editor-page__version-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-paper-soft);
+  padding: 12px;
+}
+
+.doc-editor-page__version-preview p,
+.doc-editor-page__version-preview pre {
+  margin: 0;
+  color: var(--cd-muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+.doc-editor-page__version-preview pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 版本操作 */
+.doc-editor-page__version-actions,
+.doc-editor-page__more-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.doc-editor-page__more-actions .cd-button:last-child {
+  grid-column: 1 / -1;
+}

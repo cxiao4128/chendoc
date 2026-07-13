@@ -1,0 +1,86 @@
+/* 分享卡片 */
+.doc-editor-page__share-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.doc-editor-page__share-card > span {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.doc-editor-page__share-card :is(a, code) {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  color: var(--cd-primary);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.doc-editor-page__share-card code {
+  font-family: var(--cd-font-mono, "JetBrains Mono", Consolas, monospace);
+}
+
+/* 分享状态 */
+.doc-editor-page__share-status {
+  margin: 8px 0 0;
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.doc-editor-page__share-status.is-error {
+  color: var(--cd-danger);
+}
+
+/* 分享摘要 */
+.doc-editor-page__share-summary {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-paper-soft);
+  padding: 11px 12px;
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.doc-editor-page__share-summary strong {
+  color: var(--cd-ink);
+  font-size: 13px;
+}
+
+.doc-editor-page__share-summary.is-success {
+  border-color: color-mix(in srgb, var(--cd-success) 24%, var(--cd-border));
+  background: var(--cd-success-soft);
+}
+
+.doc-editor-page__share-summary.is-success strong {
+  color: var(--cd-success);
+}
+
+.doc-editor-page__share-summary.is-warning {
+  border-color: color-mix(in srgb, var(--cd-warning) 24%, var(--cd-border));
+  background: var(--cd-warning-soft, #fff7ed);
+}
+
+.doc-editor-page__share-summary.is-warning strong {
+  color: var(--cd-warning);
+}
+
+.doc-editor-page__share-summary.is-danger {
+  border-color: color-mix(in srgb, var(--cd-danger) 24%, var(--cd-border));
+  background: var(--cd-danger-soft);
+}
+
+.doc-editor-page__share-summary.is-danger strong {
+  color: var(--cd-danger);
+}

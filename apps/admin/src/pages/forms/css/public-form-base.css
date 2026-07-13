@@ -1,0 +1,74 @@
+.public-form-page {
+  --public-form-ink: #172033;
+  --public-form-muted: #64748b;
+  --public-form-border: #dbe3ef;
+  --public-form-accent: #315ecf;
+  min-height: 100vh;
+  background: #f6f8fc;
+  color: var(--public-form-ink);
+}
+
+.public-form-topbar {
+  min-height: 64px;
+  border-bottom: 1px solid var(--public-form-border);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.public-form-brand {
+  display: flex;
+  width: min(680px, calc(100% - 32px));
+  min-height: 64px;
+  margin: 0 auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.public-form-brand img {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--public-form-border);
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.public-form-main {
+  width: min(680px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+
+.public-form-heading { margin-bottom: 24px; }
+
+.public-form-heading h1,
+.public-form-state h1 {
+  margin: 4px 0 8px;
+  color: var(--public-form-ink);
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.2;
+}
+
+.public-form-kicker {
+  margin: 0;
+  color: var(--public-form-accent);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+
+.public-form-lead,
+.public-form-state p {
+  margin: 0;
+  color: var(--public-form-muted);
+  line-height: 1.75;
+}
+
+.public-form-card,
+.public-form-state {
+  border: 1px solid var(--public-form-border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 32px rgba(51, 65, 85, 0.08);
+  padding: 28px;
+}

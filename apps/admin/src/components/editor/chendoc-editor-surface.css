@@ -1,0 +1,245 @@
+.chendoc-editor__content {
+  font-size: var(--editor-font-size);
+}
+
+.chendoc-editor__runtime-state {
+  display: grid;
+  gap: 14px;
+  max-width: 880px;
+  min-height: calc(100dvh - 220px);
+  margin: 24px auto 72px;
+  border: 1px solid rgba(219, 228, 240, 0.86);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  padding: clamp(36px, 5vw, 58px) clamp(28px, 5vw, 64px);
+}
+
+.chendoc-editor__runtime-state span {
+  height: 18px;
+}
+
+.chendoc-editor__runtime-state span:first-child {
+  width: 62%;
+  height: 34px;
+}
+
+.chendoc-editor__runtime-state span:nth-child(3) {
+  width: 86%;
+}
+
+.chendoc-editor__runtime-state span:nth-child(4) {
+  width: 72%;
+}
+
+.chendoc-editor__runtime-state.is-error {
+  align-content: start;
+  min-height: 220px;
+  border-color: rgba(220, 38, 38, 0.24);
+  background: var(--cd-danger-soft);
+  color: var(--cd-danger);
+}
+
+.chendoc-editor__runtime-state.is-error strong {
+  font-size: 15px;
+}
+
+.chendoc-editor__runtime-state.is-error span {
+  height: auto;
+  color: var(--cd-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chendoc-editor__surface {
+  position: relative;
+  max-width: 880px;
+  min-height: calc(100dvh - 220px);
+  margin: 24px auto 72px;
+  border: 1px solid rgba(219, 228, 240, 0.86);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  padding: clamp(36px, 5vw, 58px) clamp(28px, 5vw, 64px) 118px;
+  outline: none;
+  color: var(--cd-text);
+  font-family: var(--cd-font-sans);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  overflow-wrap: anywhere;
+}
+
+.chendoc-editor__surface > * + * {
+  margin-top: var(--editor-paragraph-gap);
+}
+
+.chendoc-editor__surface h1 {
+  margin-top: 1.25em;
+  color: var(--cd-ink);
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.chendoc-editor__surface h2 {
+  margin-top: 1.3em;
+  color: var(--cd-ink);
+  font-size: 28px;
+  font-weight: 850;
+  line-height: 1.32;
+}
+
+.chendoc-editor__surface h3 {
+  margin-top: 1.2em;
+  color: var(--cd-ink);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.chendoc-editor__surface p {
+  min-height: 1.5em;
+}
+
+.chendoc-editor__surface a {
+  color: var(--cd-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.chendoc-editor__surface blockquote {
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 8px;
+  color: var(--cd-text);
+  background: var(--cd-primary-soft);
+  margin-left: 0;
+  padding: 12px 14px;
+}
+
+.chendoc-editor__surface hr {
+  height: 1px;
+  border: 0;
+  background: var(--cd-border);
+  margin-block: 22px;
+}
+
+.chendoc-editor__surface ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.chendoc-editor__surface li[data-type="taskItem"] {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.chendoc-editor__surface li[data-type="taskItem"] > label {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.chendoc-editor__surface img,
+.chendoc-editor__surface video {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.chendoc-editor__surface img {
+  cursor: zoom-in;
+}
+
+.chendoc-editor__surface img.cd-image-center {
+  display: block;
+  margin-inline: auto;
+}
+
+.chendoc-editor__surface .cd-video {
+  margin: 18px 0;
+}
+
+.chendoc-editor__surface .cd-video figcaption {
+  color: var(--cd-muted);
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.chendoc-editor__surface table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+}
+
+.chendoc-editor__surface th,
+.chendoc-editor__surface td {
+  border: 1px solid var(--cd-border);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.chendoc-editor__surface th {
+  background: var(--cd-accent-soft);
+  font-weight: 700;
+}
+
+.chendoc-editor__surface pre {
+  position: relative;
+  overflow-x: auto;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #111827;
+  color: #f8fafc;
+  padding: 14px 16px;
+  cursor: copy;
+}
+
+.chendoc-editor__surface pre::after {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  content: "复制";
+  border: 1px solid var(--cd-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--cd-text);
+  padding: 2px 7px;
+  font-size: 12px;
+}
+
+.chendoc-editor__surface pre.is-copied::after {
+  content: "已复制";
+  color: var(--cd-accent);
+}
+
+.chendoc-editor__surface code {
+  font-family: var(--cd-font-mono);
+  font-size: 0.92em;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: var(--cd-faint);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.chendoc-editor__preview {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 32px;
+  cursor: zoom-out;
+}
+
+.chendoc-editor__preview img {
+  max-width: min(1080px, 94vw);
+  max-height: 88dvh;
+  border-radius: 12px;
+  background: var(--cd-panel);
+  object-fit: contain;
+}

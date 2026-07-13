@@ -1,0 +1,31 @@
+/* 响应式 */
+@media (max-width: 1180px) {
+  .doc-editor-page__body,
+  .doc-editor-page__body.has-aside {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .doc-editor-page__canvas {
+    border-right: 0;
+  }
+
+  .doc-editor-page__aside {
+    position: static;
+    max-height: none;
+    border-top: 1px solid rgba(83, 60, 33, 0.12);
+  }
+}
+
+@media (max-width: 760px) {
+  .doc-editor-page__password-row,
+  .doc-editor-page__mobile-share-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-editor-page__editor-skeleton {
+    max-width: none;
+    min-height: calc(100dvh - 220px);
+    margin: 10px 8px;
+    padding: 24px 14px 118px 42px;
+  }
+}

@@ -1,0 +1,9 @@
+/**
+ * form-editor-settings.css - 表单设置样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./form-editor-settings-main.css";
+@import "./form-editor-settings-exclusive.css";
+@import "./form-editor-settings-switch.css";

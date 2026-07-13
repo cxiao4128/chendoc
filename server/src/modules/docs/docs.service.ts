@@ -1,28 +1,87 @@
-import { and, desc, eq, inArray, isNotNull, isNull, like, or, sql, type SQL } from "drizzle-orm";
+/**
+ * docs.service.ts
+ *
+ * 文档模块业务逻辑层。
+ * 只含业务逻辑、权限检查、Schema 校验，不直接写 SQL。
+ */
+
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { castAsText, databaseProvider, db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { docs, docVersions, shares, spaces, uploads, users } from "../../db/schema.js";
 import { now } from "../../utils/date.js";
 import { env } from "../../config/env.js";
 import { decryptDocumentRecord, encryptDocumentContent } from "../../utils/documentCrypto.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
-import { generateDocUid } from "../../utils/docUid.js";
 import { isSuperAdminUser } from "../../utils/superAdmin.js";
 import { renderContentJsonToHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
 import { canAccessDocument, type DocumentAction, type DocumentActor } from "./documentAccess.js";
-import { invalidateDecryptedDocCache } from "../shares/shares.service.js";
-import { invalidateShareHtmlCache } from "../public/public.service.js";
+import { docs, shares } from "./docs.repo.js";
+import { invalidateDecryptedDocCache } from "../shares/public-api.js";
+import { invalidateShareHtmlCache } from "../public/public-api.js";
+import { dbTransaction } from "./docs.repo.js";
+import * as docRepo from "./docs.repo.js";
 
 type Actor = DocumentActor;
 type PageOptions = { page?: number; pageSize?: number };
+type DocAccessTarget = { ownerId: number | null; isSuperAdminDoc: boolean | number };
 type DocOwnerRole = "user" | "doc_admin" | "super_admin";
 type DocScope = "user" | "admin" | "system";
-const VERSION_SNAPSHOT_INTERVAL_MS = 2 * 60 * 1000; // 2 分钟内多次保存只保留一个版本
-const MAX_DOC_VERSIONS = 50; // 每个文档最多保留版本数
+
+// Safe subset of share fields returned to clients (excludes passwordHash, etc.)
+interface SafeShare {
+  id: number;
+  shareCode: number;
+  customSlug: string | null;
+  isEnabled: boolean;
+  reviewStatus: "approved" | "pending" | "rejected";
+  reviewNote: string | null;
+  reviewContentHash: string | null;
+  requestedBy: number | null;
+  reviewedBy: number | null;
+  reviewedAt: Date | null;
+  hasPassword: boolean;
+  viewCount: number;
+  expireAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Document record shape returned by getDoc / getDocByUid
+// Defined concretely rather than using $inferSelect (which is unreliable due to schema.ts type assertions)
+export interface DocWithShare {
+  id: number;
+  docUid: string;
+  spaceId: number | null;
+  parentId: number | null;
+  title: string;
+  summary: string | null;
+  tags: string;
+  status: "draft" | "published" | "archived";
+  pinned: boolean;
+  sort: number;
+  ownerId: number;
+  ownerRole: "user" | "doc_admin" | "super_admin";
+  scope: "user" | "admin" | "system";
+  isSuperAdminDoc: boolean;
+  visibility: "private" | "shared" | "public";
+  tenantKey: string;
+  createdBy: number | null;
+  updatedBy: number | null;
+  deletedAt: Date | null;
+  deletedBy: number | null;
+  revision: number;
+  scheduledAt: Date | null;
+  expiresAt: Date | null;
+  autoArchive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  contentJson: string;
+  contentHtml: string;
+  share: SafeShare | null;
+}
+const VERSION_SNAPSHOT_INTERVAL_MS = 2 * 60 * 1000;
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 50;
-const DOC_UID_RETRY_LIMIT = 5;
 const MAX_DOCUMENT_JSON_BYTES = 4 * 1024 * 1024;
 
 const docCreateSchema = z.object({
@@ -50,19 +109,13 @@ function normalizeSearch(query?: unknown) {
 }
 
 function normalizeActor(actor: Actor | undefined) {
-  return actor?.isSuperAdmin
-    ? { ...actor, isSuperAdmin: true }
-    : actor;
+  return actor?.isSuperAdmin ? { ...actor, isSuperAdmin: true } : actor;
 }
 
 async function actorFromUserId(userId: number): Promise<Actor> {
-  const user = await dbGet<typeof users.$inferSelect>(db.select().from(users).where(eq(users.id, userId)).limit(1));
+  const user = await docRepo.findUserById(userId);
   if (!user) return { id: userId, role: "user" };
-  return {
-    id: user.id,
-    role: user.role,
-    isSuperAdmin: isSuperAdminUser(user)
-  };
+  return { id: user.id, role: user.role, isSuperAdmin: isSuperAdminUser(user) };
 }
 
 function ownerRoleForActor(actor: Actor): DocOwnerRole {
@@ -74,31 +127,14 @@ function scopeForOwnerRole(ownerRole: DocOwnerRole): DocScope {
   return ownerRole === "user" ? "user" : "admin";
 }
 
-async function createUniqueDocUid(length = 24) {
-  for (let attempt = 0; attempt < DOC_UID_RETRY_LIMIT; attempt += 1) {
-    const docUid = generateDocUid(length);
-    const existing = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.docUid, docUid)).limit(1));
-    if (!existing) return docUid;
-  }
-  throw new Error("doc_uid 生成冲突，请重试");
-}
-
 async function assertCreateLocationAccess(actor: Actor, parentId?: number | null, spaceId?: number | null) {
   if (parentId) {
-    const parent = await dbGet<{ ownerId: number | null; isSuperAdminDoc: boolean }>(db
-      .select({ ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-      .from(docs)
-      .where(and(eq(docs.id, parentId), isNull(docs.deletedAt)))
-      .limit(1));
+    const parent = await docRepo.findDocById(parentId);
     if (!parent) throw new NotFoundError("父文档不存在", "PARENT_DOC_NOT_FOUND");
     assertCanAccessDoc(actor, parent, "update");
   }
   if (spaceId) {
-    const space = await dbGet<{ ownerId: number | null }>(db
-      .select({ ownerId: spaces.ownerId })
-      .from(spaces)
-      .where(eq(spaces.id, spaceId))
-      .limit(1));
+    const space = await docRepo.findSpaceById(spaceId);
     if (!space) throw new NotFoundError("空间不存在", "SPACE_NOT_FOUND");
     if (!actor.isSuperAdmin && space.ownerId !== actor.id) throw new ForbiddenError("无权在该空间创建文档", "SPACE_FORBIDDEN");
   }
@@ -119,35 +155,20 @@ function assertCanAccessDoc(actor: Actor | undefined, doc: { ownerId: number | n
   if (!canAccessDocument(normalizeActor(actor), doc, action)) throw accessDenied();
 }
 
-function queryAccessWhere(actor: Actor, deletedCondition: any): any {
+function queryAccessWhere(actor: Actor, deletedCondition: unknown): unknown {
   const normalized = normalizeActor(actor)!;
   if (normalized?.isSuperAdmin) return deletedCondition;
-  const base = and(deletedCondition as any, eq(docs.isSuperAdminDoc, false));
+  const base = and(deletedCondition as ReturnType<typeof eq>, eq(docs.isSuperAdminDoc, false));
   return and(base, eq(docs.ownerId, normalized.id));
 }
 
-function documentSearchWhere(query: string) {
-  const pattern = `%${query}%`;
-  const shareCodeMatch = like(castAsText(shares.shareCode), pattern);
-  const customSlugMatch = like(shares.customSlug, pattern);
-  if (databaseProvider === "mysql") {
-    return or(
-      sql`MATCH(${docs.title}, ${docs.summary}, ${docs.tags}) AGAINST (${query} IN NATURAL LANGUAGE MODE)`,
-      shareCodeMatch,
-      customSlugMatch
-    );
-  }
-  return or(
-    like(docs.title, pattern),
-    like(docs.summary, pattern),
-    like(docs.tags, pattern),
-    shareCodeMatch,
-    customSlugMatch
-  );
+export function safeDocPayload<T extends Record<string, unknown>>(doc: T): Omit<T, 'id'> {
+  const { id: _id, ...rest } = doc;
+  return rest as Omit<T, 'id'>;
 }
 
-export function safeDocPayload<T extends Record<string, unknown>>(doc: T) {
-  const { id: _id, ...rest } = doc;
+export function safeDocPayloadForDocWithShare(doc: DocWithShare) {
+  const { id: _id, share: _share, ...rest } = doc;
   return rest;
 }
 
@@ -167,26 +188,81 @@ function normalizePageOptions(options?: PageOptions) {
   const page = Math.max(1, Math.floor(Number(options?.page) || 1));
   const rawPageSize = Math.floor(Number(options?.pageSize) || DEFAULT_PAGE_SIZE);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, rawPageSize));
-  return {
-    page,
-    pageSize,
-    offset: (page - 1) * pageSize
-  };
+  return { page, pageSize, offset: (page - 1) * pageSize };
 }
 
 function pagedResult<T>(rows: T[], options: ReturnType<typeof normalizePageOptions>) {
   const hasMore = rows.length > options.pageSize;
   return {
     docs: rows.slice(0, options.pageSize),
-    pagination: {
-      page: options.page,
-      pageSize: options.pageSize,
-      hasMore
-    }
+    pagination: { page: options.page, pageSize: options.pageSize, hasMore }
   };
 }
 
-function safeShareRecord(share: typeof shares.$inferSelect | undefined | null) {
+// ============= Public API =============
+
+export async function listDocs(actor: Actor, query?: unknown) {
+  const options = normalizePageOptions();
+  const q = normalizeSearch(query);
+  const accessWhere = queryAccessWhere(actor, isNull(docs.deletedAt));
+  const rows = await docRepo.queryDocsList({ accessWhere: accessWhere as ReturnType<typeof isNull>, query: q, pageSize: options.pageSize, offset: options.offset });
+  return rows.slice(0, options.pageSize);
+}
+
+export async function listDocsPage(actor: Actor, query?: unknown, pageOptions?: PageOptions) {
+  const options = normalizePageOptions(pageOptions);
+  const q = normalizeSearch(query);
+  const accessWhere = queryAccessWhere(actor, isNull(docs.deletedAt));
+  const rows = await docRepo.queryDocsList({ accessWhere: accessWhere as ReturnType<typeof isNull>, query: q, pageSize: options.pageSize, offset: options.offset });
+  return pagedResult(rows, options);
+}
+
+export async function listTrashDocs(actor?: Actor) {
+  const options = normalizePageOptions();
+  const accessWhere = actor ? queryAccessWhere(actor, isNotNull(docs.deletedAt)) : isNotNull(docs.deletedAt);
+  const rows = await docRepo.queryTrashList({ accessWhere: accessWhere as ReturnType<typeof isNotNull>, pageSize: options.pageSize, offset: options.offset });
+  return rows.slice(0, options.pageSize);
+}
+
+export async function listTrashDocsPage(actor?: Actor, pageOptions?: PageOptions) {
+  const options = normalizePageOptions(pageOptions);
+  const accessWhere = actor ? queryAccessWhere(actor, isNotNull(docs.deletedAt)) : isNotNull(docs.deletedAt);
+  const rows = await docRepo.queryTrashList({ accessWhere: accessWhere as ReturnType<typeof isNotNull>, pageSize: options.pageSize, offset: options.offset });
+  return pagedResult(rows, options);
+}
+
+export async function createDoc(userId: number, input: unknown, actor?: Actor) {
+  const body = docCreateSchema.parse(input);
+  const creator = normalizeActor(actor) ?? await actorFromUserId(userId);
+  await assertCreateLocationAccess(creator, body.parentId, body.spaceId);
+  const ownerRole = ownerRoleForActor(creator);
+  const docUid = await docRepo.findUniqueDocUid();
+  const createdAt = now();
+  const encrypted = encryptDocumentContent(JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] }), "<p></p>");
+  const result = await docRepo.insertDoc({
+    docUid,
+    title: body.title,
+    parentId: body.parentId ?? null,
+    spaceId: body.spaceId ?? null,
+    ...encrypted,
+    tags: "[]",
+    status: "draft",
+    sort: 0,
+    ownerId: userId,
+    ownerRole,
+    createdBy: userId,
+    updatedBy: userId,
+    scope: scopeForOwnerRole(ownerRole),
+    isSuperAdminDoc: ownerRole === "super_admin",
+    visibility: "private",
+    tenantKey: "default",
+    createdAt,
+    updatedAt: createdAt
+  });
+  return await getDoc(Number(result.lastInsertRowid));
+}
+
+function buildSafeShare(share: typeof shares.$inferSelect | undefined | null): SafeShare | null {
   if (!share) return null;
   return {
     id: share.id,
@@ -207,226 +283,69 @@ function safeShareRecord(share: typeof shares.$inferSelect | undefined | null) {
   };
 }
 
-async function shouldCreateVersion(executor: any, docId: number, current: { title: string; contentJson: string; contentHtml: string }, next: { title?: string; contentJson?: string; contentHtml?: string }) {
-  const titleChanged = next.title !== undefined && next.title !== current.title;
-  const jsonChanged = next.contentJson !== undefined && next.contentJson !== current.contentJson;
-  const htmlChanged = next.contentHtml !== undefined && next.contentHtml !== current.contentHtml;
-  if (!titleChanged && !jsonChanged && !htmlChanged) return false;
-
-  // 获取最新版本，检查内容是否完全相同（去重）
-  const latest = await dbGet<{ createdAt: Date; title: string | null; contentJsonCiphertext: string | null; contentJsonIv: string | null; contentJsonTag: string | null; contentJsonKeyVersion: number | null; contentHtmlCiphertext: string | null; contentHtmlIv: string | null; contentHtmlTag: string | null; contentHtmlKeyVersion: number | null }>(executor
-    .select({
-      createdAt: docVersions.createdAt,
-      title: docVersions.title,
-      contentJsonCiphertext: docVersions.contentJsonCiphertext,
-      contentJsonIv: docVersions.contentJsonIv,
-      contentJsonTag: docVersions.contentJsonTag,
-      contentJsonKeyVersion: docVersions.contentJsonKeyVersion,
-      contentHtmlCiphertext: docVersions.contentHtmlCiphertext,
-      contentHtmlIv: docVersions.contentHtmlIv,
-      contentHtmlTag: docVersions.contentHtmlTag,
-      contentHtmlKeyVersion: docVersions.contentHtmlKeyVersion,
-    })
-    .from(docVersions)
-    .where(eq(docVersions.docId, docId))
-    .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
-    .limit(1));
-
-  // 无版本记录，直接创建
-  if (!latest) return true;
-
-  // 内容去重：和最新版本完全相同则跳过
-  const newTitle = next.title ?? current.title;
-  const newContentJson = next.contentJson ?? current.contentJson;
-  const newContentHtml = next.contentHtml ?? current.contentHtml;
-
-  try {
-    const latestDecrypted = decryptDocumentRecord(latest as any);
-    if (latestDecrypted.title === newTitle &&
-        latestDecrypted.contentJson === newContentJson &&
-        latestDecrypted.contentHtml === newContentHtml) {
-      // 内容完全相同，跳过
-      return false;
-    }
-  } catch {
-    // 解密失败，按节流逻辑处理
-  }
-
-  // 节流：检查是否在间隔时间内
-  return Date.now() - latest.createdAt.getTime() >= VERSION_SNAPSHOT_INTERVAL_MS;
-}
-
-async function pruneDocVersions(executor: any, docId: number) {
-  const stale = await dbAll<{ id: number }>(executor
-    .select({ id: docVersions.id })
-    .from(docVersions)
-    .where(eq(docVersions.docId, docId))
-    .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
-    .limit(100000)
-    .offset(MAX_DOC_VERSIONS));
-  if (stale.length) {
-    await dbRun(executor.delete(docVersions).where(inArray(docVersions.id, stale.map((row) => row.id))));
-  }
-}
-
-async function createVersionSnapshot(executor: any, docId: number, current: { title: string; contentJson: string; contentHtml: string }, userId: number) {
-  const encrypted = encryptDocumentContent(current.contentJson, current.contentHtml);
-  await dbRun(executor.insert(docVersions).values({
-    docId,
-    title: current.title,
-    ...encrypted,
-    createdBy: userId,
-    createdAt: now()
-  }));
-  await pruneDocVersions(executor, docId);
-}
-
-function listSelect() {
+function buildDocWithShare(
+  decrypted: Omit<typeof docs.$inferSelect, "contentJson" | "contentHtml"> & { contentJson: string; contentHtml: string },
+  share: typeof shares.$inferSelect | undefined | null
+): DocWithShare {
   return {
-    id: docs.id,
-    docUid: docs.docUid,
-    spaceId: docs.spaceId,
-    parentId: docs.parentId,
-    title: docs.title,
-    summary: docs.summary,
-    tags: docs.tags,
-    status: docs.status,
-    pinned: docs.pinned,
-    sort: docs.sort,
-    ownerId: docs.ownerId,
-    ownerRole: docs.ownerRole,
-    scope: docs.scope,
-    isSuperAdminDoc: docs.isSuperAdminDoc,
-    visibility: docs.visibility,
-    tenantKey: docs.tenantKey,
-    createdBy: docs.createdBy,
-    updatedBy: docs.updatedBy,
-    ownerUsername: users.username,
-    updatedAt: docs.updatedAt,
-    createdAt: docs.createdAt,
-    deletedAt: docs.deletedAt,
-    deletedBy: docs.deletedBy,
-    revision: docs.revision,
-    shareCode: shares.shareCode,
-    shareEnabled: shares.isEnabled,
-    shareReviewStatus: shares.reviewStatus,
-    customSlug: shares.customSlug
+    id: decrypted.id as number,
+    docUid: decrypted.docUid as string,
+    spaceId: decrypted.spaceId as number | null,
+    parentId: decrypted.parentId as number | null,
+    title: decrypted.title as string,
+    summary: decrypted.summary as string | null,
+    tags: decrypted.tags as string,
+    status: decrypted.status as "draft" | "published" | "archived",
+    pinned: decrypted.pinned as boolean,
+    sort: decrypted.sort as number,
+    ownerId: decrypted.ownerId as number,
+    ownerRole: decrypted.ownerRole as "user" | "doc_admin" | "super_admin",
+    scope: decrypted.scope as "user" | "admin" | "system",
+    isSuperAdminDoc: decrypted.isSuperAdminDoc as boolean,
+    visibility: decrypted.visibility as "private" | "shared" | "public",
+    tenantKey: decrypted.tenantKey as string,
+    createdBy: decrypted.createdBy as number | null,
+    updatedBy: decrypted.updatedBy as number | null,
+    deletedAt: decrypted.deletedAt as Date | null,
+    deletedBy: decrypted.deletedBy as number | null,
+    revision: decrypted.revision as number,
+    scheduledAt: decrypted.scheduledAt as Date | null,
+    expiresAt: decrypted.expiresAt as Date | null,
+    autoArchive: decrypted.autoArchive as boolean,
+    createdAt: decrypted.createdAt as Date,
+    updatedAt: decrypted.updatedAt as Date,
+    contentJson: decrypted.contentJson,
+    contentHtml: decrypted.contentHtml,
+    share: buildSafeShare(share)
   };
 }
 
-export async function listDocs(actor: Actor, query?: unknown) {
-  const options = normalizePageOptions();
-  return (await queryDocs(actor, query, options)).slice(0, options.pageSize);
-}
-
-async function queryDocs(actor: Actor, query?: unknown, options: ReturnType<typeof normalizePageOptions> = normalizePageOptions()) {
-  const q = normalizeSearch(query);
-  const accessWhere = queryAccessWhere(actor, isNull(docs.deletedAt));
-  const where = q
-    ? and(accessWhere, documentSearchWhere(q))
-    : accessWhere;
-
-  return (await dbAll(db
-    .select(listSelect())
-    .from(docs)
-    .leftJoin(shares, eq(docs.id, shares.docId))
-    .leftJoin(users, eq(docs.ownerId, users.id))
-    .where(where)
-    .orderBy(desc(docs.pinned), desc(docs.updatedAt))
-    .limit(options.pageSize + 1)
-    .offset(options.offset)));
-}
-
-export async function listDocsPage(actor: Actor, query?: unknown, pageOptions?: PageOptions) {
-  const options = normalizePageOptions(pageOptions);
-  return pagedResult(await queryDocs(actor, query, options), options);
-}
-
-export async function listTrashDocs(actor?: Actor) {
-  const options = normalizePageOptions();
-  return (await queryTrashDocs(actor, options)).slice(0, options.pageSize);
-}
-
-async function queryTrashDocs(actor?: Actor, options: ReturnType<typeof normalizePageOptions> = normalizePageOptions()) {
-  const accessWhere = actor
-    ? queryAccessWhere(actor, isNotNull(docs.deletedAt))
-    : isNotNull(docs.deletedAt);
-  return (await dbAll(db
-    .select(listSelect())
-    .from(docs)
-    .leftJoin(shares, eq(docs.id, shares.docId))
-    .leftJoin(users, eq(docs.ownerId, users.id))
-    .where(accessWhere)
-    .orderBy(desc(docs.deletedAt))
-    .limit(options.pageSize + 1)
-    .offset(options.offset)));
-}
-
-export async function listTrashDocsPage(actor?: Actor, pageOptions?: PageOptions) {
-  const options = normalizePageOptions(pageOptions);
-  return pagedResult(await queryTrashDocs(actor, options), options);
-}
-
-export async function createDoc(userId: number, input: unknown, actor?: Actor) {
-  const body = docCreateSchema.parse(input);
-  const creator = normalizeActor(actor) ?? await actorFromUserId(userId);
-  await assertCreateLocationAccess(creator, body.parentId, body.spaceId);
-  const ownerRole = ownerRoleForActor(creator);
-  const docUid = await createUniqueDocUid();
-  const createdAt = now();
-  const encrypted = encryptDocumentContent(JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] }), "<p></p>");
-  const result = await dbRun(db.insert(docs).values({
-    docUid,
-    title: body.title,
-    parentId: body.parentId ?? null,
-    spaceId: body.spaceId ?? null,
-    ...encrypted,
-    tags: "[]",
-    status: "draft",
-    sort: 0,
-    ownerId: userId,
-    ownerRole,
-    createdBy: userId,
-    updatedBy: userId,
-    scope: scopeForOwnerRole(ownerRole),
-    isSuperAdminDoc: ownerRole === "super_admin",
-    visibility: "private",
-    tenantKey: "default",
-    createdAt,
-    updatedAt: createdAt
-  }));
-  return await getDoc(Number(result.lastInsertRowid));
-}
-
-export async function getDoc(id: number, actor?: Actor) {
-  const doc = await dbGet<typeof docs.$inferSelect>(db.select().from(docs).where(and(eq(docs.id, id), isNull(docs.deletedAt))).limit(1));
+export async function getDoc(id: number, actor?: Actor): Promise<DocWithShare> {
+  const doc = await docRepo.findDocById(id);
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  const decrypted = decryptDocumentRecord(doc);
-  if (actor) assertCanAccessDoc(actor, decrypted, "read");
-  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, decrypted.id)).limit(1));
-  return { ...decrypted, share: safeShareRecord(share) };
+  const decrypted = decryptDocumentRecord(doc as Parameters<typeof decryptDocumentRecord>[0]);
+  if (actor) assertCanAccessDoc(actor, decrypted as unknown as DocAccessTarget, "read");
+  const share = await docRepo.findShareByDocId(decrypted.id as number);
+  return buildDocWithShare(decrypted as unknown as Omit<typeof docs.$inferSelect, "contentJson" | "contentHtml"> & { contentJson: string; contentHtml: string }, share);
 }
 
-export async function getDocByUid(docUid: string, actor: Actor) {
+export async function getDocByUid(docUid: string, actor: Actor): Promise<DocWithShare> {
   const uid = docUidParam(docUid);
-  const doc = await dbGet<typeof docs.$inferSelect>(db.select().from(docs).where(and(eq(docs.docUid, uid), isNull(docs.deletedAt))).limit(1));
+  const doc = await docRepo.findDocByUid(uid);
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  const decrypted = decryptDocumentRecord(doc);
-  assertCanAccessDoc(actor, decrypted, "read");
-  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, decrypted.id)).limit(1));
-  return { ...decrypted, share: safeShareRecord(share) };
+  const decrypted = decryptDocumentRecord(doc as Parameters<typeof decryptDocumentRecord>[0]);
+  assertCanAccessDoc(actor, decrypted as unknown as DocAccessTarget, "read");
+  const share = await docRepo.findShareByDocId(decrypted.id as number);
+  return buildDocWithShare(decrypted as unknown as Omit<typeof docs.$inferSelect, "contentJson" | "contentHtml"> & { contentJson: string; contentHtml: string }, share);
 }
 
 async function docIdByUid(docUid: string, actor: Actor, action: DocumentAction, includeDeleted = false) {
   const uid = docUidParam(docUid);
-  const where = includeDeleted ? eq(docs.docUid, uid) : and(eq(docs.docUid, uid), isNull(docs.deletedAt));
-  const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(where)
-    .limit(1));
+  const doc = includeDeleted
+    ? await docRepo.findDocByUidAnyStatus(uid)
+    : await docRepo.findDocByUid(uid);
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  assertCanAccessDoc(actor, doc, action);
+  assertCanAccessDoc(actor, doc as DocAccessTarget, action);
   return doc.id;
 }
 
@@ -451,10 +370,9 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
   const htmlChanged = contentHtml !== undefined && contentHtml !== current.contentHtml;
   const reviewRelevantChanged = titleChanged || jsonChanged || htmlChanged;
 
-  const patch: Omit<Partial<typeof docs.$inferInsert>, "revision"> & { revision?: number | SQL<unknown> } = {
+  const patch: Record<string, unknown> = {
     updatedBy: userId,
-    updatedAt: now(),
-    revision: sql`${docs.revision} + 1`
+    updatedAt: now()
   };
   if (body.title !== undefined) patch.title = body.title;
   if (contentJson !== undefined || contentHtml !== undefined) {
@@ -468,36 +386,34 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
   if (body.sort !== undefined) patch.sort = body.sort;
   if (actor?.role === "user" && reviewRelevantChanged) patch.visibility = "private";
 
-  const expectedRevision = body.expectedRevision ?? current.revision;
+  const expectedRevision = body.expectedRevision ?? (current.revision ?? 1);
   await dbTransaction(async (tx) => {
-    if (await shouldCreateVersion(tx, id, current, { title: body.title, contentJson, contentHtml })) {
-      await createVersionSnapshot(tx, id, current, userId);
+    if (await docRepo.shouldCreateVersion(tx, id, current as unknown as { title: string; contentJson: string; contentHtml: string }, { title: body.title, contentJson, contentHtml }, VERSION_SNAPSHOT_INTERVAL_MS)) {
+      await docRepo.createVersionSnapshotAndPrune(tx, id, current as unknown as { title: string; contentJson: string; contentHtml: string }, userId);
     }
-    const result = await dbRun(tx.update(docs).set(patch).where(and(eq(docs.id, id), eq(docs.revision, expectedRevision))));
+    const result = await docRepo.updateDocAndShareTx(tx, id, patch as Parameters<typeof docRepo.updateDocById>[1], actor?.role === "user" && reviewRelevantChanged ? {
+      isEnabled: false,
+      reviewStatus: "pending",
+      reviewNote: null,
+      reviewContentHash: documentReviewHash({
+        title: body.title ?? current.title,
+        contentJson: contentJson ?? current.contentJson,
+        contentHtml: contentHtml ?? current.contentHtml
+      }),
+      requestedBy: userId,
+      reviewedBy: null,
+      reviewedAt: null,
+      updatedAt: now()
+    } : undefined, body.expectedRevision !== undefined ? expectedRevision : undefined);
     if (result.changes !== 1) {
       throw new ConflictError("文档已在其他窗口更新，请刷新后合并内容", "DOC_REVISION_CONFLICT");
     }
-    if (actor?.role === "user" && reviewRelevantChanged) {
-      await dbRun(tx.update(shares).set({
-        isEnabled: false,
-        reviewStatus: "pending",
-        reviewNote: null,
-        reviewContentHash: documentReviewHash({
-          title: body.title ?? current.title,
-          contentJson: contentJson ?? current.contentJson,
-          contentHtml: contentHtml ?? current.contentHtml
-        }),
-        requestedBy: userId,
-        reviewedBy: null,
-        reviewedAt: null,
-        updatedAt: now()
-      }).where(eq(shares.docId, id)));
-    }
   });
 
-  // ===== 分享页秒开优化：文档更新后清除缓存 =====
-  // 使用 Promise.resolve 包装以便安全调用 .catch
-  Promise.resolve().then(() => invalidateShareHtmlCache(current.share?.shareCode)).catch(() => undefined);
+  Promise.resolve().then(() => {
+    invalidateShareHtmlCache(current.share?.shareCode);
+    invalidateShareHtmlCache(current.share?.customSlug ?? undefined);
+  }).catch(() => undefined);
   Promise.resolve().then(() => invalidateDecryptedDocCache(id)).catch(() => undefined);
 
   return await getDoc(id, actor);
@@ -505,108 +421,73 @@ export async function updateDoc(id: number, userId: number, input: unknown, acto
 
 export async function softDeleteDoc(id: number, userId: number, actor?: Actor) {
   const current = await getDoc(id, actor);
-  await dbRun(db.update(docs).set({ deletedAt: now(), deletedBy: userId, updatedBy: userId, updatedAt: now(), revision: sql`${docs.revision} + 1` }).where(eq(docs.id, id)));
+  await docRepo.softDeleteDocById(id, userId);
   return { docUid: current.docUid, ownerId: current.ownerId };
 }
 
 export async function bulkSoftDeleteDocs(ids: number[], userId: number, actor: Actor) {
   const uniqueIds = uniquePositiveIds(ids);
   const deletedIds: number[] = [];
-  const deletedAt = now();
-
-  await dbTransaction(async (tx) => {
-    for (const id of uniqueIds) {
-      const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(tx
-        .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-        .from(docs)
-        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
-        .limit(1));
-      if (!doc) continue;
-      assertCanAccessDoc(actor, doc, "batch");
-      const result = await dbRun(tx.update(docs).set({ deletedAt, deletedBy: userId, updatedBy: userId, updatedAt: deletedAt, revision: sql`${docs.revision} + 1` }).where(eq(docs.id, id)));
-      if (result.changes > 0) deletedIds.push(id);
-    }
-  });
-
+  for (const id of uniqueIds) {
+    const doc = await docRepo.findDocById(id);
+    if (!doc) continue;
+    assertCanAccessDoc(actor, doc as DocAccessTarget, "batch");
+    const result = await docRepo.softDeleteDocById(id, userId);
+    if (result.changes > 0) deletedIds.push(id);
+  }
   return deletedIds;
 }
 
 export async function restoreDoc(id: number, userId: number, actor?: Actor) {
-  const existing = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
-    .limit(1));
+  const existing = await docRepo.findDocByIdInTrash(id);
   if (!existing) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  if (actor) assertCanAccessDoc(actor, existing, "restore");
-  await dbRun(db.update(docs).set({ deletedAt: null, deletedBy: null, updatedBy: userId, updatedAt: now(), revision: sql`${docs.revision} + 1` }).where(eq(docs.id, id)));
+  if (actor) assertCanAccessDoc(actor, existing as DocAccessTarget, "restore");
+  await docRepo.restoreDocById(id, userId);
   return await getDoc(id, actor);
 }
 
 export async function bulkRestoreDocs(ids: number[], userId: number, actor?: Actor) {
   const uniqueIds = uniquePositiveIds(ids);
   if (!uniqueIds.length) return [];
-
-  const rows = await dbAll<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(and(inArray(docs.id, uniqueIds), isNotNull(docs.deletedAt))));
-  const restoredIds = rows.filter((row) => canAccessDocument(normalizeActor(actor), row, "batch")).map((row) => row.id);
+  const rows = await docRepo.findDocsByIds(uniqueIds);
+  const filtered = rows.filter((row) => {
+    if (!row.deletedAt) return false;
+    return canAccessDocument(normalizeActor(actor), row as { ownerId: number | null; isSuperAdminDoc: boolean | number }, "batch");
+  });
+  const restoredIds = filtered.map((row) => row.id);
   if (!restoredIds.length) return [];
-
-  const updatedAt = now();
-  await dbRun(db.update(docs).set({ deletedAt: null, deletedBy: null, updatedBy: userId, updatedAt, revision: sql`${docs.revision} + 1` }).where(inArray(docs.id, restoredIds)));
+  await docRepo.restoreDocsByIds(restoredIds, userId);
   return restoredIds;
 }
 
 export async function hardDeleteDoc(id: number, actor?: Actor) {
-  const existing = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(and(eq(docs.id, id), isNotNull(docs.deletedAt)))
-    .limit(1));
+  const existing = await docRepo.findDocByIdInTrash(id);
   if (!existing) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  if (actor) assertCanAccessDoc(actor, existing, "permanent_delete");
-  await dbTransaction(async (tx) => {
-    await dbRun(tx.update(docs).set({ parentId: null }).where(eq(docs.parentId, id)));
-    await dbRun(tx.delete(shares).where(eq(shares.docId, id)));
-    await dbRun(tx.delete(docVersions).where(eq(docVersions.docId, id)));
-    await dbRun(tx.update(uploads).set({ docId: null, detachedAt: now() }).where(eq(uploads.docId, id)));
-    await dbRun(tx.delete(docs).where(eq(docs.id, id)));
-  });
+  if (actor) assertCanAccessDoc(actor, existing as DocAccessTarget, "permanent_delete");
+  await docRepo.deleteDocById(id);
 }
 
 export async function bulkHardDeleteTrashDocs(ids: number[], actor?: Actor) {
   const uniqueIds = uniquePositiveIds(ids);
   if (!uniqueIds.length) return [];
-
-  const rows = await dbAll<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(and(inArray(docs.id, uniqueIds), isNotNull(docs.deletedAt))));
-  const deletedIds = rows.filter((row) => canAccessDocument(normalizeActor(actor), row, "batch")).map((row) => row.id);
-  if (!deletedIds.length) return [];
-
-  await dbTransaction(async (tx) => {
-    await dbRun(tx.update(docs).set({ parentId: null }).where(inArray(docs.parentId, deletedIds)));
-    await dbRun(tx.delete(shares).where(inArray(shares.docId, deletedIds)));
-    await dbRun(tx.delete(docVersions).where(inArray(docVersions.docId, deletedIds)));
-    await dbRun(tx.update(uploads).set({ docId: null, detachedAt: now() }).where(inArray(uploads.docId, deletedIds)));
-    await dbRun(tx.delete(docs).where(inArray(docs.id, deletedIds)));
+  const rows = await docRepo.findDocsByIds(uniqueIds);
+  const filtered = rows.filter((row) => {
+    if (!row.deletedAt) return false;
+    return canAccessDocument(normalizeActor(actor), row as { ownerId: number | null; isSuperAdminDoc: boolean | number }, "batch");
   });
-
+  const deletedIds = filtered.map((row) => row.id);
+  if (!deletedIds.length) return [];
+  await docRepo.deleteDocsByIds(deletedIds);
   return deletedIds;
 }
 
 async function accessibleDocsByUids(docUids: string[], actor: Actor, action: DocumentAction, deleted: "active" | "trash") {
   const uids = uniqueDocUids(docUids);
   if (!uids.length) return [];
-  const deletedWhere = deleted === "trash" ? isNotNull(docs.deletedAt) : isNull(docs.deletedAt);
-  const rows = await dbAll<{ id: number; docUid: string; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, docUid: docs.docUid, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(and(inArray(docs.docUid, uids), deletedWhere)));
-  return rows.filter((row) => canAccessDocument(normalizeActor(actor), row, action));
+  const rows = deleted === "trash"
+    ? await docRepo.findDocsByUidsInTrash(uids)
+    : await docRepo.findDocsByUidsNotDeleted(uids);
+  return rows.filter((row) => canAccessDocument(normalizeActor(actor), row as { ownerId: number | null; isSuperAdminDoc: boolean | number }, action));
 }
 
 export async function updateDocByUid(docUid: string, userId: number, input: unknown, actor: Actor) {
@@ -624,7 +505,7 @@ export async function bulkSoftDeleteDocsByUid(docUids: string[], userId: number,
   if (!rows.length) return [];
   const deletedAt = now();
   const ids = rows.map((row) => row.id);
-  await dbRun(db.update(docs).set({ deletedAt, deletedBy: userId, updatedBy: userId, updatedAt: deletedAt, revision: sql`${docs.revision} + 1` }).where(inArray(docs.id, ids)));
+  await docRepo.softDeleteDocsByIds(ids, userId, deletedAt);
   return rows.map((row) => row.docUid);
 }
 
@@ -636,9 +517,8 @@ export async function restoreDocByUid(docUid: string, userId: number, actor: Act
 export async function bulkRestoreDocsByUid(docUids: string[], userId: number, actor: Actor) {
   const rows = await accessibleDocsByUids(docUids, actor, "batch", "trash");
   if (!rows.length) return [];
-  const updatedAt = now();
   const ids = rows.map((row) => row.id);
-  await dbRun(db.update(docs).set({ deletedAt: null, deletedBy: null, updatedBy: userId, updatedAt, revision: sql`${docs.revision} + 1` }).where(inArray(docs.id, ids)));
+  await docRepo.restoreDocsByIds(ids, userId);
   return rows.map((row) => row.docUid);
 }
 
@@ -651,13 +531,7 @@ export async function bulkHardDeleteTrashDocsByUid(docUids: string[], actor: Act
   const rows = await accessibleDocsByUids(docUids, actor, "batch", "trash");
   if (!rows.length) return [];
   const ids = rows.map((row) => row.id);
-  await dbTransaction(async (tx) => {
-    await dbRun(tx.update(docs).set({ parentId: null }).where(inArray(docs.parentId, ids)));
-    await dbRun(tx.delete(shares).where(inArray(shares.docId, ids)));
-    await dbRun(tx.delete(docVersions).where(inArray(docVersions.docId, ids)));
-    await dbRun(tx.update(uploads).set({ docId: null, detachedAt: now() }).where(inArray(uploads.docId, ids)));
-    await dbRun(tx.delete(docs).where(inArray(docs.id, ids)));
-  });
+  await docRepo.deleteDocsByIds(ids);
   return rows.map((row) => row.docUid);
 }
 
@@ -668,26 +542,19 @@ export async function publishDocByUid(docUid: string, userId: number, actor: Act
 
 export async function publishDoc(id: number, userId: number, actor?: Actor) {
   if (actor) await getDoc(id, actor);
-  await dbRun(db.update(docs).set({ status: "published", updatedBy: userId, updatedAt: now() }).where(eq(docs.id, id)));
+  await docRepo.updateDocById(id, { status: "published", updatedBy: userId, updatedAt: now() });
   return await getDoc(id, actor);
 }
 
 export async function listDocVersions(docId: number, actor?: Actor) {
   const current = await getDoc(docId, actor);
-  const rows = await dbAll<typeof docVersions.$inferSelect>(db
-    .select()
-    .from(docVersions)
-    .where(eq(docVersions.docId, docId))
-    .orderBy(desc(docVersions.createdAt), desc(docVersions.id))
-    .limit(50));
+  const rows = await docRepo.findVersionsByDocId(docId);
   const userIds = Array.from(new Set(rows.map((row) => row.createdBy).filter((id): id is number => !!id)));
-  const authors = userIds.length
-    ? await dbAll<{ id: number; username: string }>(db.select({ id: users.id, username: users.username }).from(users).where(inArray(users.id, userIds)))
-    : [];
+  const authors = userIds.length ? await docRepo.findUsersByIds(userIds) : [];
   const authorMap = new Map(authors.map((author) => [author.id, author.username]));
   const currentWordCount = plainTextFromHtml(current.contentHtml).length;
   return rows.map((row) => {
-    const version = decryptDocumentRecord(row);
+    const version = decryptDocumentRecord(row as Parameters<typeof decryptDocumentRecord>[0]);
     const wordCount = plainTextFromHtml(version.contentHtml).length;
     const delta = wordCount - currentWordCount;
     return {
@@ -708,7 +575,8 @@ export async function listDocVersionsByUid(docUid: string, actor: Actor) {
 }
 
 function plainTextFromHtml(value: string) {
-  return value.replace(/<style[\s\S]*?<\/style>/gi, " ")
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
@@ -721,10 +589,9 @@ function plainTextFromHtml(value: string) {
 
 export async function getDocVersionPreviewByUid(docUid: string, versionId: number, actor: Actor) {
   const docId = await docIdByUid(docUid, actor, "history");
-  const row = await dbGet<typeof docVersions.$inferSelect>(db.select().from(docVersions)
-    .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, docId))).limit(1));
+  const row = await docRepo.findVersionById(versionId, docId);
   if (!row) throw new NotFoundError("版本不存在", "VERSION_NOT_FOUND");
-  const version = decryptDocumentRecord(row);
+  const version = decryptDocumentRecord(row as Parameters<typeof decryptDocumentRecord>[0]);
   return {
     id: row.id,
     title: version.title,
@@ -736,11 +603,10 @@ export async function getDocVersionPreviewByUid(docUid: string, versionId: numbe
 }
 
 export async function restoreDocVersionAsCopyByUid(docUid: string, versionId: number, userId: number, actor: Actor) {
-  const previewDocId = await docIdByUid(docUid, actor, "history");
-  const row = await dbGet<typeof docVersions.$inferSelect>(db.select().from(docVersions)
-    .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, previewDocId))).limit(1));
+  const docId = await docIdByUid(docUid, actor, "history");
+  const row = await docRepo.findVersionById(versionId, docId);
   if (!row) throw new NotFoundError("版本不存在", "VERSION_NOT_FOUND");
-  const version = decryptDocumentRecord(row);
+  const version = decryptDocumentRecord(row as Parameters<typeof decryptDocumentRecord>[0]);
   const copy = await createDoc(userId, { title: `${version.title}（恢复副本）` }, actor);
   return await updateDoc(copy.id, userId, {
     title: `${version.title}（恢复副本）`,
@@ -752,36 +618,30 @@ export async function restoreDocVersionAsCopyByUid(docUid: string, versionId: nu
 
 export async function restoreDocVersion(docId: number, versionId: number, userId: number, actor?: Actor) {
   const current = await getDoc(docId, actor);
-  const version = await dbGet<typeof docVersions.$inferSelect>(db
-    .select()
-    .from(docVersions)
-    .where(and(eq(docVersions.id, versionId), eq(docVersions.docId, docId)))
-    .limit(1));
+  const version = await docRepo.findVersionById(versionId, docId);
   if (!version) throw new NotFoundError("版本不存在", "VERSION_NOT_FOUND");
-  const decryptedVersion = decryptDocumentRecord(version);
+  const decryptedVersion = decryptDocumentRecord(version as Parameters<typeof decryptDocumentRecord>[0]) as unknown as { title: string; contentJson: string; contentHtml: string };
   const encrypted = encryptDocumentContent(decryptedVersion.contentJson, decryptedVersion.contentHtml);
+  const docPatch = {
+    title: decryptedVersion.title,
+    ...encrypted,
+    updatedBy: userId,
+    updatedAt: now(),
+    revision: (current.revision + 1) as number
+  };
   await dbTransaction(async (tx) => {
-    await createVersionSnapshot(tx, docId, current, userId);
-    const result = await dbRun(tx.update(docs).set({
-      title: decryptedVersion.title,
-      ...encrypted,
-      updatedBy: userId,
-      updatedAt: now(),
-      revision: sql`${docs.revision} + 1`
-    }).where(and(eq(docs.id, docId), eq(docs.revision, current.revision))));
+    await docRepo.createVersionSnapshotAndPrune(tx, docId, current as unknown as { title: string; contentJson: string; contentHtml: string }, userId);
+    const result = await docRepo.updateDocAndShareTx(tx, docId, docPatch, actor?.role === "user" ? {
+      isEnabled: false,
+      reviewStatus: "pending",
+      reviewNote: null,
+      reviewContentHash: documentReviewHash(decryptedVersion),
+      requestedBy: userId,
+      reviewedBy: null,
+      reviewedAt: null,
+      updatedAt: now()
+    } : undefined, current.revision);
     if (result.changes !== 1) throw new ConflictError("文档已在其他窗口更新，请刷新后重试", "DOC_REVISION_CONFLICT");
-    if (actor?.role === "user") {
-      await dbRun(tx.update(shares).set({
-        isEnabled: false,
-        reviewStatus: "pending",
-        reviewNote: null,
-        reviewContentHash: documentReviewHash(decryptedVersion),
-        requestedBy: userId,
-        reviewedBy: null,
-        reviewedAt: null,
-        updatedAt: now()
-      }).where(eq(shares.docId, docId)));
-    }
   });
   return await getDoc(docId, actor);
 }
@@ -792,6 +652,7 @@ export async function restoreDocVersionByUid(docUid: string, versionId: number, 
 }
 
 // ===== 回收站统计 =====
+
 export interface TrashStats {
   trashCount: number;
   storageUsedBytes: number;
@@ -805,34 +666,12 @@ export interface TrashStats {
 export async function getTrashStats(actor: Actor): Promise<TrashStats> {
   const accessWhere = queryAccessWhere(actor, isNotNull(docs.deletedAt));
   const [aggregate, uploadAggregate, oldest] = await Promise.all([
-    dbGet<{ count: number; contentBytes: number; ownerCount: number }>(db
-      .select({
-        count: sql<number>`COUNT(*)`,
-        contentBytes: sql<number>`COALESCE(SUM(
-          COALESCE(LENGTH(${docs.contentJsonCiphertext}), LENGTH(${docs.contentJson}), 0) +
-          COALESCE(LENGTH(${docs.contentHtmlCiphertext}), LENGTH(${docs.contentHtml}), 0) +
-          COALESCE(LENGTH(${docs.title}), 0) + COALESCE(LENGTH(${docs.summary}), 0) + COALESCE(LENGTH(${docs.tags}), 0)
-        ), 0)`,
-        ownerCount: sql<number>`COUNT(DISTINCT ${docs.ownerId})`
-      })
-      .from(docs)
-      .where(accessWhere)),
-    dbGet<{ totalSize: number }>(db
-      .select({ totalSize: sql<number>`COALESCE(SUM(${uploads.fileSize}), 0)` })
-      .from(uploads)
-      .innerJoin(docs, eq(uploads.docId, docs.id))
-      .where(accessWhere)),
-    dbGet<{ docUid: string; title: string; deletedAt: Date }>(db
-      .select({ docUid: docs.docUid, title: docs.title, deletedAt: docs.deletedAt })
-      .from(docs)
-      .where(accessWhere)
-      .orderBy(docs.deletedAt)
-      .limit(1))
+    docRepo.queryTrashAggregate(accessWhere as ReturnType<typeof isNotNull>),
+    docRepo.queryTrashUploadSize(accessWhere as ReturnType<typeof isNotNull>),
+    docRepo.findOldestTrashDoc(accessWhere as ReturnType<typeof isNotNull>)
   ]);
-
   const storageUsedBytes = Number(aggregate?.contentBytes ?? 0) + Number(uploadAggregate?.totalSize ?? 0);
   const ownerCount = Math.max(1, Number(aggregate?.ownerCount ?? 0));
-
   return {
     trashCount: Number(aggregate?.count ?? 0),
     storageUsedBytes,
@@ -846,65 +685,35 @@ export async function getTrashStats(actor: Actor): Promise<TrashStats> {
 
 export async function purgeExpiredTrashDocs() {
   const cutoff = new Date(Date.now() - env.trashRetentionDays * 86_400_000);
-  const rows = await dbAll<{ id: number }>(db
-    .select({ id: docs.id })
-    .from(docs)
-    .where(and(isNotNull(docs.deletedAt), sql`${docs.deletedAt} <= ${cutoff}`)));
+  const rows = await docRepo.findExpiredTrashDocs(cutoff);
   if (!rows.length) return 0;
   return (await bulkHardDeleteTrashDocs(rows.map((row) => row.id), { id: 0, role: "admin", isSuperAdmin: true })).length;
 }
 
 // ===== 定时发布和草稿过期 =====
+
 export interface ScheduleInfo {
   scheduledAt: Date | null;
   expiresAt: Date | null;
   autoArchive: boolean;
 }
 
-// 设置文档定时发布
-export async function setDocumentSchedule(
-  actor: Actor,
-  docUid: string,
-  input: {
-    scheduledAt?: string | null;
-    expiresAt?: string | null;
-    autoArchive?: boolean;
-  }
-): Promise<ScheduleInfo> {
-  const doc = await dbGet<{ id: number; ownerId: number; isSuperAdminDoc: boolean }>(
-    db.select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-      .from(docs)
-      .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
-      .limit(1)
-  );
+export async function setDocumentSchedule(actor: Actor, docUid: string, input: {
+  scheduledAt?: string | null;
+  expiresAt?: string | null;
+  autoArchive?: boolean;
+}): Promise<ScheduleInfo> {
+  const docId = await docRepo.findDocIdByUid(docUid);
+  if (!docId) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  const doc = await docRepo.findDocById(docId);
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  assertCanAccessDoc(actor, doc, "update");
-
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-
-  if (input.scheduledAt !== undefined) {
-    updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
-  }
-  if (input.expiresAt !== undefined) {
-    updates.expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-  }
-  if (input.autoArchive !== undefined) {
-    updates.autoArchive = input.autoArchive;
-  }
-
-  await dbRun(db.update(docs).set(updates).where(eq(docs.id, doc.id)));
-
-  const updated = await dbGet<ScheduleInfo>(
-    db.select({
-      scheduledAt: docs.scheduledAt,
-      expiresAt: docs.expiresAt,
-      autoArchive: docs.autoArchive
-    })
-      .from(docs)
-      .where(eq(docs.id, doc.id))
-      .limit(1)
-  );
-
+  assertCanAccessDoc(actor, doc as { ownerId: number | null; isSuperAdminDoc: boolean | number }, "update");
+  await docRepo.updateDocSchedule(docId, {
+    scheduledAt: input.scheduledAt !== undefined ? (input.scheduledAt ? new Date(input.scheduledAt) : null) : undefined,
+    expiresAt: input.expiresAt !== undefined ? (input.expiresAt ? new Date(input.expiresAt) : null) : undefined,
+    autoArchive: input.autoArchive
+  });
+  const updated = await docRepo.findDocSchedule(docUid);
   return {
     scheduledAt: updated?.scheduledAt ?? null,
     expiresAt: updated?.expiresAt ?? null,
@@ -912,114 +721,47 @@ export async function setDocumentSchedule(
   };
 }
 
-// 获取文档定时信息
-export async function getDocumentSchedule(docUid: string): Promise<ScheduleInfo | null> {
-  const doc = await dbGet<ScheduleInfo>(
-    db.select({
-      scheduledAt: docs.scheduledAt,
-      expiresAt: docs.expiresAt,
-      autoArchive: docs.autoArchive
-    })
-      .from(docs)
-      .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
-      .limit(1)
-  );
-  if (!doc) return null;
-  return {
-    scheduledAt: doc.scheduledAt,
-    expiresAt: doc.expiresAt,
-    autoArchive: doc.autoArchive
-  };
+export async function getDocumentSchedule(docUid: string, actor: Actor): Promise<ScheduleInfo | null> {
+  const docId = await docIdByUid(docUid, actor, "read");
+  const schedule = await docRepo.findDocSchedule(docUid);
+  if (!docId || !schedule) return null;
+  return { scheduledAt: schedule.scheduledAt, expiresAt: schedule.expiresAt, autoArchive: schedule.autoArchive };
 }
 
-// 处理定时发布的文档（定时任务调用）
 export async function processScheduledDocs() {
   const now = new Date();
-  const rows = await dbAll<{ id: number; docUid: string }>(
-    db.select({ id: docs.id, docUid: docs.docUid })
-      .from(docs)
-      .where(and(
-        isNull(docs.deletedAt),
-        isNotNull(docs.scheduledAt),
-        sql`${docs.scheduledAt} <= ${now}`,
-        eq(docs.status, "draft")
-      ))
-  );
-
+  const rows = await docRepo.findScheduledDocsToPublish(now);
   if (!rows.length) return { published: 0 };
-
-  const actor: Actor = { id: 0, role: "admin", isSuperAdmin: true };
   let published = 0;
-
   for (const row of rows) {
     try {
-      await dbRun(
-        db.update(docs)
-          .set({
-            status: "published",
-            scheduledAt: null,
-            updatedAt: new Date()
-          })
-          .where(eq(docs.id, row.id))
-      );
+      await docRepo.publishScheduledDoc(row.id);
       published++;
     } catch (error) {
       console.error(`Failed to publish scheduled doc ${row.docUid}:`, error);
     }
   }
-
   return { published };
 }
 
-// 处理过期的草稿（定时任务调用）
 export async function processExpiredDrafts() {
   const now = new Date();
-  const rows = await dbAll<{ id: number; docUid: string; autoArchive: boolean }>(
-    db.select({ id: docs.id, docUid: docs.docUid, autoArchive: docs.autoArchive })
-      .from(docs)
-      .where(and(
-        isNull(docs.deletedAt),
-        isNotNull(docs.expiresAt),
-        sql`${docs.expiresAt} <= ${now}`,
-        eq(docs.status, "draft")
-      ))
-  );
-
+  const rows = await docRepo.findExpiredDrafts(now);
   if (!rows.length) return { expired: 0, archived: 0 };
-
   let expired = 0;
   let archived = 0;
-
   for (const row of rows) {
     try {
       if (row.autoArchive) {
-        // 过期后归档
-        await dbRun(
-          db.update(docs)
-            .set({
-              status: "archived",
-              expiresAt: null,
-              updatedAt: new Date()
-            })
-            .where(eq(docs.id, row.id))
-        );
+        await docRepo.archiveExpiredDoc(row.id);
         archived++;
       } else {
-        // 仅标记过期
-        await dbRun(
-          db.update(docs)
-            .set({
-              expiresAt: null,
-              updatedAt: new Date()
-            })
-            .where(eq(docs.id, row.id))
-        );
+        await docRepo.clearExpiredDoc(row.id);
       }
       expired++;
     } catch (error) {
       console.error(`Failed to process expired draft ${row.docUid}:`, error);
     }
   }
-
   return { expired, archived };
 }

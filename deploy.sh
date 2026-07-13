@@ -56,9 +56,9 @@ fi
 
 node -e "const major=Number(process.versions.node.split('.')[0]); if (major < 20) { console.error('Node.js 20+ is required.'); process.exit(1); }"
 if [ -f "package-lock.json" ]; then
-  npm ci --workspaces --include-workspace-root
+  npm ci --include=dev --workspaces --include-workspace-root
 else
-  npm install --workspaces --include-workspace-root
+  npm install --include=dev --workspaces --include-workspace-root
 fi
 
 node scripts/preflight-deploy.js
@@ -73,6 +73,7 @@ if [ ! -s "$BACKUP_MARKER" ]; then
 fi
 BACKUP_PATH="$(tr -d '\r\n' < "$BACKUP_MARKER")"
 npm run db:backup:verify -- "$BACKUP_PATH"
+bash scripts/install-maintenance-cron.sh
 
 ROLLBACK_DIR=".deploy-rollback/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$ROLLBACK_DIR/server/public"
@@ -104,7 +105,6 @@ if ! bash ./start.sh; then
   exit 1
 fi
 
-bash scripts/install-maintenance-cron.sh
 find .deploy-rollback -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf -- {} +
 
 echo "ChenDoc deployed. Set the BT reverse proxy to http://127.0.0.1:8985"

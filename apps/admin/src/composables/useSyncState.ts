@@ -1,4 +1,4 @@
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import type { NetworkStatus } from "./useNetworkStatus";
 
 export type SyncState = "synced" | "syncing" | "pending" | "offline" | "error";
@@ -51,6 +51,8 @@ export function useSyncState(options: {
         return "离线模式";
       case "error":
         return "同步失败";
+      default:
+        return "";
     }
   });
 

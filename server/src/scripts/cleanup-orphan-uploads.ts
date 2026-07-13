@@ -4,7 +4,7 @@ import { createR2Client } from "../config/r2.js";
 import { closeDatabase, db, dbAll, dbGet, dbRun } from "../db/client.js";
 import { settings, uploads } from "../db/schema.js";
 import { env } from "../config/env.js";
-import { assertR2Ready } from "../modules/settings/settings.service.js";
+import { assertR2Ready } from "../modules/settings/storage.service.js";
 
 const cutoff = new Date(Date.now() - env.uploadOrphanRetentionHours * 60 * 60 * 1000);
 const SCAN_CURSOR_KEY = "maintenance.upload_cleanup_cursor";

@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { R2ConfigView } from "../api/settings";
-import { getR2ConfigApi } from "../api/settings";
+import type { R2ConfigView } from "../services/api/settings.api";
+import { getR2ConfigApi } from "../services/api/settings.api";
 
 export const useSettingsStore = defineStore("settings", () => {
   const r2Config = ref<R2ConfigView | null>(null);

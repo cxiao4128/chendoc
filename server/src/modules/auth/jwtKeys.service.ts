@@ -1,4 +1,4 @@
-import { eq, and, lt, isNull } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { db, dbAll, dbGet, dbRun } from "../../db/client.js";
 import { jwtKeys } from "../../db/schema.js";

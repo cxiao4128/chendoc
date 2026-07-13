@@ -1,0 +1,32 @@
+/* 字段操作按钮 */
+.form-field-item__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.form-field-item__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--form-border);
+  border-radius: 6px;
+  background: var(--form-paper);
+  color: var(--form-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-field-item__action-btn:hover {
+  background: var(--form-bg);
+  color: var(--form-text);
+}
+
+.form-field-item__action-btn.delete:hover {
+  background: var(--form-danger-soft);
+  border-color: var(--form-danger);
+  color: var(--form-danger);
+}

@@ -1,0 +1,29 @@
+.mobile-shell {
+  --cd-bg: #f5f6f8;
+  --cd-surface: #ffffff;
+  --cd-panel: #ffffff;
+  --cd-paper: #ffffff;
+  --cd-border: #e8eaed;
+  --cd-border-strong: #d0d5dd;
+  --cd-text: #1d2939;
+  --cd-ink: #0f172a;
+  --cd-muted: #5f6b85;
+  --cd-faint: #667085;
+  --cd-primary: #2563eb;
+  --cd-primary-hover: #1d4ed8;
+  --cd-primary-soft: #eff6ff;
+  --cd-accent: #2563eb;
+  --cd-accent-hover: #1d4ed8;
+  --cd-accent-soft: #eff6ff;
+  --cd-shadow: 0 20px 44px rgba(15, 23, 42, 0.14);
+  --cd-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --cd-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --cd-radius: 12px;
+  min-height: 100dvh;
+  background: var(--cd-bg);
+  color: var(--cd-text);
+}
+
+.mobile-shell.is-editor-route {
+  background: var(--cd-bg);
+}

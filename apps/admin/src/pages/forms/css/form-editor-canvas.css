@@ -1,0 +1,12 @@
+/**
+ * form-editor-canvas.css - 表单画布样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./form-editor-canvas-shell.css";
+@import "./form-editor-canvas-ai.css";
+@import "./form-editor-canvas-fields.css";
+@import "./form-editor-canvas-preview.css";
+@import "./form-editor-canvas-empty.css";
+@import "./form-editor-canvas-actions.css";

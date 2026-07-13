@@ -1,5 +1,15 @@
-import { request } from "./request";
+/**
+ * api/settings.ts
+ *
+ * 兼容导出层 - 临时保留，逐步迁移到 services/api/
+ *
+ * ⚠️ 警告：不要再在此文件中添加新逻辑
+ * ⚠️ 警告：不要再让新代码 import 本文件
+ */
+
 import { ensureDangerVerified } from "./security";
+
+// ============= 类型（保留在原位置） =============
 
 export interface R2ConfigView {
   accountId: string;
@@ -143,94 +153,39 @@ export interface SystemConfigExportView {
   overview: SystemStatusView;
 }
 
-export function getPublicSiteConfigApi() {
-  return request<{ config: SiteConfigView }>("/api/public/settings/site");
-}
+// ============= 函数（从 services/api 重导出） =============
 
-export function getSiteConfigApi() {
-  return request<{ config: SiteConfigView }>("/api/settings/site");
-}
+export {
+  getPublicSiteConfigApi,
+  getSiteConfigApi,
+  saveSiteConfigApi,
+  getR2ConfigApi,
+  saveR2ConfigApi,
+  testR2Api,
+  listOperationLogsApi,
+  getSystemStatusApi,
+  runSystemActionApi,
+  exportSystemConfigApi,
+  listManagedUsersApi,
+  getManagedUserApi,
+  promoteManagedUserApi,
+  disableManagedUserApi,
+  enableManagedUserApi,
+  deleteManagedUserApi,
+  getManagedUserPasswordApi,
+  resetManagedUserPasswordApi,
+  settingsApi
+} from "@/services/api/settings.api";
 
-export function listOperationLogsApi() {
-  return request<{ logs: OperationLogView[] }>("/api/settings/operation-logs");
-}
+// ============= 危险操作（需要 ensureDangerVerified，保持原位） =============
 
-export function getSystemStatusApi() {
-  return request<{ status: SystemStatusView }>("/api/settings/system/status");
-}
-
-export function runSystemActionApi(action: SystemAction) {
-  return ensureDangerVerified().then(() => request<{ result: SystemActionResult }>(`/api/settings/system/actions/${action}`, { method: "POST" }));
-}
-
-export function exportSystemConfigApi() {
-  return ensureDangerVerified().then(() => request<{ export: SystemConfigExportView }>("/api/settings/system/export"));
-}
-
-export function listManagedUsersApi() {
-  return request<{ users: ManagedUserView[] }>("/api/admin/users");
-}
-
-export function getManagedUserApi(id: number) {
-  return request<{ user: ManagedUserView }>(`/api/admin/users/${id}`);
-}
-
-export function promoteManagedUserApi(id: number) {
-  return ensureDangerVerified().then(() => request<{ user: ManagedUserView }>(`/api/admin/users/${id}/promote`, { method: "POST" }));
-}
-
-export function disableManagedUserApi(id: number) {
-  return ensureDangerVerified().then(() => request<{ user: ManagedUserView }>(`/api/admin/users/${id}/disable`, { method: "POST" }));
-}
-
-export function enableManagedUserApi(id: number) {
-  return ensureDangerVerified().then(() => request<{ user: ManagedUserView }>(`/api/admin/users/${id}/enable`, { method: "POST" }));
-}
-
-export function deleteManagedUserApi(id: number) {
-  return ensureDangerVerified().then(() => request<{ ok: true }>(`/api/admin/users/${id}`, { method: "DELETE" }));
-}
-
-export function getManagedUserPasswordApi(id: number) {
-  return ensureDangerVerified().then(() => request<{ password: { viewable: false; message: string } }>(`/api/admin/users/${id}/password`));
-}
-
-export function resetManagedUserPasswordApi(id: number, password: string) {
-  return ensureDangerVerified().then(() => request<{ user: ManagedUserView }>(`/api/admin/users/${id}/password`, {
-    method: "POST",
-    body: JSON.stringify({ password })
-  }));
-}
-
-export function saveSiteConfigApi(config: SiteConfigView) {
-  return ensureDangerVerified().then(() => request<{ config: SiteConfigView }>("/api/settings/site", {
-    method: "POST",
-    body: JSON.stringify(config)
-  }));
-}
-
-export function getR2ConfigApi() {
-  return request<{ config: R2ConfigView }>("/api/settings/storage/r2");
-}
-
-export function saveR2ConfigApi(config: R2ConfigView) {
-  return ensureDangerVerified().then(() => request<{ config: R2ConfigView }>("/api/settings/storage/r2", {
-    method: "POST",
-    body: JSON.stringify(config)
-  }));
-}
-
-export function testR2Api(upload: boolean) {
-  return request<{ ok: boolean; upload: boolean }>("/api/settings/storage/r2/test", {
-    method: "POST",
-    body: JSON.stringify({ upload })
-  });
-}
+import { request } from "./request";
 
 export function getDangerDocApi(docUid: string) {
-  return request<{ doc: { docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } }>(`/api/admin/docs/by-uid/${docUid}`);
+  return request<{ doc: { docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; customSlug?: string | null; deletedAt?: string | null } }>(`/api/admin/docs/by-uid/${docUid}`);
 }
 
-export function dangerDeleteDocApi(docUid: string) {
-  return ensureDangerVerified().then(() => request<{ ok: true }>(`/api/admin/docs/by-uid/${docUid}`, { method: "DELETE" }));
+export async function dangerDeleteDocApi(docUid: string) {
+  await ensureDangerVerified();
+  return request<{ ok: true }>(`/api/admin/docs/by-uid/${docUid}`, { method: "DELETE" });
 }

@@ -1,0 +1,205 @@
+/* ============================================
+   右侧属性面板
+   ============================================ */
+.form-props-panel {
+  width: 280px;
+  background: var(--form-paper);
+  border-left: 1px solid var(--form-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.form-props-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--form-border-light);
+}
+
+.form-props-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--form-text);
+  margin: 0;
+}
+
+.form-props-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--form-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-props-panel__close:hover {
+  background: var(--form-bg);
+  color: var(--form-text);
+}
+
+.form-props-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.form-props-panel__section {
+  margin-bottom: 20px;
+}
+
+.form-props-panel__label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--form-text-secondary);
+  margin-bottom: 8px;
+}
+
+.form-props-panel__input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--form-text);
+  background: var(--form-paper);
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  transition: all 0.15s;
+}
+
+.form-props-panel__input:focus {
+  outline: none;
+  border-color: var(--form-accent);
+  box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.1);
+}
+
+.form-props-panel__divider {
+  height: 1px;
+  background: var(--form-border);
+  margin: 16px 0;
+}
+
+/* 复选框 */
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--form-text);
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.form-checkbox input {
+  display: none;
+}
+
+.form-checkbox__box {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--form-border);
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.15s;
+}
+
+.form-checkbox input:checked + .form-checkbox__box {
+  background: var(--form-accent);
+  border-color: var(--form-accent);
+}
+
+.form-checkbox input:checked + .form-checkbox__box::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* 选项编辑器 */
+.form-options-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-option-row {
+  display: flex;
+  gap: 8px;
+}
+
+.form-option-row input {
+  flex: 1;
+}
+
+.form-option-row__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  background: var(--form-paper);
+  color: var(--form-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-option-row__remove:hover {
+  background: var(--form-danger-soft);
+  border-color: var(--form-danger);
+  color: var(--form-danger);
+}
+
+.form-add-option-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px dashed var(--form-border);
+  border-radius: var(--form-radius);
+  background: transparent;
+  color: var(--form-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-add-option-btn:hover {
+  border-color: var(--form-accent);
+  color: var(--form-accent);
+  background: var(--form-accent-soft);
+}
+
+/* 空状态 */
+.form-props-panel__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--form-muted);
+  gap: 12px;
+}
+
+.form-props-panel__empty svg {
+  opacity: 0.4;
+}
+
+.form-props-panel__empty p {
+  font-size: 13px;
+  margin: 0;
+}

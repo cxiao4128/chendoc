@@ -1,0 +1,115 @@
+/* 设置页面样式 */
+.form-settings-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  background: var(--form-bg);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.form-settings-card {
+  background: var(--form-paper);
+  border-radius: var(--form-radius-lg);
+  box-shadow: var(--form-shadow-card);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.form-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--form-border-light);
+}
+
+.form-settings-row:last-child {
+  border-bottom: none;
+}
+
+.form-settings-row__info {
+  flex: 1;
+}
+
+.form-settings-row__label {
+  display: block;
+  font-size: 14px;
+  color: var(--form-text);
+}
+
+.form-settings-row__desc {
+  display: block;
+  font-size: 12px;
+  color: var(--form-muted);
+  margin-top: 2px;
+}
+
+.form-settings-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--form-text-secondary);
+  background: var(--form-bg);
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-settings-link:hover {
+  border-color: var(--form-accent);
+  color: var(--form-accent);
+}
+
+.form-settings-link.is-active {
+  color: var(--form-warning);
+  border-color: var(--form-warning);
+  background: #fffbeb;
+}
+
+.form-settings-limit-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-settings-input {
+  width: 80px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  text-align: center;
+}
+
+.form-settings-input:focus {
+  outline: none;
+  border-color: var(--form-accent);
+}
+
+.form-settings-limit-unit {
+  font-size: 13px;
+  color: var(--form-muted);
+}
+
+.form-settings-danger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--form-danger);
+  background: var(--form-danger-soft);
+  border: 1px solid var(--form-danger);
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-settings-danger:hover {
+  background: var(--form-danger);
+  color: white;
+}

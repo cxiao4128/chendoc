@@ -1,0 +1,236 @@
+/* 统计页面样式 */
+.form-stats-sidebar {
+  width: 200px;
+  background: var(--form-paper);
+  border-right: 1px solid var(--form-border);
+  padding: 12px;
+  flex-shrink: 0;
+}
+
+.form-stats-sidebar__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-stats-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--form-text-secondary);
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-stats-sidebar__item:hover {
+  background: var(--form-bg);
+  color: var(--form-text);
+}
+
+.form-stats-sidebar__item.active {
+  background: var(--form-accent-soft);
+  color: var(--form-accent);
+  font-weight: 500;
+}
+
+.form-stats-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  background: var(--form-bg);
+}
+
+.form-stats-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--form-muted);
+}
+
+.form-stats-status__badge {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--form-bg);
+  border: 1px solid var(--form-border);
+  border-radius: 20px;
+  color: var(--form-text-secondary);
+}
+
+.form-stats-status__badge.published {
+  background: var(--form-success-soft);
+  border-color: var(--form-success);
+  color: var(--form-success);
+}
+
+.form-stats-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--form-accent);
+  background: var(--form-accent-soft);
+  border: 1px solid var(--form-accent);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-stats-copy-btn:hover {
+  background: var(--form-accent);
+  color: white;
+}
+
+.form-stats-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-stats-card {
+  background: var(--form-paper);
+  border-radius: var(--form-radius-lg);
+  box-shadow: var(--form-shadow-card);
+  overflow: hidden;
+}
+
+.form-stats-card--full {
+  grid-column: 1 / -1;
+}
+
+.form-stats-card__header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--form-border-light);
+}
+
+.form-stats-card__header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--form-text);
+}
+
+.form-stats-card__body {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.form-stats-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.form-stats-metric {
+  text-align: center;
+}
+
+.form-stats-metric__value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--form-text);
+  margin-bottom: 4px;
+}
+
+.form-stats-metric__label {
+  font-size: 12px;
+  color: var(--form-muted);
+}
+
+.form-stats-chart {
+  min-height: 200px;
+}
+
+.form-stats-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 13px;
+  color: var(--form-muted);
+}
+
+.form-stats-pies {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.form-stats-pie {
+  background: var(--form-paper);
+  border-radius: var(--form-radius-lg);
+  box-shadow: var(--form-shadow-card);
+  padding: 20px;
+}
+
+.form-stats-pie h4 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--form-text);
+}
+
+.form-stats-pie__chart {
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 字段统计 */
+.form-stats-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.form-stats-field-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-stats-field-label {
+  width: 100px;
+  font-size: 13px;
+  color: var(--form-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form-stats-field-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--form-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.form-stats-field-fill {
+  height: 100%;
+  background: var(--form-accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.form-stats-field-count {
+  width: 40px;
+  font-size: 13px;
+  color: var(--form-muted);
+  text-align: right;
+}
+
+.form-stats-status__badge.closed {
+  background: var(--form-warning);
+  border-color: var(--form-warning);
+  color: white;
+}

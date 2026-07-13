@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { checkShareHtmlCache, renderSharePage } from "./public.service.js";
+import { renderSharePage } from "./public.service.js";
 import { sharePageStyle } from "./sharePageStyle.js";
 import { enqueueSecurityLog } from "../../utils/asyncLogQueue.js";
 
@@ -48,20 +48,8 @@ export async function publicRoutes(app: FastifyInstance) {
     const params = z.object({ shareKey: z.string().trim().min(1).max(64) }).parse(request.params);
     const nonce = randomBytes(16).toString("base64url");
 
-    // ===== 分享页秒开优化：检查缓存 ETag/Last-Modified =====
     const ifNoneMatch = joinedHeader(request.headers["if-none-match"]);
     const ifModifiedSince = parseIfModifiedSince(request.headers["if-modified-since"]);
-
-    // 尝试从缓存返回 304
-    const cacheResult = checkShareHtmlCache(params.shareKey, undefined, ifNoneMatch, ifModifiedSince);
-    if (cacheResult?.hit304) {
-      return reply
-        .header("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
-        .header("ETag", cacheResult.cached.etag)
-        .header("Last-Modified", cacheResult.cached.lastModified.toUTCString())
-        .code(304)
-        .send();
-    }
 
     const page = await renderSharePage(params.shareKey, undefined, nonce);
     const cacheControl = page.cacheControl || "no-store";

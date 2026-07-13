@@ -8,9 +8,9 @@
  * - 自动归档开关
  * - 加载/保存状态
  */
-import type { DocSchedule } from "../../../api/docs";
+import type { DocSchedule } from "@/services/api";
 
-const props = defineProps<{
+const _props = defineProps<{
   scheduleData: DocSchedule | null;
   loading: boolean;
   error: string;

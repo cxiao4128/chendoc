@@ -1,0 +1,115 @@
+.mobile-shell__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  border: 0;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.mobile-shell__drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 29;
+  width: min(85vw, 340px);
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  background: var(--cd-panel);
+  box-shadow: -20px 0 40px rgba(15, 23, 42, 0.15);
+  padding: calc(18px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom));
+  transform: translateX(100%);
+  transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.mobile-shell__drawer.is-open {
+  transform: translateX(0);
+}
+
+.mobile-shell__drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-shell__drawer-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-shell__drawer-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: none;
+  box-shadow: none;
+  background: linear-gradient(135deg, var(--cd-primary) 0%, #5b8def 100%);
+}
+
+.mobile-shell__drawer-logo img,
+.mobile-shell__account img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mobile-shell__drawer-brand strong,
+.mobile-shell__drawer-brand small,
+.mobile-shell__account small,
+.mobile-shell__account strong,
+.mobile-shell__account span {
+  display: block;
+}
+
+.mobile-shell__drawer-brand strong {
+  color: var(--cd-ink);
+  font-weight: 900;
+}
+
+.mobile-shell__drawer-brand small {
+  margin-top: 2px;
+  color: var(--cd-muted);
+}
+
+.mobile-shell__account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 12px;
+  align-items: center;
+  border: none;
+  border-radius: var(--cd-radius);
+  background: var(--cd-bg);
+  padding: 16px;
+}
+
+.mobile-shell__account small {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mobile-shell__account strong {
+  margin-top: 4px;
+  color: var(--cd-ink);
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.mobile-shell__account span {
+  margin-top: 6px;
+  color: var(--cd-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mobile-shell__account img {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+}

@@ -1,0 +1,179 @@
+/**
+ * doc-list-responsive.css - 文档列表页响应式样式
+ *
+ * 重构说明：
+ * - 移动端断点（760px）
+ * - 中等断点（900px、1180px、1360px）
+ * - 桌面端增强样式
+ */
+
+/* ===== 移动端断点 ===== */
+@media (max-width: 760px) {
+  /* 隐藏桌面端元素 */
+  .doc-list-page {
+    padding: 0;
+  }
+
+  .doc-list-page__head,
+  .doc-list-page__filter-tabs,
+  .doc-list-page__workspace,
+  .doc-list-page__insights,
+  .doc-list-page__table,
+  .doc-list-page__table-tools,
+  .doc-list-page__table-head,
+  .doc-list-page__toolbox {
+    display: none !important;
+  }
+
+  /* 移动端操作按钮 - 底部固定工具栏风格 */
+  .doc-list-page__actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1px solid #e8eaed;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+    z-index: 100;
+  }
+
+  .doc-list-page__actions .cd-button {
+    min-width: 0;
+    height: 48px;
+    font-size: 11px;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0;
+    background: #f5f6f8;
+    border: none;
+    color: var(--cd-text);
+  }
+
+  .doc-list-page__actions .cd-button svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .doc-list-page__actions .cd-button.primary {
+    grid-column: span 4;
+    flex-direction: row;
+    height: 48px;
+    font-size: 15px;
+    font-weight: 600;
+    background: var(--cd-primary);
+    color: #fff;
+    border-radius: 24px;
+    margin-top: 4px;
+  }
+
+  .doc-list-page__actions .cd-button.primary svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .doc-list-page__bulk-counter {
+    grid-column: span 4;
+    text-align: center;
+    padding: 8px 0;
+    background: #f0f6ff;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--cd-primary);
+  }
+
+  /* 移动端列表行优化 - 卡片样式 */
+  .doc-list-page__row {
+    grid-template-columns: 40px 1fr auto;
+    gap: 12px;
+    min-height: 0;
+    border: none;
+    border-radius: 12px;
+    background: #fff;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .doc-list-page__row.is-bulk {
+    grid-template-columns: 28px 40px 1fr auto;
+  }
+
+  .doc-list-page__row.is-bulk .doc-list-page__row-title,
+  .doc-list-page__row.is-bulk > span:not(.doc-list-page__row-title),
+  .doc-list-page__row.is-bulk > code {
+    grid-column: auto;
+  }
+
+  .doc-list-page__row strong {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    font-size: 15px;
+  }
+
+  .doc-list-page__row-title small {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .doc-list-page__row span,
+  .doc-list-page__row code {
+    overflow-wrap: anywhere;
+  }
+
+  /* 工具箱隐藏 */
+  .doc-list-page__toolbox {
+    display: none;
+  }
+}
+
+/* ===== 中等断点 ===== */
+@media (max-width: 900px) {
+  .doc-list-page__insights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .doc-list-page__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-list-page__toolbox {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1360px) {
+  .doc-list-page:not(.is-mobile) .doc-list-page__workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .doc-list-page:not(.is-mobile) .doc-list-page__toolbox {
+    display: none;
+  }
+
+  .doc-list-page:not(.is-mobile) .doc-list-page__table-head,
+  .doc-list-page:not(.is-mobile) .doc-list-page__row {
+    grid-template-columns: 32px minmax(220px, 1fr) 78px 130px 140px 72px;
+    gap: 12px;
+    padding-inline: 18px;
+  }
+
+  .doc-list-page:not(.is-mobile) .doc-list-page__table.has-owner .doc-list-page__table-head,
+  .doc-list-page:not(.is-mobile) .doc-list-page__table.has-owner .doc-list-page__row {
+    grid-template-columns: 32px minmax(220px, 1fr) 78px 96px 125px 135px 72px;
+  }
+}

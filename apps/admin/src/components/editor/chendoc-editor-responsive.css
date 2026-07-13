@@ -1,0 +1,170 @@
+@media (max-width: 900px) {
+  .chendoc-editor {
+    background: transparent;
+  }
+
+  .chendoc-editor__upload {
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--cd-panel);
+  }
+
+  .chendoc-editor__image-tools {
+    width: 100%;
+  }
+
+  .chendoc-editor__image-tools input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .chendoc-editor__slash {
+    gap: 6px;
+    max-height: min(420px, calc(100dvh - 94px));
+    padding: 8px;
+    background: var(--cd-panel);
+  }
+
+  .chendoc-editor__slash button {
+    min-height: 32px;
+    border-radius: 8px;
+    padding: 0 12px;
+  }
+
+  .chendoc-editor__surface {
+    max-width: none;
+    min-height: calc(100dvh - 220px);
+    margin: 12px;
+    border-radius: 8px;
+    padding: 28px 24px 124px 52px;
+    font-size: 16px;
+  }
+
+  .chendoc-editor__runtime-state {
+    max-width: none;
+    min-height: calc(100dvh - 220px);
+    margin: 12px;
+    padding: 28px 24px 124px 52px;
+  }
+
+  .chendoc-editor__surface h1 {
+    font-size: 26px;
+  }
+
+  .chendoc-editor__surface h2 {
+    font-size: 21px;
+  }
+
+  .chendoc-editor__surface h3 {
+    font-size: 18px;
+  }
+
+  .chendoc-editor__surface table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .chendoc-editor__preview {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .chendoc-editor__block-handle {
+    width: 26px;
+    height: 30px;
+    letter-spacing: 0;
+  }
+
+  .chendoc-editor__surface {
+    margin: 10px 8px;
+    padding: 24px 14px 118px 42px;
+  }
+
+  .chendoc-editor__runtime-state {
+    margin: 10px 8px;
+    padding: 24px 14px 118px 42px;
+  }
+}
+
+/* 移动端触摸优化 */
+@media (hover: none) and (pointer: coarse) {
+  /* 图片双击缩放 */
+  .chendoc-editor__surface img:active {
+    transform: scale(0.98);
+    transition: transform 100ms ease;
+  }
+
+  /* 代码块触摸反馈 */
+  .chendoc-editor__surface pre {
+    user-select: text;
+    -webkit-user-select: text;
+    touch-action: pan-x;
+  }
+
+  /* 任务列表触摸区域 */
+  .chendoc-editor__surface li[data-type="taskItem"] {
+    min-height: 44px;
+  }
+
+  /* 链接触摸高亮 */
+  .chendoc-editor__surface a:active {
+    background: var(--cd-accent-soft);
+  }
+
+  /* 按钮按下反馈 */
+  .chendoc-editor button:active {
+    transform: scale(0.96);
+    opacity: 0.8;
+  }
+}
+
+/* 键盘弹出时布局调整 */
+@media (max-height: 500px) and (orientation: portrait) {
+  .chendoc-editor__surface {
+    min-height: calc(100dvh - 320px);
+    margin-bottom: 80px;
+  }
+}
+
+/* 移动端安全区域 */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .chendoc-editor__surface {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
+
+/* 移动端滚动优化 */
+@media (max-width: 900px) {
+  .chendoc-editor__upload,
+  .chendoc-editor__slash {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .chendoc-editor__upload::-webkit-scrollbar,
+  .chendoc-editor__slash::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 平滑滚动 */
+  .chendoc-editor__surface {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 锚点跳转平滑 */
+  .chendoc-editor__surface :target {
+    animation: highlightTarget 1s ease-out;
+  }
+
+  @keyframes highlightTarget {
+    from {
+      background: var(--cd-accent-soft);
+    }
+    to {
+      background: transparent;
+    }
+  }
+}

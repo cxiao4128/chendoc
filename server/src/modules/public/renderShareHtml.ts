@@ -131,11 +131,11 @@ export function renderSharePasswordHtml(input: {
         <span class="share-label">分享链接</span>
         <a class="share-url" href="${shareUrl}">${shareUrl}</a>
       </div>
-      <form class="share-form" data-share-form>
+      <form class="share-form" data-share-form autocomplete="off">
         <label>
           <span class="share-label">访问密码</span>
           <div class="share-row">
-            <input class="share-input" data-share-password type="password" placeholder="请输入访问密码" autocomplete="current-password">
+            <input class="share-input" data-share-password type="password" name="chendoc-public-share-access-password" placeholder="请输入访问密码" autocomplete="section-public-share new-password" data-form-type="other" data-1p-ignore="true" data-lpignore="true" data-bwignore="true">
             <button class="share-button" type="submit">确认密码</button>
           </div>
         </label>

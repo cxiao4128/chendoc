@@ -1,16 +1,26 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { HeadObjectCommandOutput } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { extname } from "node:path";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-import { db, dbGet, dbRun } from "../../db/client.js";
-import { docs, uploads } from "../../db/schema.js";
+import { docs, uploads } from "./uploads.repo.js";
+export { docs, uploads };
+
+import {
+  getDocIdForUpload,
+  getUploadByObjectKey,
+  getUploadById,
+  insertUpload,
+  deleteUploadById,
+  getUploadQuota,
+  getUploadDocRef
+} from "./uploads.repo.js";
 import { createR2Client } from "../../config/r2.js";
 import { env } from "../../config/env.js";
-import { assertR2Ready, type R2Config } from "../settings/settings.service.js";
+import { assertR2Ready } from "../settings/storage.service.js";
+import type { R2Config } from "../settings/types.js";
 import { now } from "../../utils/date.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { canAccessDocument } from "../docs/documentAccess.js";
@@ -39,8 +49,8 @@ const uploadTokenSchema = z.object({
   docUid: z.string().regex(/^[A-Za-z0-9]{16,32}$/)
 });
 
-type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
-type UploadKind = z.infer<typeof presignSchema>["kind"];
+export type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
+export type UploadKind = z.infer<typeof presignSchema>["kind"];
 type UploadPolicy = Record<UploadKind, {
   mimeByExtension: Record<string, string[]>;
   maxMb: number;
@@ -170,7 +180,6 @@ function validateFile(body: z.infer<typeof presignSchema>) {
   if (!allowedMime.includes(normalizeMimeType(body.mimeType))) throw new BadRequestError("文件 MIME 类型与后缀不匹配", "UPLOAD_MIME_MISMATCH");
   if (body.size > policy.maxMb * 1024 * 1024) throw new BadRequestError("文件超过大小限制", "UPLOAD_TOO_LARGE");
 
-  // M-1: 防御双扩展名绕过 (如 avatar.jpg.php)
   const finalExt = extname(body.fileName.replace(/^.*\./, "").toLowerCase());
   if (finalExt && finalExt !== ext) {
     throw new BadRequestError("文件名包含可疑后缀", "UPLOAD_DOUBLE_EXTENSION_BLOCKED");
@@ -237,6 +246,7 @@ function contentMatchesExtension(fileName: string, bytes: Uint8Array) {
 }
 
 async function validateObjectSignature(client: ReturnType<typeof createR2Client>, config: R2Config, expected: z.infer<typeof uploadTokenSchema>) {
+  const { GetObjectCommand } = await import("@aws-sdk/client-s3");
   const response = await client.send(new GetObjectCommand({
     Bucket: config.bucket,
     Key: expected.objectKey,
@@ -265,38 +275,28 @@ async function scanCompletedUpload(input: { publicUrl: string; objectKey: string
   if (!result.clean) throw new BadRequestError("文件未通过安全扫描", "UPLOAD_SCAN_REJECTED");
 }
 
-async function uploadDocId(docUid: string, actor: Actor) {
-  const doc = await dbGet<{ id: number; ownerId: number | null; isSuperAdminDoc: boolean }>(db
-    .select({ id: docs.id, ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-    .from(docs)
-    .where(and(eq(docs.docUid, docUid), isNull(docs.deletedAt)))
-    .limit(1));
+async function resolveDocIdForUpload(docUid: string, actor: Actor) {
+  const doc = await getDocIdForUpload(docUid);
   if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   if (!canAccessDocument(actor, doc, "update")) throw new ForbiddenError("无权访问该文档", "DOC_FORBIDDEN");
   return doc.id;
 }
 
 async function assertUploadQuota(userId: number, incomingBytes: number) {
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  const [daily, stored] = await Promise.all([
-    dbGet<{ count: number; bytes: number }>(db.select({
-      count: sql<number>`COUNT(*)`,
-      bytes: sql<number>`COALESCE(SUM(${uploads.fileSize}), 0)`
-    }).from(uploads).where(and(eq(uploads.userId, userId), gte(uploads.createdAt, dayStart)))),
-    dbGet<{ bytes: number }>(db.select({
-      bytes: sql<number>`COALESCE(SUM(${uploads.fileSize}), 0)`
-    }).from(uploads).where(eq(uploads.userId, userId)))
-  ]);
-  if (Number(daily?.count ?? 0) >= env.uploadQuota.dailyFiles) throw new BadRequestError("今日上传文件数已达上限", "UPLOAD_DAILY_FILE_QUOTA");
-  if (Number(daily?.bytes ?? 0) + incomingBytes > env.uploadQuota.dailyBytes) throw new BadRequestError("今日上传流量已达上限", "UPLOAD_DAILY_BYTE_QUOTA");
-  if (Number(stored?.bytes ?? 0) + incomingBytes > env.uploadQuota.storedBytesPerUser) throw new BadRequestError("存储配额不足", "UPLOAD_STORAGE_QUOTA");
+  const quota = await getUploadQuota(
+    userId,
+    incomingBytes,
+    env.uploadQuota.dailyFiles,
+    env.uploadQuota.dailyBytes,
+    env.uploadQuota.storedBytesPerUser
+  );
+  if (!quota.ok) throw new BadRequestError(quota.reason, quota.code);
 }
 
 export async function createPresignedUpload(userId: number, actor: Actor, input: unknown) {
   const body = normalizeUploadInput(presignSchema.parse(input));
   validateFile(body);
-  await uploadDocId(body.docUid, actor);
+  await resolveDocIdForUpload(body.docUid, actor);
   await assertUploadQuota(userId, body.size);
   const config = await assertR2Ready();
   const client = createR2Client(config);
@@ -348,7 +348,7 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     throw new BadRequestError("上传完成参数不匹配", "UPLOAD_COMPLETE_MISMATCH");
   }
 
-  const docId = await uploadDocId(tokenPayload.docUid, actor);
+  const docId = await resolveDocIdForUpload(tokenPayload.docUid, actor);
   await assertUploadQuota(userId, tokenPayload.size);
   validateFile(tokenPayload);
   const config = await assertR2Ready();
@@ -365,7 +365,7 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     throw error;
   }
   const publicUrl = publicUrlFromKey(config, tokenPayload.objectKey);
-  const existing = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.objectKey, tokenPayload.objectKey)).limit(1));
+  const existing = await getUploadByObjectKey(tokenPayload.objectKey);
   if (existing) {
     if (existing.userId !== userId || existing.docId !== docId) throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
     return { id: existing.id, publicUrl: existing.publicUrl };
@@ -377,14 +377,14 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     throw error;
   }
   return await withUploadUserLock(userId, async () => {
-    const raced = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.objectKey, tokenPayload.objectKey)).limit(1));
+    const raced = await getUploadByObjectKey(tokenPayload.objectKey);
     if (raced) {
       if (raced.userId !== userId || raced.docId !== docId) throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
       return { id: raced.id, publicUrl: raced.publicUrl };
     }
     await assertUploadQuota(userId, tokenPayload.size);
     try {
-      const result = await dbRun(db.insert(uploads).values({
+      return await insertUpload({
         userId,
         docId,
         objectKey: tokenPayload.objectKey,
@@ -394,9 +394,15 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
         kind: tokenPayload.kind,
         originalName: tokenPayload.fileName,
         createdAt: now()
-      }));
-      return { id: Number(result.lastInsertRowid), publicUrl };
+      });
     } catch (error) {
+      const committed = await getUploadByObjectKey(tokenPayload.objectKey);
+      if (committed) {
+        if (committed.userId !== userId || committed.docId !== docId) {
+          throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
+        }
+        return { id: committed.id, publicUrl: committed.publicUrl };
+      }
       await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
       throw error;
     }
@@ -404,16 +410,15 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
 }
 
 export async function deleteUpload(id: number, actor: Actor) {
-  const upload = await dbGet<typeof uploads.$inferSelect>(db.select().from(uploads).where(eq(uploads.id, id)).limit(1));
+  const upload = await getUploadById(id);
   if (!upload) return { deleted: false };
   if (!actor.isSuperAdmin && upload.userId !== actor.id) {
     throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
   }
-  if (upload.docId) {
-    const doc = await dbGet<{ ownerId: number | null; isSuperAdminDoc: boolean }>(db
-      .select({ ownerId: docs.ownerId, isSuperAdminDoc: docs.isSuperAdminDoc })
-      .from(docs).where(eq(docs.id, upload.docId)).limit(1));
-    if (doc && !canAccessDocument(actor, doc, "delete")) throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
+
+  const docRef = await getUploadDocRef(id);
+  if (docRef && docRef.docId !== null && !canAccessDocument(actor, docRef, "delete")) {
+    throw new ForbiddenError("无权删除该附件", "UPLOAD_FORBIDDEN");
   }
 
   const config = await assertR2Ready();
@@ -422,6 +427,6 @@ export async function deleteUpload(id: number, actor: Actor) {
     Bucket: config.bucket,
     Key: upload.objectKey
   }));
-  await dbRun(db.delete(uploads).where(eq(uploads.id, id)));
+  await deleteUploadById(id);
   return { deleted: true, ownerId: upload.userId, docId: upload.docId };
 }

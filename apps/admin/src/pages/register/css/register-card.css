@@ -1,0 +1,31 @@
+.register-page .auth-stage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 500px);
+  align-items: center;
+  min-height: calc(100dvh - 132px);
+  padding: 18px 8vw 76px 42px;
+}
+
+.register-page .auth-card {
+  grid-column: 2;
+  display: grid;
+  gap: 15px;
+  width: min(500px, 100%);
+  border: 1px solid var(--cd-border);
+  border-radius: 12px;
+  background: var(--cd-bg-plain);
+  color: var(--cd-text);
+  padding: 38px 44px 34px;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.register-page .auth-card h1 {
+  margin: 8px 0 0;
+  color: var(--cd-ink);
+  font-weight: 900;
+  font-size: 31px;
+  line-height: 1.16;
+  letter-spacing: 0;
+}

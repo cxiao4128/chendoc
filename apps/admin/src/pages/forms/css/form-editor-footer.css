@@ -1,0 +1,43 @@
+/* ============================================
+   底部操作栏
+   ============================================ */
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--form-paper);
+  border-top: 1px solid var(--form-border);
+  flex-shrink: 0;
+}
+
+.form-footer__btn {
+  padding: 10px 48px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-footer__btn.secondary {
+  color: var(--form-text);
+  background: var(--form-bg);
+  border: 1px solid var(--form-border);
+}
+
+.form-footer__btn.secondary:hover {
+  background: var(--form-border-light);
+  border-color: var(--form-text-secondary);
+}
+
+.form-footer__btn.primary {
+  color: white;
+  background: var(--form-primary);
+  border: none;
+}
+
+.form-footer__btn.primary:hover {
+  background: var(--form-primary-hover);
+}

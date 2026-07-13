@@ -1,0 +1,159 @@
+/* ============================================
+   左侧题型面板
+   ============================================ */
+.form-field-panel {
+  width: 260px;
+  background: var(--form-paper);
+  border-right: 1px solid var(--form-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.form-field-panel__search {
+  padding: 12px;
+  border-bottom: 1px solid var(--form-border-light);
+}
+
+.form-field-panel__search-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--form-bg);
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  transition: all 0.15s;
+}
+
+.form-field-panel__search-input:focus-within {
+  border-color: var(--form-accent);
+  box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.1);
+}
+
+.form-field-panel__search-input svg {
+  color: var(--form-muted);
+  flex-shrink: 0;
+}
+
+.form-field-panel__search-input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--form-text);
+}
+
+.form-field-panel__search-input input::placeholder {
+  color: var(--form-text-placeholder);
+}
+
+.form-field-panel__search-input .ai-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 10px;
+}
+
+/* 题型分类 */
+.form-field-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.form-field-section {
+  margin-bottom: 16px;
+}
+
+.form-field-section__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--form-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.form-field-section__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 题型卡片 */
+.form-field-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-field-card:hover {
+  background: var(--form-bg);
+}
+
+.form-field-card__icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.form-field-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-field-card__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--form-text);
+}
+
+.form-field-card__desc {
+  font-size: 11px;
+  color: var(--form-muted);
+}
+
+/* 题型图标颜色 */
+.form-field-card__icon.text { background: #e8f5e9; color: #4caf50; }
+.form-field-card__icon.radio { background: #e3f2fd; color: #2196f3; }
+.form-field-card__icon.checkbox { background: #e8f5e9; color: #4caf50; }
+.form-field-card__icon.date { background: #fff3e0; color: #ff9800; }
+.form-field-card__icon.image { background: #f3e5f5; color: #9c27b0; }
+.form-field-card__icon.file { background: #fce4ec; color: #e91e63; }
+.form-field-card__icon.select { background: #e1f5fe; color: #03a9f4; }
+.form-field-card__icon.location { background: #e8f5e9; color: #4caf50; }
+.form-field-card__icon.signature { background: #f5f5f5; color: #757575; }
+.form-field-card__icon.matrix { background: #e3f2fd; color: #3f51b5; }
+.form-field-card__icon.scale { background: #fce4ec; color: #e91e63; }
+.form-field-card__icon.rating { background: #fff8e1; color: #ffc107; }
+.form-field-card__icon.table { background: #e8eaf6; color: #5c6bc0; }
+.form-field-card__icon.sort { background: #e0f2f1; color: #00897b; }
+.form-field-card__icon.qrcode { background: #f5f5f5; color: #607d8b; }
+.form-field-card__icon.section { background: #fafafa; color: #9e9e9e; }
+
+/* 常用题库 */
+.form-field-card__tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--form-accent-soft);
+  color: var(--form-accent);
+  font-weight: 500;
+}

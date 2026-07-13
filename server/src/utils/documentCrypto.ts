@@ -24,6 +24,15 @@ export interface EncryptedDocumentContent {
   contentHtmlKeyVersion: string | null;
 }
 
+export type DecryptedDoc = {
+  [K in keyof EncryptedDocumentContent]: EncryptedDocumentContent[K];
+} & {
+  contentJson: string;
+  contentHtml: string;
+  title: string;
+  createdAt: Date;
+};
+
 export class DocumentDecryptionError extends Error {
   constructor(readonly keyVersion: string | null) {
     super(`Document decryption failed for key version ${keyVersion ?? "unknown"}.`);
@@ -120,6 +129,8 @@ export function encryptDocumentContent(contentJson: string, contentHtml: string)
 }
 
 export function decryptDocumentRecord<T extends {
+  title: string;
+  createdAt: Date;
   contentJson: string;
   contentHtml: string;
   contentJsonCiphertext?: string | null;
@@ -130,7 +141,8 @@ export function decryptDocumentRecord<T extends {
   contentHtmlIv?: string | null;
   contentHtmlTag?: string | null;
   contentHtmlKeyVersion?: string | null;
-}>(record: T): T {
+  [key: string]: unknown;
+}>(record: T): Omit<T, "contentJson" | "contentHtml"> & { contentJson: string; contentHtml: string } {
   const contentJson = decryptField({
     ciphertext: record.contentJsonCiphertext ?? null,
     iv: record.contentJsonIv ?? null,

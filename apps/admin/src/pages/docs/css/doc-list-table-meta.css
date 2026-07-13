@@ -1,0 +1,43 @@
+/* 批量选择框 */
+.doc-list-page__select {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  cursor: pointer;
+}
+
+.doc-list-page__select input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--cd-accent);
+}
+
+/* 所有者 */
+.doc-list-page__owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cd-muted);
+  font-family: var(--cd-font-sans);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.doc-list-page__owner img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #efeaff;
+  background: #fff;
+  object-fit: cover;
+  object-position: 50% 42%;
+}
+
+.doc-list-page__owner + span {
+  color: var(--cd-muted);
+  font-family: var(--cd-font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}

@@ -1,1 +1,1 @@
-export { listSettings, setSetting } from "./settings.service.js";
+export { listSettings, setSetting, setSettings } from "./core.service.js";

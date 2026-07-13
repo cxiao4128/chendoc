@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { z } from "zod";
-import { getFormByUid, incrementFormView, submitForm, type FormField } from "./forms.service.js";
-import { getSiteConfig } from "../settings/settings.service.js";
+import { getFormByUid, incrementFormView, type FormField } from "./forms.service.js";
+import { getSiteConfig } from "../settings/site.service.js";
 import { sharePageStyle } from "../public/sharePageStyle.js";
 
 const bundledLogoUrl = "/site-assets/chendoc-logo-192.webp";
@@ -83,7 +82,7 @@ function renderField(field: FormField) {
         </div>`;
 
     case "select":
-    case "radio":
+    case "radio": {
       const selectOptions = (field.options || []).map(opt =>
         `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`
       ).join('');
@@ -106,9 +105,10 @@ function renderField(field: FormField) {
             ${selectOptions}
           </select>
         </div>`;
+    }
 
-    case "multiselect":
-      const checkboxOptions = (field.options || []).map((opt, i) =>
+    case "multiselect": {
+      const checkboxOptions = (field.options || []).map((opt) =>
         `<label class="checkbox-label"><input type="checkbox" name="${fieldName}" value="${escapeHtml(opt)}"> ${escapeHtml(opt)}</label>`
       ).join('');
       return `
@@ -116,16 +116,18 @@ function renderField(field: FormField) {
           <label>${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <div class="checkbox-group">${checkboxOptions}</div>
         </div>`;
+    }
 
     case "date":
     case "datetime":
-    case "time":
+    case "time": {
       const dateInputType = field.type === "datetime" ? "datetime-local" : field.type;
       return `
         <div class="form-field" data-field-id="${fieldName}">
           <label for="${id}">${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <input type="${dateInputType}" id="${id}" name="${fieldName}"${required} class="form-input">
         </div>`;
+    }
 
     case "checkbox":
       return `
@@ -166,7 +168,7 @@ function renderField(field: FormField) {
           </div>
         </div>`;
 
-    case "rating":
+    case "rating": {
       const ratingStars = [1, 2, 3, 4, 5].map(n =>
         `<label class="star-label"><input type="radio" name="${fieldName}" value="${n}"${required}> <span class="star">★</span></label>`
       ).join('');
@@ -175,6 +177,7 @@ function renderField(field: FormField) {
           <label>${escapeHtml(field.label)}${field.required ? '<span class="required">*</span>' : ''}</label>
           <div class="rating-group">${ratingStars}</div>
         </div>`;
+    }
 
     case "city":
       return `
@@ -402,7 +405,7 @@ export async function renderFormPage(formUid: string) {
 
       async function showCaptcha() {
         var container = document.getElementById('form-captcha');
-        var result = await fetch('/api/captcha').then(function(response) { return response.json(); });
+        var result = await fetch('/f/' + form.dataset.formUid + '/captcha').then(function(response) { return response.json(); });
         captchaId = result.captchaId;
         if (!container) {
           container = document.createElement('div');

@@ -22,6 +22,8 @@ const stateIcon = computed(() => {
       return CloudOff;
     case "error":
       return CloudOff;
+    default:
+      return Cloud;
   }
 });
 </script>

@@ -20,6 +20,14 @@ import {
   verifyShareAccessToken,
   verifySharePassword
 } from "./shares.service.js";
+import { invalidateShareHtmlCache } from "../public/public.service.js";
+
+function invalidateShareKeys(shareCode?: number | null, ...slugs: Array<string | null | undefined>) {
+  if (shareCode) invalidateShareHtmlCache(shareCode);
+  for (const slug of slugs) {
+    if (slug) invalidateShareHtmlCache(slug);
+  }
+}
 
 export async function sharesRoutes(app: FastifyInstance) {
   const publicShareRateLimit = { max: 30, timeWindow: "1 minute" };
@@ -54,6 +62,7 @@ export async function sharesRoutes(app: FastifyInstance) {
   app.patch("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const docLog = await updateShare(params.id, request.body, request.user!);
+    invalidateShareKeys(docLog.shareCode, docLog.oldCustomSlug, docLog.customSlug);
     enqueueDocumentLog({
       userId: request.user!.id,
       role: request.user!.role,
@@ -74,6 +83,7 @@ export async function sharesRoutes(app: FastifyInstance) {
   app.delete("/api/shares/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
     const docLog = await deleteShare(params.id, request.user!);
+    invalidateShareKeys(docLog.shareCode, docLog.customSlug);
     enqueueDocumentLog({
       userId: request.user!.id,
       role: request.user!.role,
@@ -136,7 +146,7 @@ export async function sharesRoutes(app: FastifyInstance) {
       doc: publicDocPayload(payloadData, canReadContent),
       share: {
         shareId: data.share.shareCode,
-        customSlug: null,
+        customSlug: data.share.customSlug,
         viewCount: data.share.viewCount
       },
       protected: data.protected,

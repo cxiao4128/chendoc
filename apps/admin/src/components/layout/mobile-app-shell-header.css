@@ -1,0 +1,137 @@
+.mobile-shell__header {
+  position: sticky;
+  top: 0;
+  z-index: 22;
+  display: grid;
+  gap: 8px;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 10px;
+  background: var(--cd-panel);
+  box-shadow: 0 1px 0 var(--cd-border);
+}
+
+.mobile-shell__header.is-docs-home,
+.mobile-shell__header.is-home {
+  gap: 0;
+  padding-bottom: 10px;
+}
+
+.mobile-shell__homebar,
+.mobile-shell__subbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-shell__subbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mobile-shell__homebar-spacer {
+  width: 1px;
+  height: 1px;
+}
+
+.mobile-shell__profile {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.mobile-shell__profile img {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cd-primary) 0%, #5b8def 100%);
+  object-fit: cover;
+  object-position: 50% 42%;
+}
+
+.mobile-shell__profile strong,
+.mobile-shell__profile small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-shell__profile strong {
+  color: var(--cd-ink);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.mobile-shell__profile small {
+  margin-top: 3px;
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mobile-shell__brand-title {
+  justify-self: center;
+  color: var(--cd-ink);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.mobile-shell__subcopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mobile-shell__subcopy small {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mobile-shell__subcopy strong {
+  color: var(--cd-ink);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.mobile-shell__header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+}
+
+.mobile-shell__action {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: var(--cd-bg);
+  color: var(--cd-text);
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+.mobile-shell__action:active {
+  transform: scale(0.95);
+  background: var(--cd-border);
+}
+
+.mobile-shell__summary {
+  margin: 0;
+  color: var(--cd-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.mobile-shell__content {
+  padding: 0 0 calc(80px + env(safe-area-inset-bottom));
+}

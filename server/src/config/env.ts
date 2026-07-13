@@ -9,9 +9,10 @@ const serverDir = resolve(here, "../..");
 const projectRoot = resolve(serverDir, "..");
 
 const isE2ETesting = process.env.CHENDOC_E2E_TESTING === "true";
+const skipDotenv = isE2ETesting || process.env.CHENDOC_SKIP_DOTENV === "true";
 
 // E2E 测试模式下跳过 .env 加载，使用 global-setup 传入的环境变量
-if (!isE2ETesting) {
+if (!skipDotenv) {
   for (const envPath of [
     resolve(projectRoot, ".env"),
     resolve(serverDir, ".env"),
@@ -157,8 +158,36 @@ function remoteAssetAllowedHosts() {
   return raw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
 }
 
+function originList(name: string) {
+  const raw = process.env[name]?.trim() ?? "";
+  if (!raw) return [];
+  return [...new Set(raw.split(",").map((item) => {
+    const value = item.trim();
+    if (!value || value === "*") throw new Error(`${name} must contain explicit http(s) origins, never *.`);
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error(`${name} contains an invalid origin: ${value}`);
+    }
+    const productionHttp = (process.env.NODE_ENV ?? "development") === "production" && url.protocol !== "https:";
+    if (productionHttp || !["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) {
+      throw new Error(`${name} must contain origins such as https://admin.example.com.`);
+    }
+    return url.origin;
+  }))];
+}
+
+function singleOrigin(name: string, fallback: string) {
+  const origins = originList(name);
+  if (origins.length > 1) throw new Error(`${name} must contain exactly one origin.`);
+  return origins[0] || new URL(fallback).origin;
+}
+
 const defaultAdminUsername = process.env.DEFAULT_ADMIN_USERNAME ?? "xchen";
 const provider = databaseProvider();
+const publicSiteUrl = process.env.PUBLIC_SITE_URL ?? `http://127.0.0.1:${process.env.PORT ?? 8985}`;
+const apiOrigin = singleOrigin("CHENDOC_API_ORIGIN", publicSiteUrl);
 
 export const env = {
   paths: {
@@ -168,7 +197,11 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   host: process.env.HOST ?? "0.0.0.0",
   port: optionalInt("PORT", 8985),
-  publicSiteUrl: process.env.PUBLIC_SITE_URL ?? `http://127.0.0.1:${process.env.PORT ?? 8985}`,
+  publicSiteUrl,
+  apiOrigin,
+  adminOrigins: originList("CHENDOC_ADMIN_ORIGINS"),
+  r2CorsOrigins: originList("CHENDOC_R2_CORS_ORIGINS"),
+  serveAdmin: process.env.CHENDOC_SERVE_ADMIN === undefined || flagEnabled("CHENDOC_SERVE_ADMIN"),
   databaseProvider: provider,
   databaseUrl: databaseUrl(provider),
   mysqlPool: mysqlPoolSettings(),

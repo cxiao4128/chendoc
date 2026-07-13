@@ -49,7 +49,7 @@ function normalizedIp(ip?: string) {
 
 type Dimension = { dimension: "account" | "ip"; dimensionValue: string };
 
-function dimensions(input: TotpRiskInput, scope: TotpScope): Dimension[] {
+function dimensions(input: TotpRiskInput, _scope: TotpScope): Dimension[] {
   const dims: Dimension[] = [{ dimension: "account", dimensionValue: String(input.userId) }];
   if (input.ip) {
     dims.push({ dimension: "ip", dimensionValue: normalizedIp(input.ip) });

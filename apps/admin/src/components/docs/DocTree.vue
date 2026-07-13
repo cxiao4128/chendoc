@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { FileText, Plus } from "lucide-vue-next";
-import type { DocSummary } from "../../api/docs";
+import type { DocSummary } from "@/services/api";
+import { sharePathOf } from "../../utils/sharePath";
 import "./doc-tree.css";
 
 defineProps<{
@@ -11,7 +12,7 @@ defineProps<{
 defineEmits<{ create: []; select: [docUid: string] }>();
 
 function sharePath(doc: DocSummary) {
-  return doc.shareCode ? `/r/${doc.shareCode}` : "";
+  return sharePathOf(doc);
 }
 </script>
 

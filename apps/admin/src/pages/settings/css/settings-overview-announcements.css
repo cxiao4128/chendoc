@@ -1,0 +1,47 @@
+
+.settings-page__announcement-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-page__announcement-list li {
+  display: grid;
+  gap: 3px;
+  border-radius: 6px;
+  background: var(--cd-primary-soft);
+  padding: 8px 10px;
+}
+
+.settings-page__announcement-list b {
+  color: var(--cd-primary-hover);
+  font-size: 12px;
+}
+
+.settings-page__announcement-list span {
+  color: var(--cd-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-page__text-action {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--cd-primary-hover);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.settings-page__text-action:hover {
+  color: var(--cd-accent);
+}

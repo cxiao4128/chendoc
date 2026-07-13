@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isHttpsRequest, isLoopbackAddress } from "./httpsRequest.js";
+import { httpsRedirectOrigin, isHttpsRequest, isLoopbackAddress } from "./httpsRequest.js";
 
 describe("HTTPS reverse proxy detection", () => {
   test("accepts native HTTPS", () => {
@@ -43,5 +43,18 @@ describe("HTTPS reverse proxy detection", () => {
     expect(isLoopbackAddress("::ffff:127.0.0.1")).toBe(true);
     expect(isLoopbackAddress("::1")).toBe(true);
     expect(isLoopbackAddress("192.0.2.1")).toBe(false);
+  });
+
+  test("keeps API HTTPS redirects on the configured API origin", () => {
+    expect(httpsRedirectOrigin({
+      requestUrl: "/api/health?probe=1",
+      publicSiteUrl: "https://d.w92.pw",
+      apiOrigin: "https://api.w92.pw",
+    })).toBe("https://api.w92.pw");
+    expect(httpsRedirectOrigin({
+      requestUrl: "/r/111",
+      publicSiteUrl: "https://d.w92.pw",
+      apiOrigin: "https://api.w92.pw",
+    })).toBe("https://d.w92.pw");
   });
 });

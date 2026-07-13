@@ -1,0 +1,43 @@
+/* 空状态 */
+.form-canvas__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--form-muted);
+}
+
+.form-canvas__empty svg {
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+
+.form-canvas__empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* 添加问题按钮 */
+.form-canvas__add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--form-accent);
+  background: var(--form-paper);
+  border: 2px dashed var(--form-border);
+  border-radius: var(--form-radius-lg);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-canvas__add-btn:hover {
+  border-color: var(--form-accent);
+  background: var(--form-accent-soft);
+}

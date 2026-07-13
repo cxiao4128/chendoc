@@ -12,7 +12,7 @@ import {
   setDocScheduleApi,
   deleteDocScheduleApi,
   type DocSchedule,
-} from "../api/docs";
+} from "../services/api";
 
 export interface ScheduleInput {
   scheduledAt?: string | null;

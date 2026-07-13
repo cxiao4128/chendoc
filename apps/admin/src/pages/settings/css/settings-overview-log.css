@@ -1,0 +1,32 @@
+.settings-page__compact-log {
+  display: grid;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-page__compact-log article {
+  display: grid;
+  grid-template-columns: 170px minmax(140px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+  border-bottom: 1px solid var(--cd-border);
+  padding: 0 12px;
+}
+
+.settings-page__compact-log article:last-child {
+  border-bottom: 0;
+}
+
+.settings-page__compact-log time,
+.settings-page__compact-log span,
+.settings-page__compact-log code {
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.settings-page__compact-log strong {
+  color: var(--cd-text);
+  font-size: 12px;
+}

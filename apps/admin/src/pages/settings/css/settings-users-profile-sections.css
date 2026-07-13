@@ -1,0 +1,66 @@
+.settings-page__profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.settings-page__profile-main,
+.settings-page__profile-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.settings-page__profile-section,
+.settings-page__profile-side {
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.settings-page__profile-section {
+  padding: 16px;
+}
+
+.settings-page__profile-section header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-page__danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--cd-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0 16px;
+}
+
+.settings-page__danger-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 8px;
+  background: #fff7f7;
+  color: var(--cd-danger);
+  padding: 0 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.settings-page__danger-actions button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}

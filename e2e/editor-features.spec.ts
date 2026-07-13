@@ -4,6 +4,46 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 
+const testImageBuffer = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64"
+);
+const testImageUrl = `data:image/png;base64,${testImageBuffer.toString("base64")}`;
+const testVideoUrl = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVl";
+
+async function mockUploads(page: Page) {
+  await page.route("**/api/uploads/presign", async (route) => {
+    const body = route.request().postDataJSON() as { kind: "image" | "video" | "file"; fileName: string };
+    const publicUrl = body.kind === "video" ? testVideoUrl : testImageUrl;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        uploadUrl: `${new URL(route.request().url()).origin}/__e2e-upload/${body.kind}`,
+        uploadToken: `e2e-upload-token-${Date.now()}`,
+        objectKey: `e2e/${body.fileName}`,
+        publicUrl
+      })
+    });
+  });
+  await page.route("**/__e2e-upload/**", async (route) => {
+    await route.fulfill({ status: 200, body: "" });
+  });
+  await page.route("**/api/uploads/complete", async (route) => {
+    const body = route.request().postDataJSON() as { kind: "image" | "video" | "file"; publicUrl?: string };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        upload: {
+          id: Date.now(),
+          publicUrl: body.publicUrl || (body.kind === "video" ? testVideoUrl : testImageUrl)
+        }
+      })
+    });
+  });
+}
+
 async function loginAndCreateDoc(page: Page) {
   await page.goto("/login");
   await page.getByPlaceholder("用户名").fill("e2eadmin");
@@ -31,12 +71,12 @@ test.describe("编辑器功能测试", () => {
     await editor.fill("测试文字颜色");
     await editor.selectText();
 
-    // 点击颜色按钮 (根据实际实现调整)
-    const colorButton = page.getByRole("button", { name: /颜色|color/i }).first();
+    // 点击颜色按钮
+    const colorButton = page.getByRole("button", { name: "文本颜色" });
     await colorButton.click();
 
     // 选择颜色选择器中的红色
-    const colorOption = page.locator("[data-color='#ff0000'], .color-picker__option:first-child");
+    const colorOption = page.getByRole("button", { name: /选择文本颜色 红色/ });
     await colorOption.click();
 
     // 验证颜色应用
@@ -52,11 +92,11 @@ test.describe("编辑器功能测试", () => {
     await editor.selectText();
 
     // 点击高亮按钮
-    const highlightButton = page.getByRole("button", { name: /高亮|highlight/i }).first();
+    const highlightButton = page.getByRole("button", { name: "高亮背景" });
     await highlightButton.click();
 
     // 选择黄色高亮
-    const highlightOption = page.locator("[data-color='#ffff00'], .highlight-picker__option:first-child");
+    const highlightOption = page.getByRole("button", { name: /选择高亮背景 黄色/ });
     await highlightOption.click();
 
     // 验证高亮应用 (TipTap 使用 mark 标签)
@@ -105,34 +145,22 @@ test.describe("编辑器功能测试", () => {
   });
 
   test("TC-EDIT-005: 编辑器媒体插入 - 图片", async ({ page }) => {
+    await mockUploads(page);
+
     // 点击图片插入按钮
     const imageButton = page.getByRole("button", { name: /图片|image/i }).first();
     await imageButton.click();
 
     // 文件选择对话框会出现，等待隐藏输入框
-    const fileInput = page.locator("input[type='file']").last();
+    const fileInput = page.getByTestId("editor-image-input");
     await expect(fileInput).toBeAttached();
 
-    // 创建测试图片文件 (1x1 红色 PNG)
-    const testImage = await page.evaluate(() => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 100;
-      canvas.height = 100;
-      const ctx = canvas.getContext("2d");
-      ctx!.fillStyle = "#ff0000";
-      ctx!.fillRect(0, 0, 100, 100);
-      return new Promise(resolve => {
-        canvas.toBlob(blob => {
-          const file = new File([blob!], "test.png", { type: "image/png" });
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          resolve(dt.files[0]);
-        });
-      });
-    });
-
     // 上传文件
-    await fileInput.setInputFiles(testImage as File);
+    await fileInput.setInputFiles({
+      name: "test.png",
+      mimeType: "image/png",
+      buffer: testImageBuffer
+    });
 
     // 等待上传完成
     await page.waitForTimeout(2000);
@@ -143,26 +171,22 @@ test.describe("编辑器功能测试", () => {
   });
 
   test("TC-EDIT-006: 编辑器媒体插入 - 视频", async ({ page }) => {
+    await mockUploads(page);
+
     // 点击视频插入按钮
     const videoButton = page.getByRole("button", { name: /视频|video/i }).first();
     await videoButton.click();
 
     // 文件选择对话框
-    const fileInput = page.locator("input[type='file']").last();
+    const fileInput = page.getByTestId("editor-video-input");
     await expect(fileInput).toBeAttached();
 
-    // 创建测试视频文件 (最小 MP4)
-    const testVideo = await page.evaluate(() => {
-      // 创建一个最小的 MP4 文件 (仅用于测试上传流程)
-      const buffer = new ArrayBuffer(1024);
-      const file = new File([buffer], "test.mp4", { type: "video/mp4" });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      return dt.files[0];
-    });
-
     // 上传文件
-    await fileInput.setInputFiles(testVideo as File);
+    await fileInput.setInputFiles({
+      name: "test.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.alloc(1024)
+    });
 
     // 等待上传
     await page.waitForTimeout(2000);

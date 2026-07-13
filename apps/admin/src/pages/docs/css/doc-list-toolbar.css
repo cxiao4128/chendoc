@@ -1,0 +1,151 @@
+/**
+ * doc-list-toolbar.css - 文档列表页工具栏和操作按钮样式
+ *
+ * 重构说明：
+ * - 页面操作区（新建、上传、批量等）
+ * - 筛选标签、排序工具
+ * - 表格工具栏
+ */
+
+/* 页面操作区 */
+.doc-list-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.doc-list-page__bulk-counter {
+  font-size: 13px;
+  color: var(--cd-text-secondary);
+  padding: 0 4px;
+}
+
+/* 筛选标签 */
+.doc-list-page__filter-tabs {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 28px;
+  box-shadow: 0 8px 20px rgba(82, 73, 146, 0.04);
+}
+
+.doc-list-page__filter-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 76px;
+  min-height: 42px;
+  border: 0;
+  border-right: 1px solid var(--cd-border);
+  background: #fff;
+  color: var(--cd-muted);
+  padding: 0 18px;
+  font: inherit;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.doc-list-page__filter-tabs button:last-child {
+  border-right: 0;
+}
+
+.doc-list-page__filter-tabs button:hover,
+.doc-list-page__filter-tabs button.is-active {
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+}
+
+/* 表格工具栏 */
+.doc-list-page__table-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.doc-list-page__table-tools .is-square {
+  width: 42px;
+  padding: 0;
+  color: var(--cd-primary-hover);
+}
+
+.doc-list-page__table-tools {
+  flex-wrap: wrap;
+}
+
+.doc-list-page__table-tools .cd-select {
+  width: auto;
+  min-width: 128px;
+  min-height: 38px;
+  padding-block: 0;
+}
+
+/* 最近搜索 */
+.doc-list-page__recent-searches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: -12px 0 18px;
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.doc-list-page__recent-searches button {
+  min-height: 30px;
+  border: 1px solid var(--cd-border);
+  border-radius: 999px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+/* 文件上传 */
+.doc-list-page__file-input {
+  display: none;
+}
+
+/* 加载更多 */
+.doc-list-page__more {
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  min-height: 44px;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid #e8eaed;
+  color: var(--cd-text);
+}
+
+/* 错误状态 */
+.doc-list-page__error {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.24);
+  border-radius: 8px;
+  background: var(--cd-danger-soft);
+  padding: 18px;
+}
+
+.doc-list-page__error strong {
+  color: var(--cd-danger);
+  font-size: 15px;
+}
+
+.doc-list-page__error p {
+  display: block;
+  margin: 0;
+  color: var(--cd-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}

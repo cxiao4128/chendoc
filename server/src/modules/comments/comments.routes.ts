@@ -9,7 +9,7 @@ import {
   updateComment,
   deleteComment,
   toggleReaction,
-  listAllComments,
+  listAllCommentsService,
   deleteCommentAdmin,
   deleteCommentsBatch,
 } from "./comments.service.js";
@@ -119,7 +119,7 @@ export async function commentsRoutes(app: FastifyInstance) {
     }).parse(request.query);
 
     const actor = request.user!;
-    const result = await listAllComments(actor, query);
+    const result = await listAllCommentsService(actor, query);
 
     return result;
   });

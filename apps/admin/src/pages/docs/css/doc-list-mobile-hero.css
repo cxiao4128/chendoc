@@ -1,0 +1,72 @@
+/**
+ * doc-list-mobile.css - 文档列表页移动端样式
+ *
+ * 重构说明：
+ * - 移动端视图头部、搜索、标签、列表卡片
+ * - 移动端加载骨架、错误状态
+ */
+
+/* 移动端英雄区 */
+.doc-list-page__mobile-hero {
+  display: grid;
+  gap: 4px;
+  background: #fff;
+  padding: 16px 16px 12px;
+  border-bottom: none;
+}
+
+.doc-list-page__mobile-hero span {
+  color: var(--cd-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.doc-list-page__mobile-hero h1 {
+  margin: 0;
+  color: var(--cd-ink);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+/* 移动端搜索栏 */
+.doc-list-page__mobile-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  border: 0;
+  border-radius: 20px;
+  background: #f0f2f5;
+  color: var(--cd-muted);
+  padding: 0 14px;
+  height: 40px;
+}
+
+.doc-list-page__mobile-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--cd-text);
+  font-size: 14px;
+}
+
+.doc-list-page__mobile-search input::placeholder {
+  color: #b2b8bf;
+}
+
+.doc-list-page__mobile-search button {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 14px;
+  background: var(--cd-primary);
+  color: #fff;
+  padding: 0 14px;
+  height: 28px;
+  font-size: 13px;
+  font-weight: 600;
+}

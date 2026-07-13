@@ -1,0 +1,15 @@
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(320px, 700px) 1fr auto;
+  gap: 18px;
+  align-items: center;
+  min-width: 0;
+  height: var(--cd-header);
+  border-bottom: 1px solid var(--cd-border);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  padding: 0 clamp(24px, 3vw, 52px);
+}

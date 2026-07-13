@@ -1,0 +1,120 @@
+/**
+ * doc-editor-mobile.css - 文档编辑器移动端样式
+ *
+ * 重构说明：
+ * - 顶部导航栏
+ * - 摘要和元数据
+ * - 操作按钮
+ * - 画布区域
+ * - 底部浮动工具栏
+ * - 弹出面板（分享等）
+ */
+
+/* 顶部导航栏 */
+.doc-editor-page__mobile-top {
+  position: sticky;
+  top: 0;
+  z-index: 34;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+  border-bottom: 1px solid var(--cd-border);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+
+/* 返回按钮 */
+.doc-editor-page__mobile-back {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+}
+
+/* 标题区域 */
+.doc-editor-page__mobile-headline {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.doc-editor-page__mobile-headline span {
+  color: var(--cd-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.doc-editor-page__mobile-headline strong {
+  overflow: hidden;
+  color: var(--cd-ink);
+  font-size: 17px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 保存状态标签 */
+.doc-editor-page__mobile-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid var(--cd-border);
+  border-radius: 999px;
+  background: var(--cd-panel);
+  color: var(--cd-muted);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* 摘要区域 */
+.doc-editor-page__mobile-summary {
+  display: grid;
+  gap: 8px;
+  margin: 10px 12px 0;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  padding: 14px;
+}
+
+/* 标题输入 */
+.doc-editor-page__mobile-title {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--cd-paper);
+  color: var(--cd-ink);
+  font-size: 20px;
+  font-weight: 900;
+  padding: 0 12px;
+}
+
+/* 元数据标签 */
+.doc-editor-page__mobile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.doc-editor-page__mobile-meta span {
+  border-radius: 999px;
+  background: var(--cd-brand-accent-soft);
+  color: var(--cd-brand-accent);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 操作按钮行 */

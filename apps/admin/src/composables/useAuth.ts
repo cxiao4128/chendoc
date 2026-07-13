@@ -1,5 +1,6 @@
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
+import { logoutApi } from "../services/api";
 
 export function useAuth() {
   const router = useRouter();
@@ -7,7 +8,6 @@ export function useAuth() {
 
   async function logout() {
     try {
-      const { a3: logoutApi } = await import("../api/auth");
       await logoutApi();
     } catch {
       // Local logout must still complete if the server session is already gone.

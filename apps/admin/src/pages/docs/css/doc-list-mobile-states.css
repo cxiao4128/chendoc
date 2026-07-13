@@ -1,0 +1,33 @@
+/* 移动端骨架屏 */
+.doc-list-page__skeleton.is-mobile span {
+  height: 90px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* 移动端加载更多 */
+.doc-list-page__more {
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  min-height: 44px;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid #e8eaed;
+  color: var(--cd-text);
+}
+
+/* 移动端错误状态 */
+.doc-list-page__error.is-mobile {
+  margin: 16px;
+  border-radius: 16px;
+  background: #fff;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* 增加列表底部padding，避免被固定工具栏遮挡 */
+.doc-list-page__mobile-list {
+  padding-bottom: 80px;
+}

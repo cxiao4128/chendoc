@@ -12,6 +12,17 @@ export function isLoopbackAddress(address: string | undefined) {
   return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
 }
 
+export function httpsRedirectOrigin(input: {
+  requestUrl: string;
+  publicSiteUrl: string;
+  apiOrigin: string;
+}) {
+  const pathname = new URL(input.requestUrl, "http://localhost").pathname;
+  return pathname.startsWith("/api/")
+    ? new URL(input.apiOrigin).origin
+    : new URL(input.publicSiteUrl).origin;
+}
+
 export function isHttpsRequest(input: {
   protocol: string;
   forwardedProto: ForwardedProto;

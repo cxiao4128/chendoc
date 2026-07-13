@@ -1,0 +1,45 @@
+.stats-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--cd-muted);
+  font-size: 13px;
+}
+
+.stats-logs {
+  display: grid;
+  gap: 8px;
+}
+
+.stats-log {
+  padding: 10px 12px;
+  background: var(--cd-paper-soft);
+  border-radius: var(--cd-radius);
+}
+
+.stats-log__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.stats-log__device {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: white;
+}
+
+.stats-log__time {
+  font-size: 12px;
+  color: var(--cd-muted);
+  margin-left: auto;
+}
+
+.stats-log__ua {
+  font-size: 11px;
+  color: var(--cd-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

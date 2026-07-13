@@ -1,0 +1,10 @@
+/**
+ * doc-list-mobile.css - 文档移动列表样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./doc-list-mobile-hero.css";
+@import "./doc-list-mobile-actions.css";
+@import "./doc-list-mobile-cards.css";
+@import "./doc-list-mobile-states.css";

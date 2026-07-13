@@ -426,7 +426,7 @@ export const totpFailures = sqliteTable("totp_failures", {
 // ===== 搜索历史模块 =====
 export const searchHistory = sqliteTable("search_history", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   query: text("query").notNull(),
   queryHash: text("query_hash").notNull(),
   searchMode: text("search_mode", { enum: ["fulltext", "quick", "suggestions"] }).notNull().default("fulltext"),
@@ -444,9 +444,9 @@ export const searchHistory = sqliteTable("search_history", {
 // ===== 文档评论模块 =====
 export const docComments = sqliteTable("doc_comments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  docUid: text("doc_uid").notNull(),
+  docUid: text("doc_uid").notNull().references(() => docs.docUid, { onDelete: "cascade" }),
   parentId: integer("parent_id"),  // 回复嵌套
-  userId: integer("user_id").notNull().references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),  // 评论内容（Markdown）
   selectionStart: integer("selection_start"),  // 批注起始位置
   selectionEnd: integer("selection_end"),      // 批注结束位置

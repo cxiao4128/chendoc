@@ -1,0 +1,32 @@
+.settings-page__log-table {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-page__log-row {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr) minmax(110px, 0.7fr) minmax(140px, 0.8fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.settings-page__log-row:hover {
+  background: #fbfdff;
+}
+
+.settings-page__log-row time,
+.settings-page__log-row span,
+.settings-page__log-row code,
+.settings-page__logs-empty {
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.settings-page__log-row strong,
+.settings-page__log-row code {
+  overflow-wrap: anywhere;
+}

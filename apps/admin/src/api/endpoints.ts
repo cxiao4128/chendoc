@@ -1,3 +1,5 @@
+import { backendFetch } from "../config/runtime";
+
 const slots = {
   signIn: "l",
   signUp: "r",
@@ -64,7 +66,7 @@ export async function loadEndpointOverrides() {
   bootstrapLoaded = true;
 
   try {
-    const response = await fetch("/api/bootstrap", { cache: "no-store" });
+    const response = await backendFetch("/api/bootstrap", { cache: "no-store" });
     if (!response.ok) return apiPaths;
     applyEndpointOverrides(await response.json());
   } catch {

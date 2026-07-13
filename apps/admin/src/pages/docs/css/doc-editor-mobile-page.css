@@ -1,0 +1,10 @@
+/**
+ * doc-editor-mobile-page.css - 移动端编辑页样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./doc-editor-mobile-top.css";
+@import "./doc-editor-mobile-actions.css";
+@import "./doc-editor-mobile-sheet-panel.css";
+@import "./doc-editor-mobile-docs.css";

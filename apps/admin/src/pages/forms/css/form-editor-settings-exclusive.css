@@ -1,0 +1,93 @@
+/* 专属信息样式 */
+.form-exclusive-info {
+  padding: 16px 20px;
+}
+
+.form-exclusive-info__desc {
+  font-size: 13px;
+  color: var(--form-muted);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.form-exclusive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.form-exclusive-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-exclusive-item__input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  background: var(--form-bg);
+}
+
+.form-exclusive-item__label {
+  width: 132px;
+  padding: 8px 12px;
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  background: var(--form-paper);
+  color: var(--form-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.form-exclusive-item__label:focus {
+  border-color: var(--form-accent);
+  outline: none;
+}
+
+.form-exclusive-item__input:focus {
+  outline: none;
+  border-color: var(--form-accent);
+}
+
+.form-exclusive-item__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--form-radius);
+  background: var(--form-danger-soft);
+  color: var(--form-danger);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-exclusive-item__remove:hover {
+  background: var(--form-danger);
+  color: white;
+}
+
+.form-exclusive-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--form-accent);
+  background: var(--form-accent-soft);
+  border: 1px dashed var(--form-accent);
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-exclusive-add-btn:hover {
+  background: var(--form-accent);
+  color: white;
+  border-style: solid;
+}

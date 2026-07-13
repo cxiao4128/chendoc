@@ -1,0 +1,34 @@
+.chendoc-editor {
+  min-height: 100%;
+  background: transparent;
+  --editor-font-size: 16px;
+  --editor-line-height: 1.72;
+  --editor-paragraph-gap: 0.78em;
+}
+
+.chendoc-editor__block-handle {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 34px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-muted);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.10);
+  cursor: grab;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.chendoc-editor__block-handle:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: var(--cd-panel);
+  color: var(--cd-primary-hover);
+}
+
+.chendoc-editor__block-handle:active {
+  cursor: grabbing;
+}

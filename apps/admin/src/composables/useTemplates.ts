@@ -13,7 +13,7 @@ import {
   type Template,
   type CreateTemplateInput,
   type UpdateTemplateInput,
-} from "../api/templates.js";
+} from "../services/api";
 
 export function useTemplates() {
   // 状态

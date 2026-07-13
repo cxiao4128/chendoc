@@ -43,7 +43,16 @@ const expectedTables = [
   "login_failures",
   "danger_verifications",
   "audit_logs",
-  "logs"
+  "logs",
+  "access_logs",
+  "doc_comment_reactions",
+  "doc_comments",
+  "jwt_keys",
+  "search_history",
+  "tag_hierarchy",
+  "tags",
+  "templates",
+  "totp_failures"
 ];
 
 function isVerificationDatabase(database) {

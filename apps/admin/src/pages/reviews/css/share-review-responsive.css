@@ -1,0 +1,32 @@
+@media (max-width: 1320px) {
+  .share-review-page__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .share-review-page__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .share-review-page__aside {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .share-review-page {
+    padding: 16px;
+  }
+
+  .share-review-page__head h1 {
+    font-size: 30px;
+  }
+
+  .share-review-page__head,
+  .share-review-page__item {
+    grid-template-columns: 1fr;
+  }
+
+  .share-review-page__head {
+    display: grid;
+  }
+}

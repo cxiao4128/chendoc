@@ -1,0 +1,56 @@
+.settings-page__suggestion-panel {
+  align-content: start;
+}
+
+.settings-page__suggestion-panel button,
+.settings-page__suggestion-panel a,
+.settings-page__quick button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--cd-text);
+  padding: 12px;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.settings-page__suggestion-panel button:hover,
+.settings-page__suggestion-panel a:hover,
+.settings-page__quick button:hover {
+  border-color: rgba(123, 97, 255, 0.35);
+  background: #fbfaff;
+}
+
+.settings-page__suggestion-panel svg,
+.settings-page__quick svg {
+  flex: 0 0 auto;
+  color: var(--cd-primary-hover);
+}
+
+.settings-page__suggestion-panel span,
+.settings-page__suggestion-panel small,
+.settings-page__quick span,
+.settings-page__quick small {
+  display: grid;
+  min-width: 0;
+}
+
+.settings-page__suggestion-panel strong,
+.settings-page__quick strong {
+  color: var(--cd-text);
+  font-size: 13px;
+}
+
+.settings-page__suggestion-panel small,
+.settings-page__quick small {
+  margin-top: 2px;
+  color: var(--cd-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}

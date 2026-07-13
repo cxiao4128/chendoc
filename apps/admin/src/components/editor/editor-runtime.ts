@@ -77,14 +77,35 @@ async function loadLazyLanguages() {
 
 // 启动懒加载（不影响首屏）
 if (typeof window !== "undefined") {
-  requestIdleCallback(() => loadLazyLanguages(), { timeout: 2000 });
+  const scheduleIdle = typeof window.requestIdleCallback === "function"
+    ? window.requestIdleCallback.bind(window)
+    : (callback: IdleRequestCallback) => window.setTimeout(() => callback({
+      didTimeout: false,
+      timeRemaining: () => 0
+    } as IdleDeadline), 0);
+  scheduleIdle(() => void loadLazyLanguages(), { timeout: 2000 });
 }
 
 export function createChendocEditor(options: Record<string, unknown>) {
   return new Editor({
     ...(options as any),
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      // StarterKit 已内置 link 和 underline，这里排除它们以避免重复
+      StarterKit.configure({
+        codeBlock: false,
+        link: false,
+        underline: false
+      }),
+      // 单独配置 link 和 underline 以获得更好的控制
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: {
+          rel: "noopener noreferrer",
+          target: "_blank"
+        }
+      }),
       UnderlineExtension,
       TextStyle,
       FontFamily,
@@ -111,15 +132,6 @@ export function createChendocEditor(options: Record<string, unknown>) {
       Video,
       Color,
       Highlight.configure({ multicolor: true }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        linkOnPaste: true,
-        HTMLAttributes: {
-          rel: "noopener noreferrer",
-          target: "_blank"
-        }
-      }),
       Placeholder.configure({
         placeholder: "正文"
       })

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { UserRound } from "lucide-vue-next";
-import { getPublicSiteConfigApi } from "../../api/settings";
+import { getPublicSiteConfigApi } from "@/services/api";
 import {
   bundledLogoUrl,
   bundledWallpaperUrl,
@@ -100,7 +100,7 @@ onMounted(() => {
       <section class="auth-home">
         <section class="auth-hero" aria-label="ChenDoc">
           <div class="auth-hero__copy">
-            <h1>陈书</h1>
+            <h1 aria-hidden="true">陈书</h1>
             <strong>ChenDoc 文档系统</strong>
             <span></span>
           </div>
@@ -108,12 +108,12 @@ onMounted(() => {
         </section>
 
         <section class="auth-panel" aria-label="找回密码">
-          <form class="auth-card" autocomplete="off" @submit.prevent="submit">
+          <form class="auth-card" autocomplete="on" @submit.prevent="submit">
             <div class="auth-card__header">
               <img class="auth-brand__logo" :src="effectiveLogoUrl" alt="" referrerpolicy="no-referrer" />
               <div class="auth-heading">
-                <h1>{{ brandTitle }}</h1>
-                <p>找回密码</p>
+                <h1 class="auth-heading__title">{{ brandTitle }}</h1>
+                <p class="auth-heading__subtitle">找回密码</p>
               </div>
             </div>
 
@@ -123,10 +123,10 @@ onMounted(() => {
                 <UserRound :size="18" />
                 <input
                   v-model.trim="username"
-                  autocomplete="off"
+                  autocomplete="username"
                   autocapitalize="none"
                   inputmode="text"
-                  name="recovery-account"
+                  name="username"
                   placeholder="输入账号"
                   required
                   spellcheck="false"

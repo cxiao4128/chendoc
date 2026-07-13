@@ -1,0 +1,48 @@
+@media (max-width: 760px) {
+  .editor-toolbar__primary {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .editor-toolbar__secondary {
+    display: none;
+  }
+
+  .editor-toolbar__more-btn {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    margin-left: 4px;
+    border: 1px solid var(--cd-border);
+    border-radius: 10px;
+    background: var(--cd-panel);
+    color: var(--cd-text);
+  }
+
+  .editor-toolbar__more-btn:active {
+    transform: scale(0.96);
+  }
+
+  .editor-toolbar__more-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .editor-toolbar__more-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .editor-toolbar__more-grid button {
+    min-height: 56px;
+  }
+
+  /* 移动端颜色选择器优化：使用视口固定定位，确保不被底部导航遮挡 */
+  .editor-toolbar__color-dropdown {
+    max-height: 50vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -1,0 +1,53 @@
+.settings-page__password-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-page__password-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 360px));
+  gap: 14px;
+  align-items: end;
+}
+
+.settings-page__password-grid label {
+  display: grid;
+  gap: 7px;
+  color: #354263;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.settings-page__password-panel p {
+  margin: 0;
+}
+
+.settings-page__password-actions {
+  margin-top: 4px;
+}
+
+.settings-page__asset-panel a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  color: var(--cd-text);
+  padding: 12px 14px;
+  text-decoration: none;
+}
+
+.settings-page__asset-panel a:hover {
+  border-color: rgba(123, 97, 255, 0.38);
+  background: #fbfaff;
+}
+
+.settings-page__asset-panel span {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-page__asset-panel small {
+  color: var(--cd-muted);
+}

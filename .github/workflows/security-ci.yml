@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.16.0
           cache: npm
       - run: npm ci --workspaces --include-workspace-root
       - run: npm audit --omit=dev
@@ -40,11 +40,15 @@ jobs:
       - run: npm --prefix apps/admin run lint
       - run: npm --prefix server run lint
       - run: npm --prefix apps/admin run typecheck
+      - run: npm --prefix apps/admin run test
       - run: npm run env:check
       - run: npm --prefix server run test
       - run: npm --prefix server run db:migrate
       - run: npm --prefix server run test:mysql-integrity
-      - run: npm --prefix apps/admin run build
+      - run: npm run build:cloudflare-pages
+        env:
+          CHENDOC_CLOUDFLARE_BACKEND_ORIGIN: https://api.w92.pw
+          CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN: https://d.w92.pw
       - run: npm --prefix server run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

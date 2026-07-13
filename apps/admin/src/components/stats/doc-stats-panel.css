@@ -1,0 +1,12 @@
+/**
+ * doc-stats-panel.css - 文档统计弹层样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./doc-stats-panel-shell.css";
+@import "./doc-stats-panel-controls.css";
+@import "./doc-stats-panel-metrics.css";
+@import "./doc-stats-panel-devices.css";
+@import "./doc-stats-panel-chart.css";
+@import "./doc-stats-panel-logs.css";

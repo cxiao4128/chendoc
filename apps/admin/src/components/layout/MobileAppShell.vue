@@ -26,7 +26,14 @@ const roleText = computed(() => {
   if (auth.user?.role === "admin") return "管理员";
   return "普通用户";
 });
-const workspaceTabs = computed(() => visibleLinks.value.slice(0, 4));
+const mobilePrimaryLabels = ["文档", "收集表", "审核", "系统管理"];
+const workspaceTabs = computed(() => {
+  const preferred = mobilePrimaryLabels
+    .map((label) => visibleLinks.value.find((item) => item.label === label))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const rest = visibleLinks.value.filter((item) => !preferred.some((selected) => selected.to === item.to));
+  return [...preferred, ...rest].slice(0, 4);
+});
 const isDocsHomeRoute = computed(() => /^\/(?:admin|users)\/docs\/?$/.test(route.path));
 const currentUserName = computed(() => auth.user?.username || "ChenDoc");
 
@@ -92,7 +99,7 @@ async function createDoc() {
         <RouterView />
       </main>
 
-      <button v-if="!isDocsHomeRoute" class="mobile-shell__fab" type="button" aria-label="新建文档" @click="createDoc">
+      <button v-if="isDocsHomeRoute" class="mobile-shell__fab" type="button" aria-label="新建文档" @click="createDoc">
         <Plus :size="24" />
       </button>
 
@@ -114,7 +121,7 @@ async function createDoc() {
         </button>
       </nav>
 
-      <button v-if="drawerOpen" class="mobile-shell__scrim" type="button" aria-label="关闭面板" @click="drawerOpen = false" />
+      <button v-if="drawerOpen" class="mobile-shell__scrim" type="button" aria-label="关闭抽屉遮罩" @click="drawerOpen = false" />
 
       <aside v-if="drawerOpen" class="mobile-shell__drawer is-open" role="dialog" aria-modal="true" aria-label="移动端账号与导航面板">
         <div class="mobile-shell__drawer-head">

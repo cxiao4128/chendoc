@@ -15,6 +15,7 @@ import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { generateShareToken, isWeakShareToken } from "../../utils/shareToken.js";
 import { canAccessDocument } from "../docs/documentAccess.js";
+import { getDocWithOwner, getShareById } from "./shares.repo.js";
 
 type Actor = { id: number; role: "admin" | "user"; isSuperAdmin?: boolean };
 
@@ -60,7 +61,8 @@ const reviewShareSchema = z.object({
 
 const shareAccessTokenSchema = z.object({
   shareId: z.number().int().positive(),
-  docId: z.number().int().positive()
+  docId: z.number().int().positive(),
+  shareToken: z.string().min(1)
 });
 
 const sharePasswordAttempts = new Map<string, { count: number; firstAt: number; nextAllowedAt: number; lockedUntil: number }>();
@@ -80,18 +82,16 @@ function parseExpireAt(value?: string | null) {
   return value ? new Date(value) : null;
 }
 
-async function assertShareCodeAvailable(shareCode: number | null | undefined, currentShareId?: number) {
-  if (!shareCode) return;
-  const existing = await dbGet<{ id: number }>(db.select({ id: shares.id }).from(shares).where(eq(shares.shareCode, shareCode)).limit(1));
-  if (existing && existing.id !== currentShareId) throw new BadRequestError("分享数字已被占用", "SHARE_CODE_TAKEN");
-}
-
+// assertCustomSlugAvailable 是同步调用 dbGet，await 不影响调用方
 async function assertCustomSlugAvailable(customSlug: string, currentShareId?: number) {
   // 自定义 slug 只允许管理员使用，且必须是字母数字组合
   if (!/^[A-Za-z0-9_-]+$/.test(customSlug)) {
     throw new BadRequestError("分享码只能使用字母、数字、下划线和连字符", "INVALID_CUSTOM_SLUG");
   }
   const lowerSlug = customSlug.toLowerCase();
+  if (/^\d+$/.test(lowerSlug)) {
+    throw new BadRequestError("自定义分享码不能是纯数字", "CUSTOM_SLUG_NUMERIC_FORBIDDEN");
+  }
   // 检查是否已被占用（customSlug 列）
   const existing = await dbGet<{ id: number }>(db.select({ id: shares.id }).from(shares).where(eq(shares.customSlug, lowerSlug)).limit(1));
   if (existing && existing.id !== currentShareId) {
@@ -123,21 +123,6 @@ function isUserShareCode(shareCode: number) {
   return shareCode >= USER_SHARE_CODE_MIN && shareCode <= USER_SHARE_CODE_MAX;
 }
 
-function assertAdminShareCode(shareCode: number | null | undefined) {
-  if (shareCode === undefined || shareCode === null) return;
-  if (!isAdminShareCode(shareCode)) throw new BadRequestError("管理员分享数字必须在 111-9999 之间", "INVALID_SHARE_CODE");
-}
-
-function assertUserShareCode(shareCode: number | null | undefined) {
-  if (shareCode === undefined || shareCode === null) return;
-  if (!isUserShareCode(shareCode)) throw new BadRequestError("普通用户分享数字必须是 7 位数字", "INVALID_SHARE_CODE");
-}
-
-function assertShareCodeRangeForDoc(shareCode: number | null | undefined, userOwned: boolean) {
-  if (userOwned) assertUserShareCode(shareCode);
-  else assertAdminShareCode(shareCode);
-}
-
 function isValidPublicShareCode(shareCode: number) {
   return isAdminShareCode(shareCode) || isUserShareCode(shareCode);
 }
@@ -150,6 +135,18 @@ async function nextAdminShareCode() {
   const code = (row?.code ?? ADMIN_SHARE_CODE_MIN - 1) + 1;
   if (code <= ADMIN_SHARE_CODE_MAX) return code;
   throw new BadRequestError("管理员分享编号已用完", "SHARE_CODE_EXHAUSTED");
+}
+
+function databaseErrorText(error: unknown) {
+  if (!(error instanceof Error)) return String(error).toLowerCase();
+  const code = "code" in error ? String((error as Error & { code?: unknown }).code ?? "") : "";
+  return `${code} ${error.message}`.toLowerCase();
+}
+
+function isDuplicateField(error: unknown, ...names: string[]) {
+  const text = databaseErrorText(error);
+  const duplicate = text.includes("duplicate") || text.includes("unique constraint") || text.includes("constraint_unique");
+  return duplicate && names.some((name) => text.includes(name.toLowerCase()));
 }
 
 async function randomUserShareCode() {
@@ -171,52 +168,7 @@ async function createUniqueShareToken(currentShareId?: number) {
 }
 
 async function docWithOwner(docId: number) {
-  const row = await dbGet<{
-    id: number;
-    docUid: string;
-    title: string;
-    contentJson: string;
-    contentHtml: string;
-    contentJsonCiphertext: string | null;
-    contentJsonIv: string | null;
-    contentJsonTag: string | null;
-    contentJsonKeyVersion: string | null;
-    contentHtmlCiphertext: string | null;
-    contentHtmlIv: string | null;
-    contentHtmlTag: string | null;
-    contentHtmlKeyVersion: string | null;
-    createdBy: number | null;
-    ownerId: number | null;
-    deletedAt: Date | null;
-    ownerRole: "user" | "doc_admin" | "super_admin" | null;
-    isSuperAdminDoc: boolean;
-    ownerName: string | null;
-  }>(db
-    .select({
-      id: docs.id,
-      docUid: docs.docUid,
-      title: docs.title,
-      contentJson: docs.contentJson,
-      contentHtml: docs.contentHtml,
-      contentJsonCiphertext: docs.contentJsonCiphertext,
-      contentJsonIv: docs.contentJsonIv,
-      contentJsonTag: docs.contentJsonTag,
-      contentJsonKeyVersion: docs.contentJsonKeyVersion,
-      contentHtmlCiphertext: docs.contentHtmlCiphertext,
-      contentHtmlIv: docs.contentHtmlIv,
-      contentHtmlTag: docs.contentHtmlTag,
-      contentHtmlKeyVersion: docs.contentHtmlKeyVersion,
-      createdBy: docs.createdBy,
-      ownerId: docs.ownerId,
-      deletedAt: docs.deletedAt,
-      ownerRole: docs.ownerRole,
-      isSuperAdminDoc: docs.isSuperAdminDoc,
-      ownerName: users.username
-    })
-    .from(docs)
-    .leftJoin(users, eq(docs.ownerId, users.id))
-    .where(and(eq(docs.id, docId), isNull(docs.deletedAt)))
-    .limit(1));
+  const row = await getDocWithOwner(docId);
   if (!row) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   return decryptDocumentRecord(row);
 }
@@ -224,13 +176,15 @@ async function docWithOwner(docId: number) {
 async function docWithOwnerByUid(docUid: string) {
   const row = await dbGet<{ id: number }>(db.select({ id: docs.id }).from(docs).where(eq(docs.docUid, docUid)).limit(1));
   if (!row) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
-  return await docWithOwner(row.id);
+  return await getDocWithOwner(row.id).then(d => d ? decryptDocumentRecord(d) : null);
 }
 
 async function shareWithDoc(shareId: number) {
-  const share = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.id, shareId)).limit(1));
+  const share = await getShareById(shareId);
   if (!share) throw new NotFoundError("分享不存在", "SHARE_NOT_FOUND");
-  return { share, doc: await docWithOwner(share.docId) };
+  const doc = await getDocWithOwner(share.docId);
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
+  return { share, doc: decryptDocumentRecord(doc) };
 }
 
 function isUserOwnedDoc(doc: { ownerRole: string | null }) {
@@ -247,7 +201,6 @@ async function syncDocVisibilityForShare(executor: any, docId: number, share: { 
   await dbRun(executor.update(docs).set({
     visibility,
     ...(visibility === "shared" ? { status: "published" as const } : {}),
-    revision: sql`${docs.revision} + 1`,
     updatedAt: now()
   }).where(eq(docs.id, docId)));
 }
@@ -269,18 +222,15 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
   if (body.customSlug && actor.role !== "admin") {
     throw new ForbiddenError("普通用户不能自定义分享链接", "SHARE_CUSTOM_CODE_FORBIDDEN");
   }
-  if (body.customSlug) assertCustomSlugAvailable(body.customSlug);
-  assertSystemAssignedShareCode(body.shareCode);
+  if (body.customSlug) await assertCustomSlugAvailable(body.customSlug);
+  await assertSystemAssignedShareCode(body.shareCode);
 
   const isAdminDoc = !userOwned;
   const isAdminApprovingUserDoc = userOwned && actor.role === "admin";
   const reviewContentHash = userOwned ? documentReviewHash(doc) : null;
   const createdAt = now();
-  const shareCode = userOwned ? await randomUserShareCode() : await nextAdminShareCode();
   const values = {
     docId,
-    shareCode,
-    shareToken: await createUniqueShareToken(),
     customSlug: body.customSlug ?? null,
     passwordHash: body.password ? await hashPassword(body.password) : null,
     isEnabled: isAdminDoc || isAdminApprovingUserDoc ? body.isEnabled ?? false : false,
@@ -295,19 +245,30 @@ export async function createOrGetShare(docId: number, input: unknown, actor: Act
     createdAt,
     updatedAt: createdAt
   };
-  try {
-    return await dbTransaction(async (tx) => {
-      const result = await dbRun(tx.insert(shares).values(values));
-      const created = await dbGet<typeof shares.$inferSelect>(tx.select().from(shares).where(eq(shares.id, Number(result.lastInsertRowid))).limit(1));
-      if (!created) throw new Error("分享创建失败");
-      await syncDocVisibilityForShare(tx, docId, created);
-      return created;
-    });
-  } catch (error) {
-    const raced = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, docId)).limit(1));
-    if (raced) return raced;
-    throw error;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const shareCode = userOwned ? await randomUserShareCode() : await nextAdminShareCode();
+    const shareToken = await createUniqueShareToken();
+    try {
+      return await dbTransaction(async (tx) => {
+        const result = await dbRun(tx.insert(shares).values({ ...values, shareCode, shareToken }));
+        const created = await dbGet<typeof shares.$inferSelect>(tx.select().from(shares).where(eq(shares.id, Number(result.lastInsertRowid))).limit(1));
+        if (!created) throw new Error("分享创建失败");
+        await syncDocVisibilityForShare(tx, docId, created);
+        return created;
+      });
+    } catch (error) {
+      const raced = await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, docId)).limit(1));
+      if (raced) return raced;
+      if (isDuplicateField(error, "custom_slug", "shares_custom_slug_unique")) {
+        throw new BadRequestError("该分享码已被占用", "CUSTOM_SLUG_TAKEN");
+      }
+      if (isDuplicateField(error, "share_code", "shares_share_code_unique", "share_token", "shares_share_token_unique")) {
+        continue;
+      }
+      throw error;
+    }
   }
+  throw new BadRequestError("分享码分配冲突，请重试", "SHARE_CODE_ALLOCATION_RETRY");
 }
 
 export async function updateShare(id: number, input: unknown, actor: Actor = { id: 1, role: "admin" }) {
@@ -343,11 +304,11 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
   } else {
     if (body.isEnabled !== undefined) patch.isEnabled = body.isEnabled;
     if (body.shareCode !== undefined) {
-      assertSystemAssignedShareCode(body.shareCode);
+      await assertSystemAssignedShareCode(body.shareCode);
     }
     // 管理员可以设置/更新自定义分享码
     if (body.customSlug !== undefined) {
-      if (body.customSlug) assertCustomSlugAvailable(body.customSlug);
+      if (body.customSlug) await assertCustomSlugAvailable(body.customSlug, id);
       patch.customSlug = body.customSlug ?? null;
     }
     if (userOwned && body.isEnabled) {
@@ -359,15 +320,25 @@ export async function updateShare(id: number, input: unknown, actor: Actor = { i
     }
   }
 
-  if (isWeakShareToken(current.shareToken, current.shareCode)) patch.shareToken = await createUniqueShareToken(id);
-  if (body.password !== undefined) patch.passwordHash = body.password ? await hashPassword(body.password) : null;
+  if (body.password !== undefined) {
+    patch.passwordHash = body.password ? await hashPassword(body.password) : null;
+    patch.shareToken = await createUniqueShareToken(id);
+  } else if (isWeakShareToken(current.shareToken, current.shareCode)) {
+    patch.shareToken = await createUniqueShareToken(id);
+  }
   if (body.expireAt !== undefined) patch.expireAt = parseExpireAt(body.expireAt);
 
   await dbTransaction(async (tx) => {
     await dbRun(tx.update(shares).set(patch).where(eq(shares.id, id)));
     await syncDocVisibilityForShare(tx, current.docId, { ...current, ...patch });
   });
-  return { docUid: doc.docUid, ownerId: doc.ownerId };
+  return {
+    docUid: doc.docUid,
+    ownerId: doc.ownerId,
+    shareCode: current.shareCode,
+    oldCustomSlug: current.customSlug,
+    customSlug: patch.customSlug !== undefined ? patch.customSlug : current.customSlug
+  };
 }
 
 export async function getShareByDoc(docId: number, actor?: Actor) {
@@ -380,12 +351,14 @@ export async function getShareByDoc(docId: number, actor?: Actor) {
 
 export async function createOrGetShareByDocUid(docUid: string, input: unknown, actor: Actor) {
   const doc = await docWithOwnerByUid(docUid);
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   assertCanManageDocShare(actor, doc);
   return await createOrGetShare(doc.id, input, actor);
 }
 
 export async function getShareByDocUid(docUid: string, actor: Actor) {
   const doc = await docWithOwnerByUid(docUid);
+  if (!doc) throw new NotFoundError("文档不存在", "DOC_NOT_FOUND");
   assertCanManageDocShare(actor, doc);
   return (await dbGet<typeof shares.$inferSelect>(db.select().from(shares).where(eq(shares.docId, doc.id)).limit(1))) ?? null;
 }
@@ -411,13 +384,13 @@ export function adminSharePayload(share: typeof shares.$inferSelect) {
 }
 
 export async function deleteShare(id: number, actor: Actor) {
-  const { doc } = await shareWithDoc(id);
+  const { share, doc } = await shareWithDoc(id);
   assertCanManageDocShare(actor, doc);
   await dbTransaction(async (tx) => {
     await dbRun(tx.delete(shares).where(eq(shares.id, id)));
-    await dbRun(tx.update(docs).set({ visibility: "private", revision: sql`${docs.revision} + 1`, updatedAt: now() }).where(eq(docs.id, doc.id)));
+    await dbRun(tx.update(docs).set({ visibility: "private", updatedAt: now() }).where(eq(docs.id, doc.id)));
   });
-  return { docUid: doc.docUid, ownerId: doc.ownerId };
+  return { docUid: doc.docUid, ownerId: doc.ownerId, shareCode: share.shareCode, customSlug: share.customSlug };
 }
 
 export async function listUserShareReviews() {
@@ -466,14 +439,14 @@ export async function reviewUserShare(id: number, input: unknown, adminId: numbe
   };
 
   if (body.shareCode !== undefined) {
-    assertSystemAssignedShareCode(body.shareCode);
+    await assertSystemAssignedShareCode(body.shareCode);
   } else if (body.action === "approve" && !isUserShareCode(current.shareCode)) {
     patch.shareCode = await randomUserShareCode();
   }
   if (isWeakShareToken(current.shareToken, current.shareCode)) patch.shareToken = await createUniqueShareToken(id);
   // 管理员可以设置自定义分享码
   if (body.customSlug !== undefined) {
-    if (body.customSlug) assertCustomSlugAvailable(body.customSlug);
+    if (body.customSlug) await assertCustomSlugAvailable(body.customSlug, id);
     patch.customSlug = body.customSlug ?? null;
   }
 
@@ -531,6 +504,7 @@ function publicDocSelect() {
     docUid: docs.docUid,
     ownerId: docs.ownerId,
     ownerStatus: users.status,
+    createdAt: docs.createdAt,
     title: docs.title,
     summary: docs.summary,
     coverUrl: docs.coverUrl,
@@ -601,7 +575,7 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
       .from(shares)
       .where(shareWhere(shareKey))
       .limit(1)),
-    dbGet<PublicDocRecord>(db
+    dbGet(db
       .select(publicDocSelect())
       .from(docs)
       .leftJoin(users, eq(docs.ownerId, users.id))
@@ -626,7 +600,7 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
 
   // 检查缓存
   const docId = share.docId;
-  let cachedDoc = getCachedDecryptedDoc(docId);
+  const cachedDoc = getCachedDecryptedDoc(docId);
 
   if (cachedDoc && !cachedDoc.deletedAt) {
     // 缓存命中且未删除，直接使用
@@ -636,13 +610,12 @@ export async function resolvePublicShare(shareKey: string | number): Promise<Pub
   }
 
   // 解密并缓存
-  const decryptedDoc = decryptDocumentRecord(docRecord);
+  const decryptedDoc = decryptDocumentRecord(docRecord as any) as unknown as PublicDocRecord;
   setCachedDecryptedDoc(docId, decryptedDoc);
 
   if (decryptedDoc.deletedAt) return { ok: false, reason: "deleted" };
-  if (isUserOwnedDoc(decryptedDoc) && !isUserShareCode(share.shareCode)) return { ok: false, reason: "missing" };
-  if (!isUserOwnedDoc(decryptedDoc) && !isAdminShareCode(share.shareCode)) return { ok: false, reason: "missing" };
-
+  if (isUserOwnedDoc(decryptedDoc as { ownerRole: string | null }) && !isUserShareCode(share.shareCode)) return { ok: false, reason: "missing" };
+  if (!isUserOwnedDoc(decryptedDoc as { ownerRole: string | null }) && !isAdminShareCode(share.shareCode)) return { ok: false, reason: "missing" };
   return { ok: true, share, doc: decryptedDoc, protected: !!share.passwordHash };
 }
 
@@ -692,7 +665,7 @@ function decryptShareAccessJwt(token: string) {
 }
 
 export function signShareAccessToken(share: typeof shares.$inferSelect, docId: number) {
-  const token = jwt.sign({ shareId: share.id, docId }, env.jwtSecret, {
+  const token = jwt.sign({ shareId: share.id, docId, shareToken: share.shareToken }, env.jwtSecret, {
     expiresIn: "30m",
     audience: "chendoc-public-share",
     issuer: "chendoc"
@@ -707,7 +680,7 @@ export function verifyShareAccessToken(token: string | undefined, share: typeof 
       audience: "chendoc-public-share",
       issuer: "chendoc"
     }));
-    return payload.shareId === share.id && payload.docId === docId;
+    return payload.shareId === share.id && payload.docId === docId && payload.shareToken === share.shareToken;
   } catch {
     return false;
   }

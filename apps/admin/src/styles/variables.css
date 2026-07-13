@@ -65,6 +65,11 @@
   --cd-sidebar: 226px;
   --cd-header: 80px;
 
+  /* 滚动条颜色 */
+  --cd-scrollbar-track: #f1f5f9;
+  --cd-scrollbar-thumb: #cbd5e1;
+  --cd-scrollbar-thumb-hover: #94a3b8;
+
   font-family: var(--cd-font-sans);
 }
 
@@ -136,12 +141,6 @@
 /* ============================================
    滚动条样式
    ============================================ */
-:root {
-  --cd-scrollbar-track: #f1f5f9;
-  --cd-scrollbar-thumb: #cbd5e1;
-  --cd-scrollbar-thumb-hover: #94a3b8;
-}
-
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

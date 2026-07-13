@@ -17,7 +17,7 @@ ChenDoc 上下文优先看 `chendoc/超记忆副本.md`，再按任务读具体�
 
 ## Core
 
-- Root: `D:\desktop\bixu\js\chensdoc-claude`
+- Root: `D:\desktop\bixu\js\chendoc`
 - 用户界面默认中文。
 - 个人文档管理和知识发布系统。**不做**：企业 OA、团队协作、CRM、营销页、AI 仪表盘。
 - Workspaces: `apps/admin` (Vue 3/Vite/Pinia/Vue Router/TipTap), `server` (Fastify 5/Drizzle)

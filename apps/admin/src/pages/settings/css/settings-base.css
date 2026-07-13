@@ -1,0 +1,116 @@
+.settings-page {
+  width: 100%;
+  min-width: 0;
+  padding: 28px clamp(24px, 3vw, 48px) 48px;
+}
+
+.settings-page.is-mobile {
+  padding: 16px 12px calc(24px + env(safe-area-inset-bottom));
+}
+
+.settings-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.settings-page__head h1,
+.settings-page__panel-head h2,
+.settings-page__info-panel h2,
+.settings-page__inline-head h2,
+.settings-page__suggestion-panel h2,
+.settings-page__deploy h2 {
+  margin: 0;
+  color: var(--cd-ink);
+  line-height: 1.18;
+}
+
+.settings-page__head h1 {
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 900;
+}
+
+.settings-page__head h1 span {
+  color: var(--cd-accent);
+  font-size: 22px;
+}
+
+.settings-page__head p {
+  margin: 8px 0 0;
+  color: var(--cd-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.settings-page__tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--cd-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-page__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+
+
+.settings-page__tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--cd-muted);
+  padding: 0 14px 11px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings-page__tab::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+}
+
+.settings-page__tab:hover,
+.settings-page__tab.is-active {
+  color: var(--cd-primary-hover);
+  background: linear-gradient(180deg, rgba(123, 97, 255, 0.08), rgba(123, 97, 255, 0.02));
+}
+
+.settings-page__tab:focus {
+  outline: none;
+}
+
+.settings-page__tab:focus-visible {
+  box-shadow: none;
+}
+
+.settings-page__tab.is-active::after {
+  background: var(--cd-accent);
+}
+
+.settings-page__tab--link {
+  color: var(--cd-muted);
+}

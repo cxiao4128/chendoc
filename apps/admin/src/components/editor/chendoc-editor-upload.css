@@ -1,0 +1,119 @@
+.chendoc-editor__upload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--cd-border);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 10px 14px;
+}
+
+.chendoc-editor__hint {
+  color: var(--cd-muted);
+  font-size: 13px;
+}
+
+.chendoc-editor__error {
+  color: var(--cd-danger);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.chendoc-editor__upload-failed {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--cd-danger) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cd-danger) 7%, var(--cd-panel));
+  padding: 9px 10px;
+}
+
+.chendoc-editor__upload-failed > div {
+  display: flex;
+  gap: 6px;
+}
+
+.chendoc-editor__upload-failed button {
+  min-height: 32px;
+  border: 1px solid var(--cd-border);
+  border-radius: 7px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.chendoc-editor__image-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chendoc-editor__image-tools button,
+.chendoc-editor__slash button {
+  min-height: 30px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 0 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chendoc-editor__image-tools button:hover,
+.chendoc-editor__slash button:hover {
+  border-color: var(--cd-accent);
+  background: var(--cd-accent-soft);
+}
+
+.chendoc-editor__image-tools input {
+  height: 30px;
+  min-width: 180px;
+  border: 1px solid var(--cd-border);
+  border-radius: 7px;
+  padding: 0 10px;
+  outline: none;
+}
+
+.chendoc-editor__slash {
+  position: fixed;
+  z-index: 35;
+  display: grid;
+  gap: 10px;
+  width: min(326px, calc(100vw - 24px));
+  max-height: min(520px, calc(100dvh - 96px));
+  overflow: auto;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  box-shadow: var(--cd-shadow);
+  padding: 10px;
+}
+
+.chendoc-editor__slash-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.chendoc-editor__slash-group > span {
+  flex: 0 0 100%;
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.chendoc-editor__slash-group--compact > span {
+  flex-basis: auto;
+  padding-right: 2px;
+}
+
+.chendoc-editor__slash-group--compact button {
+  min-width: 38px;
+}

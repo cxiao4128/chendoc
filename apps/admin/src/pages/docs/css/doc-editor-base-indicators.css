@@ -1,0 +1,41 @@
+/* 保存状态指示器 */
+.doc-editor-page__save {
+  color: var(--cd-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.doc-editor-page__save.is-saving,
+.doc-editor-page__save.is-pending,
+.doc-editor-page__mobile-save.is-saving,
+.doc-editor-page__mobile-save.is-pending {
+  color: var(--cd-accent);
+}
+
+.doc-editor-page__save.is-error,
+.doc-editor-page__mobile-save.is-error {
+  color: var(--cd-danger);
+}
+
+/* 字数统计 */
+.doc-editor-page__metrics {
+  color: var(--cd-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 同步状态指示器 */
+.doc-editor-page__bar :deep(.sync-indicator) {
+  justify-self: center;
+}
+
+.doc-editor-page__mobile-headline :deep(.sync-indicator) {
+  justify-self: end;
+}
+
+/* 占位文本 */
+.doc-editor-page__muted {
+  margin: 0;
+  color: var(--cd-muted);
+  font-size: 13px;
+}

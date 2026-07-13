@@ -4,8 +4,9 @@ import { useRouter } from "vue-router";
 import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Network, Search, Sparkles, UserRound } from "lucide-vue-next";
 import { useAuth } from "../../composables/useAuth";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
-import { getSystemStatusApi } from "../../api/settings";
+import { getSystemStatusApi } from "@/services/api";
 import { bundledLogoUrl as logoUrl } from "../../config/site-assets";
+import { publicUrl } from "../../config/runtime";
 import "./app-header.css";
 
 defineEmits<{ menu: [] }>();
@@ -22,12 +23,12 @@ const currentIp = computed(() => auth.user?.currentIp || "暂无 IP");
 function search() {
   const value = keyword.value.trim();
   if (!value) return;
-  const shareCode = value.match(/\/r\/(\d{3,7})/)?.[1];
-  const numericShareCode = shareCode ? Number(shareCode) : 0;
+  const shareKey = value.match(/\/r\/([A-Za-z0-9_-]{3,64})/)?.[1];
+  const numericShareCode = shareKey ? Number(shareKey) : 0;
   const isAdminShareCode = numericShareCode >= 111 && numericShareCode <= 9999;
   const isUserShareCode = numericShareCode >= 1_000_000 && numericShareCode <= 9_999_999;
-  if (shareCode && (isAdminShareCode || isUserShareCode)) {
-    window.open(`/r/${shareCode}`, "_blank", "noopener,noreferrer");
+  if (shareKey && (!/^\d+$/.test(shareKey) || isAdminShareCode || isUserShareCode)) {
+    window.open(publicUrl(`/r/${shareKey}`), "_blank", "noopener,noreferrer");
     return;
   }
   router.push({ path: docsPath.value, query: { q: value } });

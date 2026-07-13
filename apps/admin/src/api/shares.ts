@@ -1,4 +1,13 @@
-import { request } from "./request";
+/**
+ * api/shares.ts
+ *
+ * 兼容导出层 - 临时保留，逐步迁移到 services/api/
+ *
+ * ⚠️ 警告：不要再在此文件中添加新逻辑
+ * ⚠️ 警告：不要再让新代码 import 本文件
+ */
+
+// ============= 类型（保留在原位置） =============
 
 export interface ShareItem {
   id: number;
@@ -32,26 +41,14 @@ export interface ShareReviewItem extends ShareItem {
   ownerName?: string | null;
 }
 
-export function createShareApi(docUid: string) {
-  return request<{ share: ShareItem }>(`/api/docs/${docUid}/share`, { method: "POST", body: JSON.stringify({}) });
-}
+// ============= 函数（从 services/api 重导出） =============
 
-export function getShareByDocApi(docUid: string) {
-  return request<{ share: ShareItem | null }>(`/api/shares/doc/${docUid}`);
-}
-
-export function updateShareApi(id: number, body: SharePatch) {
-  return request<{ ok: true }>(`/api/shares/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-}
-
-export function deleteShareApi(id: number) {
-  return request<{ ok: true }>(`/api/shares/${id}`, { method: "DELETE" });
-}
-
-export function listShareReviewsApi() {
-  return request<{ shares: ShareReviewItem[] }>("/api/admin/share-reviews");
-}
-
-export function reviewShareApi(id: number, body: { action: "approve" | "reject"; note?: string | null }) {
-  return request<{ ok: true }>(`/api/admin/share-reviews/${id}/review`, { method: "POST", body: JSON.stringify(body) });
-}
+export {
+  createShareApi,
+  getShareByDocApi,
+  updateShareApi,
+  deleteShareApi,
+  listShareReviewsApi,
+  reviewShareApi,
+  shareApi
+} from "@/services/api/share.api";

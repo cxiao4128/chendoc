@@ -1,0 +1,50 @@
+.form-submissions {
+  min-height: 100vh;
+  background: var(--cd-bg);
+}
+
+.form-submissions .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--cd-paper);
+  border-bottom: 1px solid var(--cd-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.form-submissions .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-submissions .header-left h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--cd-ink);
+}
+
+.form-submissions .header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.form-submissions .loading-state,
+.form-submissions .error-state {
+  padding: 48px;
+  text-align: center;
+}
+
+.form-submissions .error-state {
+  color: var(--cd-danger);
+}
+
+.form-submissions .skeleton-line {
+  height: 48px;
+  margin-bottom: 12px;
+}

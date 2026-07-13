@@ -1,0 +1,135 @@
+/* 移动端工具栏布局 */
+.editor-toolbar__primary {
+  display: none;
+}
+
+.editor-toolbar__secondary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor-toolbar__more-btn {
+  display: none;
+}
+
+/* 移动端更多菜单 */
+.editor-toolbar__more-menu {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: grid;
+  gap: 16px;
+  max-height: 70dvh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  background: var(--cd-panel);
+  box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.18);
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+  animation: toolbarMenuUp 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes toolbarMenuUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.editor-toolbar__more-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: rgba(15, 23, 42, 0.42);
+  animation: fadeIn 150ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.editor-toolbar__more-section {
+  display: grid;
+  gap: 8px;
+}
+
+.editor-toolbar__more-label {
+  color: var(--cd-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.editor-toolbar__more-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.editor-toolbar__more-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  font-size: 11px;
+}
+
+.editor-toolbar__more-grid button span {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.editor-toolbar__more-grid button:hover,
+.editor-toolbar__more-grid button.active {
+  border-color: rgba(37, 99, 235, 0.38);
+  background: var(--cd-accent-soft);
+  color: var(--cd-accent-hover);
+}
+
+.editor-toolbar__more-grid select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.editor-toolbar__more-close {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: var(--cd-panel);
+  color: var(--cd-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 过渡动画 */
+.toolbar-menu-enter-active,
+.toolbar-menu-leave-active {
+  transition: opacity 150ms ease;
+}
+
+.toolbar-menu-enter-from,
+.toolbar-menu-leave-to {
+  opacity: 0;
+}

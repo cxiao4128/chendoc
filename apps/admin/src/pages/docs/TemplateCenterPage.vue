@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { FilePlus2 } from "lucide-vue-next";
-import { getDocApi, type DocSummary } from "../../api/docs";
+import { getDocApi, type DocSummary } from "@/services/api";
 import { useDocStore } from "../../stores/doc";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
 import "./css/utility-pages.css";

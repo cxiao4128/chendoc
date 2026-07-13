@@ -1,0 +1,12 @@
+/**
+ * settings-overview.css - 设置概览样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./settings-overview-status.css";
+@import "./settings-overview-panels.css";
+@import "./settings-overview-info.css";
+@import "./settings-overview-announcements.css";
+@import "./settings-overview-log.css";
+@import "./settings-overview-suggestions.css";

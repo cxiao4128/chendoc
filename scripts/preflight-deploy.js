@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
+import { createDecipheriv, createHash } from "node:crypto";
 import net from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +66,21 @@ function note(message) {
   notes.push(message);
 }
 
+function decryptValue(payload, secret) {
+  const [version, ivRaw, tagRaw, cipherRaw] = String(payload).split(":");
+  if (version !== "v1" || !ivRaw || !tagRaw || !cipherRaw) throw new Error("Invalid encrypted value.");
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    createHash("sha256").update(secret).digest(),
+    Buffer.from(ivRaw, "base64")
+  );
+  decipher.setAuthTag(Buffer.from(tagRaw, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(cipherRaw, "base64")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
 function isWeak(value) {
   return weakValues.has(value) || value.startsWith("please_change_this");
 }
@@ -113,6 +129,60 @@ function checkAdminPassword(env) {
   }
 }
 
+function isReservedExampleHostname(hostname) {
+  const value = String(hostname || "").toLowerCase();
+  return value.endsWith(".example")
+    || value === "example.com"
+    || value.endsWith(".example.com")
+    || value === "example.net"
+    || value.endsWith(".example.net")
+    || value === "example.org"
+    || value.endsWith(".example.org");
+}
+
+function parseOrigins(env, name) {
+  const raw = String(env[name] || "").trim();
+  if (!raw) return [];
+  const origins = [];
+  for (const entry of raw.split(",")) {
+    const value = entry.trim();
+    try {
+      const url = new URL(value);
+      if (value === "*" || url.protocol !== "https:" || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) {
+        throw new Error();
+      }
+      if (isReservedExampleHostname(url.hostname)) {
+        throw new Error();
+      }
+      origins.push(url.origin);
+    } catch {
+      fail(`${name} must contain exact HTTPS origins without paths, never *: ${value || "empty"}.`);
+    }
+  }
+  return [...new Set(origins)];
+}
+
+function checkPublicSiteUrl(env) {
+  const value = requireValue(env, "PUBLIC_SITE_URL");
+  if (!value) return;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:"
+      || url.username
+      || url.password
+      || url.search
+      || url.hash
+      || (url.pathname !== "/" && url.pathname !== "")
+      || isReservedExampleHostname(url.hostname)
+    ) {
+      throw new Error();
+    }
+  } catch {
+    fail("PUBLIC_SITE_URL must be a real exact HTTPS origin without path, query, hash, credentials, or .example placeholders.");
+  }
+}
+
 async function checkPort(port, host) {
   return new Promise((resolveCheck) => {
     const server = net.createServer();
@@ -148,15 +218,28 @@ checkSecret(env, "RSA_PRIVATE_KEY_ENCRYPTION_KEY", 32);
 checkSecret(env, "CHENDOC_DOCUMENT_ENCRYPTION_KEY", 32);
 checkSecret(env, "CHENDOC_BACKUP_ENCRYPTION_KEY", 32);
 checkAdminPassword(env);
-requireValue(env, "PUBLIC_SITE_URL");
+checkPublicSiteUrl(env);
 requireValue(env, "CHENDOC_BACKUP_VERIFY_DATABASE_URL");
 requireValue(env, "CHENDOC_BACKUP_OFFSITE_DIR");
 
 if (env.CHENDOC_REQUIRE_UPLOAD_SCAN === undefined || flagEnabled(env.CHENDOC_REQUIRE_UPLOAD_SCAN)) {
   requireValue(env, "CHENDOC_UPLOAD_SCAN_WEBHOOK");
 }
-const r2Configured = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]
-  .some((name) => String(env[name] || "").trim());
+const r2Fields = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"];
+const configuredR2Fields = r2Fields.filter((name) => String(env[name] || "").trim());
+const r2Configured = configuredR2Fields.length > 0;
+if (r2Configured && configuredR2Fields.length !== r2Fields.length) {
+  fail(`R2 configuration is incomplete. Missing: ${r2Fields.filter((name) => !configuredR2Fields.includes(name)).join(", ")}.`);
+}
+for (const name of ["R2_PUBLIC_URL", "R2_ENDPOINT"]) {
+  const value = String(env[name] || "").trim();
+  if (!value) continue;
+  try {
+    if (new URL(value).protocol !== "https:") fail(`${name} must use https://.`);
+  } catch {
+    fail(`${name} must be a valid URL.`);
+  }
+}
 if (r2Configured && !String(env.R2_BACKUP_BUCKET || "").trim()) {
   if (flagEnabled(env.CHENDOC_REQUIRE_R2_BACKUP)) {
     fail("R2_BACKUP_BUCKET is required when CHENDOC_REQUIRE_R2_BACKUP=true and R2 uploads are configured.");
@@ -165,12 +248,21 @@ if (r2Configured && !String(env.R2_BACKUP_BUCKET || "").trim()) {
   }
 }
 
-if (!String(env.PUBLIC_SITE_URL || "").startsWith("https://")) {
-  fail("PUBLIC_SITE_URL must use https:// in production.");
-}
 if (!flagEnabled(env.CHENDOC_FORCE_HTTPS)) {
   fail("CHENDOC_FORCE_HTTPS=true is required in production.");
 }
+
+const adminOrigins = parseOrigins(env, "CHENDOC_ADMIN_ORIGINS");
+const r2CorsOrigins = parseOrigins(env, "CHENDOC_R2_CORS_ORIGINS");
+const apiOrigins = parseOrigins(env, "CHENDOC_API_ORIGIN");
+if (apiOrigins.length > 1) fail("CHENDOC_API_ORIGIN must contain exactly one HTTPS origin.");
+if (apiOrigins.length) note(`Public API origin: ${apiOrigins[0]}.`);
+if (adminOrigins.length) note(`Split admin origins: ${adminOrigins.join(", ")}.`);
+if (String(env.CHENDOC_SERVE_ADMIN || "true").trim().toLowerCase() === "false") {
+  if (!adminOrigins.length) fail("CHENDOC_ADMIN_ORIGINS is required when CHENDOC_SERVE_ADMIN=false.");
+  if (!apiOrigins.length) fail("CHENDOC_API_ORIGIN is required when CHENDOC_SERVE_ADMIN=false.");
+}
+if (r2CorsOrigins.length) note(`R2 browser origins: ${r2CorsOrigins.join(", ")}.`);
 
 function documentKeyVersions(env) {
   const versions = new Set([String(env.CHENDOC_DOCUMENT_KEY_VERSION || "v1")]);
@@ -230,9 +322,10 @@ if (databaseProvider === "mysql") {
     fail(`DATABASE_URL must be a mysql:// URL when DATABASE_PROVIDER=mysql. Current source: ${envSources.DATABASE_URL || "missing"}.`);
   } else {
     note(`MySQL database provider selected (${envSources.DATABASE_PROVIDER || "default mysql"}).`);
+    let connection;
     try {
       const mysql = await import("mysql2/promise");
-      const connection = await mysql.createConnection(env.DATABASE_URL);
+      connection = await mysql.createConnection(env.DATABASE_URL);
       const [rows] = await connection.query(`
         SELECT DISTINCT key_version FROM (
           SELECT content_json_key_version AS key_version FROM docs WHERE content_json_ciphertext IS NOT NULL
@@ -241,18 +334,49 @@ if (databaseProvider === "mysql") {
           UNION SELECT content_html_key_version FROM doc_versions WHERE content_html_ciphertext IS NOT NULL
         ) versions WHERE key_version IS NOT NULL
       `);
-      await connection.end();
       for (const row of rows) {
         if (!configuredDocumentVersions.has(String(row.key_version))) {
           fail(`Database uses document key version ${row.key_version}, but no key is configured for it.`);
         }
       }
+      const [settingRows] = await connection.query(
+        "SELECT `key`, `value`, `encrypted` FROM settings WHERE `key` IN ('r2.account_id','r2.access_key_id','r2.secret_access_key','r2.bucket','r2.public_url','r2.endpoint','r2.region')"
+      );
+      const databaseR2 = new Map();
+      for (const row of settingRows) {
+        const value = row.encrypted
+          ? decryptValue(row.value, String(env.CONFIG_ENCRYPTION_KEY))
+          : String(row.value ?? "");
+        databaseR2.set(String(row.key), value);
+      }
+      const effectiveR2 = {
+        accountId: databaseR2.get("r2.account_id") ?? String(env.R2_ACCOUNT_ID || ""),
+        accessKeyId: databaseR2.get("r2.access_key_id") ?? String(env.R2_ACCESS_KEY_ID || ""),
+        secretAccessKey: databaseR2.get("r2.secret_access_key") ?? String(env.R2_SECRET_ACCESS_KEY || ""),
+        bucket: databaseR2.get("r2.bucket") ?? String(env.R2_BUCKET || ""),
+        publicUrl: databaseR2.get("r2.public_url") ?? String(env.R2_PUBLIC_URL || "")
+      };
+      const missingEffectiveR2 = Object.entries(effectiveR2)
+        .filter(([, value]) => !String(value).trim())
+        .map(([name]) => name);
+      if (configuredR2Fields.length > 0 && missingEffectiveR2.length > 0) {
+        fail(`Effective R2 configuration is incomplete after database overrides. Missing: ${missingEffectiveR2.join(", ")}.`);
+      }
+      const [cryptoRows] = await connection.query(
+        "SELECT private_key_encrypted FROM crypto_keys WHERE status = 'active' ORDER BY id DESC LIMIT 1"
+      );
+      if (cryptoRows[0]?.private_key_encrypted) {
+        decryptValue(cryptoRows[0].private_key_encrypted, String(env.RSA_PRIVATE_KEY_ENCRYPTION_KEY));
+      }
+      note("Database encryption keys and effective R2 settings are readable.");
     } catch (error) {
       if (error && typeof error === "object" && ["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error.code)) {
-        note("Document key-version check deferred until the initial migration.");
+        note("Database key/configuration checks deferred until the initial migration.");
       } else {
-        fail(`Unable to verify document key versions: ${error instanceof Error ? error.message : String(error)}`);
+        fail(`Unable to verify database keys and configuration: ${error instanceof Error ? error.message : String(error)}`);
       }
+    } finally {
+      await connection?.end().catch(() => undefined);
     }
   }
 } else {

@@ -1,0 +1,48 @@
+/* 字段预览 */
+.form-field-preview {
+  padding: 10px 12px;
+  border: 1px solid var(--form-border);
+  border-radius: var(--form-radius);
+  font-size: 13px;
+  color: var(--form-muted);
+  background: var(--form-bg);
+  max-width: 400px;
+}
+
+.form-field-preview.radio,
+.form-field-preview.select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.form-field-preview.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.form-field-preview__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--form-text);
+}
+
+.form-field-preview__radio,
+.form-field-preview__checkbox {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--form-border);
+  flex-shrink: 0;
+}
+
+.form-field-preview__radio {
+  border-radius: 50%;
+}
+
+.form-field-preview__checkbox {
+  border-radius: 4px;
+}

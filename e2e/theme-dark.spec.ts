@@ -12,18 +12,21 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/admin\/docs/);
 }
 
+async function openThemeSettings(page: Page) {
+  await page.getByRole("link", { name: /系统管理/ }).click();
+  await expect(page).toHaveURL(/\/admin\/settings/);
+  await page.getByRole("button", { name: "站点外观" }).click();
+  await expect(page.getByRole("heading", { name: "主题设置" })).toBeVisible();
+}
+
 test.describe("深色模式测试", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await openThemeSettings(page);
   });
 
   test("TC-DARK-001: 主题切换 - Light → Dark", async ({ page }) => {
-    // 获取主题切换按钮 (根据实际实现调整选择器)
-    const themeButton = page.getByRole("button", { name: /主题|深色|暗色/i }).first();
-    await themeButton.click();
-
-    // 选择深色模式
-    await page.getByText("深色", { exact: true }).click();
+    await page.getByRole("button", { name: /深色模式/ }).click();
 
     // 验证深色主题生效
     const html = page.locator("html");
@@ -31,14 +34,8 @@ test.describe("深色模式测试", () => {
   });
 
   test("TC-DARK-002: 主题切换 - Dark → Light", async ({ page }) => {
-    // 先切换到深色
-    const themeButton = page.getByRole("button", { name: /主题|深色|暗色/i }).first();
-    await themeButton.click();
-    await page.getByText("深色", { exact: true }).click();
-
-    // 再切换到浅色
-    await themeButton.click();
-    await page.getByText("浅色", { exact: true }).click();
+    await page.getByRole("button", { name: /深色模式/ }).click();
+    await page.getByRole("button", { name: /浅色模式/ }).click();
 
     // 验证浅色主题
     const html = page.locator("html");
@@ -46,10 +43,7 @@ test.describe("深色模式测试", () => {
   });
 
   test("TC-DARK-003: 系统主题跟随", async ({ page }) => {
-    // 选择跟随系统
-    const themeButton = page.getByRole("button", { name: /主题/i }).first();
-    await themeButton.click();
-    await page.getByText("跟随系统", { exact: true }).click();
+    await page.getByRole("button", { name: /跟随系统/ }).click();
 
     // 验证跟随系统设置
     const html = page.locator("html");
@@ -67,10 +61,7 @@ test.describe("深色模式测试", () => {
   });
 
   test("TC-DARK-004: 主题持久化 - 刷新页面", async ({ page }) => {
-    // 切换到深色模式
-    const themeButton = page.getByRole("button", { name: /主题/i }).first();
-    await themeButton.click();
-    await page.getByText("深色", { exact: true }).click();
+    await page.getByRole("button", { name: /深色模式/ }).click();
 
     // 刷新页面
     await page.reload();
@@ -84,10 +75,7 @@ test.describe("深色模式测试", () => {
   });
 
   test("TC-DARK-005: 深色模式组件一致性", async ({ page }) => {
-    // 切换到深色模式
-    const themeButton = page.getByRole("button", { name: /主题/i }).first();
-    await themeButton.click();
-    await page.getByText("深色", { exact: true }).click();
+    await page.getByRole("button", { name: /深色模式/ }).click();
 
     // 验证关键组件样式
     const body = page.locator("body");

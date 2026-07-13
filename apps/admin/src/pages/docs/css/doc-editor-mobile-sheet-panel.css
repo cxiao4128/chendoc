@@ -1,0 +1,68 @@
+/* 弹出面板遮罩 */
+.doc-editor-page__mobile-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+  border: 0;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+/* 弹出面板 */
+.doc-editor-page__mobile-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 49;
+  display: grid;
+  gap: 14px;
+  max-height: min(82dvh, 760px);
+  overflow: auto;
+  border-radius: 16px 16px 0 0;
+  background: var(--cd-panel);
+  box-shadow: 0 -16px 34px rgba(15, 23, 42, 0.16);
+  padding: 12px 14px calc(24px + env(safe-area-inset-bottom));
+}
+
+.doc-editor-page__mobile-sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cd-border-strong);
+  margin: 0 auto;
+}
+
+.doc-editor-page__mobile-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doc-editor-page__mobile-sheet-head small,
+.doc-editor-page__mobile-sheet-head strong {
+  display: block;
+}
+
+.doc-editor-page__mobile-sheet-head small {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.doc-editor-page__mobile-sheet-head strong {
+  margin-top: 4px;
+  color: var(--cd-ink);
+  font-size: 18px;
+}
+
+.doc-editor-page__mobile-sheet-head button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+}

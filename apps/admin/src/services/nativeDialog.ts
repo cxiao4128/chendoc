@@ -24,6 +24,7 @@ export interface NativeDialogRequest {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  theme?: "auth";
   fields?: NativeDialogField[];
 }
 

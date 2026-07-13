@@ -25,6 +25,7 @@ const { docs, users } = await import("../../db/schema.js");
 const { generateDocUid, isValidDocUid } = await import("../../utils/docUid.js");
 const {
   createDoc,
+  getDocumentSchedule,
   getDocByUid,
   listDocVersionsByUid,
   listDocs,
@@ -32,8 +33,10 @@ const {
   listTrashDocs,
   listTrashDocsPage,
   softDeleteDoc,
+  setDocumentSchedule,
   updateDoc
 } = await import("./docs.service.js");
+const { getSearchSuggestions } = await import("./docs.search.service.js");
 
 const adminId = 1;
 const superAdminId = 2;
@@ -222,6 +225,30 @@ describe("document identity and access boundaries", () => {
     await expect(getDocByUid(userDoc.docUid, adminActor)).rejects.toThrow("无权访问该文档");
     expect((await listDocs(adminActor, "Super private needle"))).toHaveLength(0);
     await expect(getDocByUid(superDoc.docUid, adminActor)).rejects.toThrow("无权访问该文档");
+  });
+
+  test("search suggestions only include documents visible to the actor", async () => {
+    await createDoc(userId, { title: "Private own suggestion" }, userActor);
+    await createDoc(otherUserId, { title: "Private other suggestion" }, otherUserActor);
+
+    const own = await getSearchSuggestions(userActor, "Private", 10);
+    const all = await getSearchSuggestions(superAdminActor, "Private", 10);
+
+    expect(own.map((item) => item.keyword)).toEqual(["Private own suggestion"]);
+    expect(all.map((item) => item.keyword).sort()).toEqual([
+      "Private other suggestion",
+      "Private own suggestion"
+    ]);
+  });
+
+  test("document schedule reads enforce document ownership", async () => {
+    const doc = await createDoc(userId, { title: "Private schedule" }, userActor);
+    await setDocumentSchedule(userActor, doc.docUid, { scheduledAt: "2030-01-01T00:00:00.000Z" });
+
+    expect((await getDocumentSchedule(doc.docUid, userActor))?.scheduledAt?.toISOString())
+      .toBe("2030-01-01T00:00:00.000Z");
+    await expect(getDocumentSchedule(doc.docUid, otherUserActor)).rejects
+      .toMatchObject({ code: "DOC_FORBIDDEN" });
   });
 
   test("super admin can see all docs and editing user docs keeps owner_id unchanged", async () => {

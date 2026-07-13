@@ -2,7 +2,7 @@
 
 > 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
 
-当前版本 / Current version: `v3.0.1`
+当前版本 / Current version: `v3.3.0`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -45,6 +45,40 @@ npm run build
 ```
 
 构建会生成管理端产物，并复制到 `server/public/admin` 供后端托管。
+
+### Cloudflare Pages Git 自动部署
+
+Cloudflare Pages 连接 GitHub 仓库 `cxiao4128/chendoc` 后，`main` 每次 push 自动构建。一次性配置：
+
+```text
+Production branch: main
+Root directory: 留空
+Build command: npm run build:cloudflare-pages
+Build output directory: apps/admin/dist
+```
+
+Pages 环境变量：
+
+```env
+CHENDOC_CLOUDFLARE_BACKEND_ORIGIN=https://api.w92.pw
+CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN=https://d.w92.pw
+```
+
+现有 Direct Upload 项目不能原地转成 Git Integration；需新建 Git 集成项目并迁移 `d.w92.pw`。完整步骤见 `CLOUDFLARE_DEPLOY.md`。
+
+### 双部署包
+
+```bash
+npm run package:deployments -- --backend-origin=https://api.w92.pw --public-origin=https://d.w92.pw
+```
+
+生成：
+
+- `release/chendoc-3.3.0-cloudflare-pages.zip`：Cloudflare Pages 完整 SPA，包含后台、分享页和公开表单。
+- `release/chendoc-3.3.0-server.zip`：正常一体化服务器部署包。
+- `release/chendoc-3.3.0-SHA256SUMS.txt`：两包校验值。
+
+Cloudflare Pages 前端与 API 的 CORS、R2 来源和唯一展示域名配置见 `CLOUDFLARE_DEPLOY.md`。正常包继续使用同源部署，不需要配置跨域来源。
 
 ### 生产部署
 
@@ -253,7 +287,33 @@ Reverse proxy target:
 http://127.0.0.1:8985
 ```
 
+### Automatic Cloudflare Pages deployment
+
+Connect Cloudflare Pages to the GitHub repository `cxiao4128/chendoc`. Use production branch `main`, repository root, build command `npm run build:cloudflare-pages`, and output directory `apps/admin/dist`. Set:
+
+```env
+CHENDOC_CLOUDFLARE_BACKEND_ORIGIN=https://api.w92.pw
+CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN=https://d.w92.pw
+```
+
+Each push to `main` then deploys automatically. A Direct Upload project cannot be converted in place; create a Git-integrated project and move `d.w92.pw` after verification. See `CLOUDFLARE_DEPLOY.md`.
+
+### Dual deployment packages
+
+```bash
+npm run package:deployments -- --backend-origin=https://api.w92.pw --public-origin=https://d.w92.pw
+```
+
+This produces a complete Cloudflare Pages SPA ZIP, a normal all-in-one server ZIP, and a SHA-256 checksum file. The Pages SPA serves every visible route from `d.w92.pw`; dynamic requests go to `api.w92.pw`. See `CLOUDFLARE_DEPLOY.md` for deployment and exact-origin CORS/R2 settings.
+
 ### Changelog
+
+#### 3.1.0
+
+- Added `修改架构.md` to track modular refactor tasks, progress, risks, validation, and rollback notes.
+- Added the first modular architecture layer: `services/http`, `services/api`, `features`, `hooks`, `layouts`, and shared `types`.
+- Moved upload, export, and GitHub version-check logic behind domain services.
+- Added Gateway export action mappings so export APIs continue through the encrypted packet layer.
 
 #### 2.6.2
 

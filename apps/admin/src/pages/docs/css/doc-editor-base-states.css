@@ -1,0 +1,80 @@
+/* 加载骨架屏 */
+.doc-editor-page__loading {
+  display: grid;
+  gap: 14px;
+  max-width: 840px;
+  padding: 48px 32px;
+}
+
+.doc-editor-page__loading span:first-child {
+  width: 60%;
+  height: 34px;
+}
+
+.doc-editor-page__loading span {
+  height: 18px;
+}
+
+/* 编辑器骨架屏 */
+.doc-editor-page__editor-skeleton {
+  display: grid;
+  gap: 14px;
+  max-width: 880px;
+  min-height: calc(100dvh - 220px);
+  margin: 24px auto 72px;
+  border: 1px solid rgba(219, 228, 240, 0.86);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  padding: clamp(36px, 5vw, 58px) clamp(28px, 5vw, 64px);
+}
+
+.doc-editor-page__editor-skeleton span {
+  height: 18px;
+}
+
+.doc-editor-page__editor-skeleton span:first-child {
+  width: 62%;
+  height: 34px;
+}
+
+.doc-editor-page__editor-skeleton span:nth-child(3) {
+  width: 86%;
+}
+
+.doc-editor-page__editor-skeleton span:nth-child(4) {
+  width: 72%;
+}
+
+/* 错误状态 */
+.doc-editor-page__error {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: 760px;
+  border: 1px solid rgba(220, 38, 38, 0.24);
+  border-radius: 8px;
+  background: var(--cd-danger-soft);
+  margin: 32px;
+  padding: 18px;
+}
+
+.doc-editor-page__error strong {
+  color: var(--cd-danger);
+  font-size: 15px;
+}
+
+.doc-editor-page__error p {
+  margin: 0;
+  color: var(--cd-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.doc-editor-page__error-text {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--cd-radius);
+  background: var(--cd-danger-soft);
+  color: var(--cd-danger);
+  font-size: 12px;
+}

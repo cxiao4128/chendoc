@@ -58,6 +58,7 @@ const rawDb = databaseProvider === "mysql"
   : drizzleSqlite(sqlite!, { schema });
 
 export const db: any = rawDb;
+let sqliteTransactionTail: Promise<void> = Promise.resolve();
 
 export async function dbAll<T = any>(query: any): Promise<T[]> {
   return await measureRequestPhase("db", async () => {
@@ -113,14 +114,23 @@ export async function dbHealthCheck() {
 
 export async function dbTransaction<T>(callback: (tx: any) => Promise<T>): Promise<T> {
   if (databaseProvider === "sqlite") {
-    sqlite!.exec("BEGIN IMMEDIATE");
+    const previous = sqliteTransactionTail;
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    sqliteTransactionTail = previous.then(() => current);
+    await previous;
     try {
-      const result = await callback(db);
-      sqlite!.exec("COMMIT");
-      return result;
-    } catch (error) {
-      sqlite!.exec("ROLLBACK");
-      throw error;
+      sqlite!.exec("BEGIN IMMEDIATE");
+      try {
+        const result = await callback(db);
+        sqlite!.exec("COMMIT");
+        return result;
+      } catch (error) {
+        sqlite!.exec("ROLLBACK");
+        throw error;
+      }
+    } finally {
+      release();
     }
   }
 

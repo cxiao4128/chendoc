@@ -1,0 +1,57 @@
+.form-submissions .stats-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 20px 24px;
+  max-width: 800px;
+}
+
+.form-submissions .stat-card {
+  background: var(--cd-paper);
+  border: 1px solid var(--cd-border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.form-submissions .stat-value {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--cd-ink);
+  margin-bottom: 4px;
+}
+
+.form-submissions .stat-label {
+  font-size: 13px;
+  color: var(--cd-muted);
+}
+
+.form-submissions .tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--cd-border);
+  background: var(--cd-paper);
+}
+
+.form-submissions .tab {
+  padding: 12px 24px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cd-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+}
+
+.form-submissions .tab:hover {
+  color: var(--cd-text);
+}
+
+.form-submissions .tab.active {
+  color: var(--cd-accent);
+  border-bottom-color: var(--cd-accent);
+}

@@ -46,7 +46,10 @@ function confirm() {
     <dialog
       ref="dialogEl"
       class="native-dialog"
-      :class="{ 'is-danger': nativeDialogState.request?.danger }"
+      :class="{
+        'is-danger': nativeDialogState.request?.danger,
+        'is-auth': nativeDialogState.request?.theme === 'auth'
+      }"
       @cancel.prevent="cancel"
       @close="cancel"
     >

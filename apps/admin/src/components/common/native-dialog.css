@@ -45,8 +45,8 @@
 
 .native-dialog__close {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 0;
   border-radius: 8px;
@@ -71,7 +71,7 @@
 }
 
 .native-dialog.is-danger .native-dialog__panel {
-  border-color: #ffd6df;
+  border-color: var(--auth-danger-border, #ffd6df);
 }
 
 @media (max-width: 520px) {

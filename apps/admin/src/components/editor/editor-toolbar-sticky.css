@@ -1,0 +1,56 @@
+@media (max-width: 900px) {
+  .editor-toolbar-wrap {
+    position: sticky;
+    top: var(--doc-editor-toolbar-top, 0px);
+    z-index: 18;
+    border-bottom-color: var(--cd-border);
+    background: var(--cd-panel);
+  }
+
+  .editor-toolbar {
+    gap: 4px;
+    min-height: var(--doc-editor-toolbar-height, 54px);
+    padding: 8px 10px;
+    scroll-padding-inline: 10px;
+  }
+
+  .editor-toolbar button,
+  .editor-toolbar select {
+    border-color: var(--cd-border);
+    border-radius: 8px;
+    background: var(--cd-panel);
+    box-shadow: none;
+  }
+
+  .editor-toolbar button.active {
+    border-color: rgba(37, 99, 235, 0.34);
+    background: var(--cd-accent-soft);
+    color: var(--cd-accent-hover);
+  }
+
+}
+
+@media (max-width: 560px) {
+  .editor-toolbar {
+    flex-wrap: nowrap;
+    min-height: var(--doc-editor-toolbar-height, 54px);
+    overflow-y: hidden;
+    padding-inline: 10px;
+  }
+
+  .editor-toolbar button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .editor-toolbar select {
+    min-width: 80px;
+    height: 34px;
+    padding-inline: 8px;
+  }
+
+  .editor-toolbar__sep {
+    height: 18px;
+    margin-inline: 1px;
+  }
+}

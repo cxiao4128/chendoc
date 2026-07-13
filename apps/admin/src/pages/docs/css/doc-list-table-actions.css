@@ -1,0 +1,31 @@
+/* 操作按钮 */
+.doc-list-page__ops {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.doc-list-page__ops button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cd-muted);
+  cursor: pointer;
+}
+
+.doc-list-page__ops button:hover {
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+}
+
+.doc-list-page__ops button.is-active {
+  color: var(--cd-primary-hover);
+}
+
+/* 紧凑模式 */
+.doc-list-page__table.is-compact .doc-list-page__row {
+  min-height: 52px;
+}

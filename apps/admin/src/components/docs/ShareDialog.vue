@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { Check, Copy, ExternalLink, X } from "lucide-vue-next";
-import { updateShareApi, type ShareItem } from "../../api/shares";
+import { updateShareApi, type ShareItem } from "@/services/api";
 import { useShare } from "../../composables/useShare";
+import { absoluteShareUrlOf } from "../../utils/sharePath";
 import "./share-dialog.css";
 
 const open = defineModel<boolean>({ default: false });
@@ -15,7 +16,7 @@ const copySuccess = ref(false);
 const copyMessage = ref("");
 const { ensureShare } = useShare();
 
-const shareUrl = computed(() => share.value ? `${location.origin}/r/${share.value.shareCode}` : "");
+const shareUrl = computed(() => absoluteShareUrlOf(share.value));
 const isExpired = computed(() => !!share.value?.expireAt && new Date(share.value.expireAt).getTime() <= Date.now());
 const canUseLink = computed(() => !!share.value?.isEnabled
   && share.value.reviewStatus !== "pending"

@@ -111,6 +111,22 @@ describe("public share route cache headers", () => {
     expect(changed.headers.etag).not.toBe(oldEtag);
   });
 
+  test("revalidates share availability before returning 304", async () => {
+    const { share } = await createPublicShare("<p>cached content</p>");
+    const first = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+    const etag = String(first.headers.etag);
+
+    db.update(shares).set({ isEnabled: false }).where(eq(shares.id, share.id)).run();
+    const disabled = await app.inject({
+      method: "GET",
+      url: `/r/${share.shareCode}`,
+      headers: { "if-none-match": etag }
+    });
+
+    expect(disabled.statusCode).toBe(404);
+    expect(disabled.body).toContain("分享暂不可用或不存在");
+  });
+
   test("keeps short numeric share links and rejects invalid middle range", async () => {
     const { share } = await createPublicShare("<p>short code</p>");
 
@@ -151,6 +167,10 @@ describe("public share route cache headers", () => {
     expect(response.body).toContain("受保护的分享");
     expect(response.body).not.toContain("Confidential title");
     expect(response.headers["content-security-policy"]).not.toContain("unsafe-inline");
+    expect(response.body).toContain('data-share-form autocomplete="off"');
+    expect(response.body).toContain('name="chendoc-public-share-access-password"');
+    expect(response.body).toContain('autocomplete="section-public-share new-password"');
+    expect(response.body).not.toContain('autocomplete="current-password"');
   });
 
   test("serves share CSS as a cacheable static asset", async () => {

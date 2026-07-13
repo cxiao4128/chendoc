@@ -1,0 +1,43 @@
+.settings-page__profile-side {
+  padding: 0 16px;
+}
+
+.settings-page__profile-side section {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--cd-border);
+  padding: 16px 0;
+}
+
+.settings-page__profile-side footer {
+  color: var(--cd-muted);
+  padding: 14px 0 16px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.settings-page__side-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.settings-page__side-list div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-page__side-list dd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  color: #354263;
+  overflow-wrap: anywhere;
+  text-align: right;
+}

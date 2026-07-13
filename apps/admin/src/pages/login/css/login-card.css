@@ -1,0 +1,115 @@
+.login-page .auth-panel {
+  grid-column: 2;
+  width: min(312px, 100%);
+  justify-self: end;
+}
+
+.login-page .auth-card {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  gap: 10px;
+  min-height: 0;
+  border: 1px solid rgba(205, 213, 226, 0.95);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 8px rgba(42, 55, 82, 0.12);
+  padding: 25px;
+}
+
+.login-page .auth-card::before {
+  display: none;
+}
+
+.login-page .auth-card__header {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  justify-items: start;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.login-page .auth-brand-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.login-page .auth-brand__logo {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  object-fit: cover;
+  box-shadow: 0 3px 8px rgba(90, 100, 150, 0.1);
+}
+
+.login-page .auth-brand__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.login-page .auth-brand__copy strong {
+  color: var(--cd-ink);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.login-page .auth-brand__copy small {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.login-page .auth-heading {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  padding-top: 0;
+  text-align: left;
+}
+
+.login-page .auth-heading__title {
+  margin: 0;
+  color: #8179b8;
+  font-family: var(--cd-font-serif);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+.login-page .auth-heading__subtitle {
+  margin: 0;
+  color: #858bad;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.login-page .auth-risk-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0;
+  border: 1px solid rgba(5, 150, 105, 0.18);
+  border-radius: var(--cd-radius);
+  background: var(--cd-success-soft);
+  color: #047857;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-page .auth-risk-note.is-warning {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+}

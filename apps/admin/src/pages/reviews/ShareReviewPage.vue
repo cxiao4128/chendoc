@@ -2,7 +2,8 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Check, ClipboardCheck, ExternalLink, MoreHorizontal, RefreshCcw, Search, Send, ShieldCheck, X, XCircle } from "lucide-vue-next";
-import { listShareReviewsApi, reviewShareApi, type ShareReviewItem } from "../../api/shares";
+import { listShareReviewsApi, reviewShareApi, type ShareReviewItem } from "@/services/api";
+import { publicUrl } from "@/config/runtime";
 
 const router = useRouter();
 const shares = ref<ShareReviewItem[]>([]);
@@ -133,7 +134,7 @@ function resetFilters() {
 
 function openMore(item: ShareReviewItem) {
   if (item.reviewStatus === "approved" && item.shareCode) {
-    window.open(`/r/${item.shareCode}`, "_blank", "noopener,noreferrer");
+    window.open(publicUrl(`/r/${item.shareCode}`), "_blank", "noopener,noreferrer");
     return;
   }
   router.push(`/admin/docs/${item.docUid}`);

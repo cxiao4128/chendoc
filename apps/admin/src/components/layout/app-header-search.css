@@ -1,0 +1,46 @@
+.app-header__menu {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-paper);
+  color: var(--cd-text);
+  cursor: pointer;
+}
+
+.app-header__search {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  height: 48px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  color: var(--cd-muted);
+  padding: 0 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), 0 10px 24px rgba(82, 73, 146, 0.04);
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.app-header__search:focus-within {
+  border-color: var(--cd-accent);
+  background: var(--cd-panel);
+  box-shadow: 0 0 0 3px var(--cd-focus);
+}
+
+.app-header__search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--cd-text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.app-header__search input::placeholder {
+  color: #7e88a7;
+}

@@ -1,0 +1,48 @@
+.app-sidebar__nav {
+  display: grid;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.app-sidebar__nav a,
+.app-sidebar__disabled-link {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0 18px;
+  color: #56627f;
+  font-weight: 760;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.app-sidebar__nav span,
+.app-sidebar__account strong,
+.app-sidebar__account small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar__nav a:hover {
+  border-color: rgba(125, 107, 232, 0.18);
+  background: #fbfaff;
+  color: var(--cd-primary-hover);
+}
+
+.app-sidebar__nav a.router-link-active {
+  border-color: transparent;
+  background: linear-gradient(90deg, rgba(125, 107, 232, 0.14), rgba(125, 107, 232, 0.06));
+  color: var(--cd-primary-hover);
+}
+
+.app-sidebar__disabled-link {
+  cursor: not-allowed;
+  opacity: 0.86;
+}

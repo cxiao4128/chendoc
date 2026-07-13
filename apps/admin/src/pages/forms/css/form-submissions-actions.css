@@ -1,0 +1,29 @@
+/* 操作列 */
+.form-submissions .action-cell {
+  white-space: nowrap;
+}
+
+.form-submissions .action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cd-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-right: 4px;
+}
+
+.form-submissions .action-btn:hover {
+  background: var(--cd-paper-soft);
+  color: var(--cd-accent);
+}
+
+.form-submissions .action-btn.danger:hover {
+  background: var(--cd-danger-soft, #fef2f2);
+  color: var(--cd-danger);
+}

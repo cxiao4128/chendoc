@@ -1,8 +1,35 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { createHmac, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { db, dbAll, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { docs, formSubmissions, forms, users } from "../../db/schema.js";
+import { dbTransaction } from "../../db/client.js";
+import { docs, formSubmissions, forms, users } from "./forms.repo.js";
+export { docs, formSubmissions, forms, users };
+
+import {
+  getFormById,
+  getFormByUid as getFormByUidRaw,
+  listFormsByOwner,
+  listAllForms,
+  insertForm,
+  updateFormById,
+  deleteFormById,
+  updateFormSubmissionCount,
+  resetFormSubmissionCount,
+  deleteFormSubmissionsByFormId,
+  deleteFormSubmissionById,
+  getSubmissionById,
+  listSubmissionsByFormId,
+  listAllSubmissionsByFormId,
+  countSubmissionsByIp,
+  countSubmissionsBySubmitterId,
+  countRecentSubmissionsByIp,
+  insertSubmission,
+  cleanupExpiredSubmissions,
+  recalculateAllFormCounts,
+  updateFormCountIfMismatch,
+  getFormIpStats as getFormIpStatsRaw,
+  incrementFormViewCount,
+  incrementFormSubmissionCountCond,
+} from "./forms.repo.js";
 import { env } from "../../config/env.js";
 import { now } from "../../utils/date.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
@@ -55,7 +82,7 @@ export interface FormRecord {
   status: "draft" | "published" | "closed";
   maxSubmissions: number | null;
   allowMultiple: boolean;
-  exclusiveInfo: Record<string, string> | null;  // 提交后展示的专属信息
+  exclusiveInfo: Record<string, string> | null;
   privacyNotice: string | null;
   retentionDays: number | null;
   storeUserAgent: boolean;
@@ -100,13 +127,13 @@ const fieldSchema = z.object({
   order: z.number().int().min(0)
 }).superRefine((field, ctx) => {
   if (optionFieldTypes.has(field.type) && (!field.options || field.options.length === 0)) {
-    ctx.addIssue({ code: "custom", path: ["options"], message: `“${field.label}”至少需要一个选项` });
+    ctx.addIssue({ code: "custom", path: ["options"], message: `字段 "${field.label}" 至少需要一个选项` });
   }
   if (field.options && new Set(field.options).size !== field.options.length) {
-    ctx.addIssue({ code: "custom", path: ["options"], message: `“${field.label}”的选项不能重复` });
+    ctx.addIssue({ code: "custom", path: ["options"], message: `字段 "${field.label}" 的选项不能重复` });
   }
   if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
-    ctx.addIssue({ code: "custom", path: ["max"], message: `“${field.label}”的最大值不能小于最小值` });
+    ctx.addIssue({ code: "custom", path: ["max"], message: `字段 "${field.label}" 的最大值不能小于最小值` });
   }
 });
 
@@ -151,16 +178,6 @@ const updateFormSchema = z.object({
     storeUserAgent: z.boolean().optional()
   }).optional(),
   exclusiveInfo: exclusiveInfoSchema.optional()
-});
-
-const submitFormSchema = z.object({
-  data: z.record(z.string(), z.unknown()),
-  captchaId: z.string().optional(),
-  captchaCode: z.string().optional()
-});
-
-const exportSchema = z.object({
-  format: z.enum(["csv", "json", "xlsx"]).optional()
 });
 
 // ===== 工具函数 =====
@@ -312,7 +329,7 @@ export async function createForm(actor: Actor, input: unknown) {
   const formUid = generateFormUid();
   const createdAt = now();
 
-  const result = await dbRun(db.insert(forms).values({
+  const { lastInsertRowid } = await insertForm({
     formUid,
     title: body.title,
     description: body.description ?? null,
@@ -327,27 +344,21 @@ export async function createForm(actor: Actor, input: unknown) {
     storeUserAgent: body.config?.storeUserAgent ?? false,
     createdAt,
     updatedAt: createdAt
-  }));
+  });
 
-  return await getForm(Number(result.lastInsertRowid), actor);
+  return await getForm(Number(lastInsertRowid), actor);
 }
 
 export async function listForms(actor: Actor) {
-  const where = actor.isSuperAdmin
-    ? undefined
-    : eq(forms.ownerId, actor.id);
-
-  const rows = await dbAll(
-    db.select().from(forms).where(where).orderBy(sql`${forms.updatedAt} desc`)
-  );
+  const rows = actor.isSuperAdmin
+    ? await listAllForms()
+    : await listFormsByOwner(actor.id);
 
   return rows.map(safeFormRecord);
 }
 
 export async function getForm(id: number, actor?: Actor) {
-  const form = await dbGet<typeof forms.$inferSelect>(
-    db.select().from(forms).where(eq(forms.id, id)).limit(1)
-  );
+  const form = await getFormById(id);
   if (!form) throw new NotFoundError("表单不存在", "FORM_NOT_FOUND");
 
   if (actor) assertCanManageForm(actor, safeFormRecord(form));
@@ -355,18 +366,16 @@ export async function getForm(id: number, actor?: Actor) {
 }
 
 export async function getFormByUid(formUid: string) {
-  const form = await dbGet<typeof forms.$inferSelect>(
-    db.select().from(forms).where(eq(forms.formUid, formUid)).limit(1)
-  );
+  const form = await getFormByUidRaw(formUid);
   if (!form) throw new NotFoundError("表单不存在", "FORM_NOT_FOUND");
   return safeFormRecord(form);
 }
 
 export async function updateForm(id: number, actor: Actor, input: unknown) {
   const body = updateFormSchema.parse(input);
-  const form = await getForm(id, actor);
+  await getForm(id, actor);
 
-  const patch: Partial<typeof forms.$inferInsert> = { updatedAt: now() };
+  const patch: Record<string, unknown> = { updatedAt: now() };
   if (body.title !== undefined) patch.title = body.title;
   if (body.description !== undefined) patch.description = body.description ?? null;
   if (body.fields !== undefined) patch.fields = JSON.stringify(body.fields);
@@ -379,34 +388,29 @@ export async function updateForm(id: number, actor: Actor, input: unknown) {
     patch.exclusiveInfo = body.exclusiveInfo ? JSON.stringify(body.exclusiveInfo) : null;
   }
 
-  await dbRun(db.update(forms).set(patch).where(eq(forms.id, id)));
+  await updateFormById(id, patch);
   return await getForm(id, actor);
 }
 
 export async function deleteForm(id: number, actor: Actor) {
   const form = await getForm(id, actor);
   await dbTransaction(async (tx) => {
-    await dbRun(tx.delete(formSubmissions).where(eq(formSubmissions.formId, id)));
-    await dbRun(tx.delete(forms).where(eq(forms.id, id)));
+    await deleteFormSubmissionsByFormId(form.id, tx);
+    await deleteFormById(form.id, tx);
   });
   return { formUid: form.formUid };
 }
 
 export async function deleteSubmission(formId: number, submissionId: number, actor: Actor) {
-  // 验证表单权限
   await getForm(formId, actor);
 
   await dbTransaction(async (tx) => {
-    const submission = await dbGet<typeof formSubmissions.$inferSelect>(
-      tx.select().from(formSubmissions).where(eq(formSubmissions.id, submissionId)).limit(1)
-    );
+    const submission = await getSubmissionById(submissionId, tx);
     if (!submission) throw new NotFoundError("提交记录不存在", "SUBMISSION_NOT_FOUND");
     if (submission.formId !== formId) throw new ForbiddenError("提交记录不属于此表单", "SUBMISSION_FORBIDDEN");
 
-    await dbRun(tx.delete(formSubmissions).where(eq(formSubmissions.id, submissionId)));
-    await dbRun(tx.update(forms).set({
-      submissionCount: sql`CASE WHEN ${forms.submissionCount} > 0 THEN ${forms.submissionCount} - 1 ELSE 0 END`
-    }).where(eq(forms.id, formId)));
+    await deleteFormSubmissionById(submissionId, tx);
+    await updateFormSubmissionCount(formId, -1, tx);
   });
 
   return { ok: true };
@@ -415,14 +419,10 @@ export async function deleteSubmission(formId: number, submissionId: number, act
 export async function deleteAllFormSubmissions(formId: number, actor: Actor) {
   await getForm(formId, actor);
   return await dbTransaction(async (tx) => {
-    await dbRun(tx.update(forms).set({
-      submissionCount: sql`${forms.submissionCount}`
-    }).where(eq(forms.id, formId)));
-    const result = await dbRun(tx.delete(formSubmissions).where(eq(formSubmissions.formId, formId)));
+    await resetFormSubmissionCount(formId, tx);
+    const result = await deleteFormSubmissionsByFormId(formId, tx);
     if (result.changes > 0) {
-      await dbRun(tx.update(forms).set({
-        submissionCount: sql`CASE WHEN ${forms.submissionCount} >= ${result.changes} THEN ${forms.submissionCount} - ${result.changes} ELSE 0 END`
-      }).where(eq(forms.id, formId)));
+      await updateFormSubmissionCount(formId, -result.changes, tx);
     }
     return { deleted: result.changes };
   });
@@ -434,27 +434,18 @@ export async function publishForm(id: number, actor: Actor) {
     throw new BadRequestError("请先添加至少一个字段", "FORM_NO_FIELDS");
   }
 
-  await dbRun(db.update(forms).set({
-    status: "published",
-    updatedAt: now()
-  }).where(eq(forms.id, id)));
-
+  await updateFormById(id, { status: "published", updatedAt: now() });
   return await getForm(id, actor);
 }
 
 export async function closeForm(id: number, actor: Actor) {
-  const form = await getForm(id, actor);
-  await dbRun(db.update(forms).set({
-    status: "closed",
-    updatedAt: now()
-  }).where(eq(forms.id, id)));
+  await getForm(id, actor);
+  await updateFormById(id, { status: "closed", updatedAt: now() });
   return await getForm(id, actor);
 }
 
 export async function incrementFormView(formUid: string) {
-  await dbRun(
-    db.update(forms).set({ viewCount: sql`${forms.viewCount} + 1` }).where(eq(forms.formUid, formUid))
-  ).catch(() => undefined);
+  await incrementFormViewCount(formUid);
 }
 
 export async function submitForm(
@@ -465,7 +456,7 @@ export async function submitForm(
 ) {
   let form = await getFormByUid(formUid);
   if (form.retentionDays) {
-    await cleanupExpiredFormSubmissions(form);
+    await cleanupExpired(form);
     form = await getFormByUid(formUid);
   }
   if (Object.keys(data).length > 50 || Buffer.byteLength(JSON.stringify(data), "utf8") > 64 * 1024) {
@@ -481,27 +472,17 @@ export async function submitForm(
   const browserIdentity = anonymousIdentity(meta.submitterId || meta.ip, formUid, "browser");
   const networkIdentity = anonymousIdentity(meta.ip, formUid, "network");
   const submitterId = form.allowMultiple ? null : browserIdentity;
-  const recentRows = await dbAll<{ count: number }>(db
-    .select({ count: sql<number>`count(*)` })
-    .from(formSubmissions)
-    .where(and(
-      eq(formSubmissions.formId, form.id),
-      eq(formSubmissions.ip, `来源-${networkIdentity.slice(0, 12)}`),
-      gte(formSubmissions.submittedAt, new Date(Date.now() - 60_000))
-    )));
-  if (Number(recentRows[0]?.count ?? 0) >= IP_SUBMIT_LIMIT) {
+  const recentIpCount = await countRecentSubmissionsByIp(
+    form.id,
+    `来源-${networkIdentity.slice(0, 12)}`,
+    new Date(Date.now() - 60_000)
+  );
+  if (recentIpCount >= IP_SUBMIT_LIMIT) {
     throw new BadRequestError("提交过于频繁，请稍后再试", "FORM_RATE_LIMITED");
   }
-  const previousRows = await dbAll<{ count: number }>(db
-    .select({ count: sql<number>`count(*)` })
-    .from(formSubmissions)
-    .where(and(eq(formSubmissions.formId, form.id), eq(formSubmissions.ip, `来源-${networkIdentity.slice(0, 12)}`))));
-  const previousIpCount = Number(previousRows[0]?.count ?? 0);
+  const previousIpCount = await countSubmissionsByIp(form.id, `来源-${networkIdentity.slice(0, 12)}`);
   const previousSubmitterCount = submitterId
-    ? Number((await dbAll<{ count: number }>(db
-      .select({ count: sql<number>`count(*)` })
-      .from(formSubmissions)
-      .where(and(eq(formSubmissions.formId, form.id), eq(formSubmissions.submitterId, submitterId)))))[0]?.count ?? 0)
+    ? await countSubmissionsBySubmitterId(form.id, submitterId)
     : 0;
   const policy = new FormSubmissionPolicy(form, previousIpCount, previousSubmitterCount);
   policy.assertAvailable();
@@ -519,7 +500,6 @@ export async function submitForm(
     }
   }
 
-  // 验证提交数据
   const validationError = validateFormSubmission(form.fields, data);
   if (validationError) {
     throw new BadRequestError(validationError, "VALIDATION_ERROR");
@@ -528,43 +508,31 @@ export async function submitForm(
   const submittedAt = now();
   try {
     await dbTransaction(async (tx) => {
-    const currentRow = await dbGet<typeof forms.$inferSelect>(
-      tx.select().from(forms).where(eq(forms.id, form.id)).limit(1)
-    );
-    if (!currentRow) throw new NotFoundError("表单不存在", "FORM_NOT_FOUND");
-    const current = safeFormRecord(currentRow);
-    const duplicateRows = submitterId ? await dbAll<{ count: number }>(tx
-      .select({ count: sql<number>`count(*)` })
-      .from(formSubmissions)
-      .where(and(eq(formSubmissions.formId, form.id), eq(formSubmissions.submitterId, submitterId)))) : [];
-    const transactionalPolicy = new FormSubmissionPolicy(
-      current,
-      previousIpCount,
-      Number(duplicateRows[0]?.count ?? 0)
-    );
-    transactionalPolicy.assertAvailable();
-    transactionalPolicy.assertRepeatAllowed();
+      const currentRow = await getFormById(form.id, tx);
+      if (!currentRow) throw new NotFoundError("表单不存在", "FORM_NOT_FOUND");
+      const current = safeFormRecord(currentRow);
+      const duplicateCount = submitterId
+        ? await countSubmissionsBySubmitterId(form.id, submitterId, tx)
+        : 0;
+      const transactionalPolicy = new FormSubmissionPolicy(
+        current,
+        previousIpCount,
+        duplicateCount
+      );
+      transactionalPolicy.assertAvailable();
+      transactionalPolicy.assertRepeatAllowed();
 
-    const counterUpdate = current.maxSubmissions === null
-      ? await dbRun(tx.update(forms).set({ submissionCount: sql`${forms.submissionCount} + 1` }).where(and(
-          eq(forms.id, form.id),
-          eq(forms.status, "published")
-        )))
-      : await dbRun(tx.update(forms).set({ submissionCount: sql`${forms.submissionCount} + 1` }).where(and(
-          eq(forms.id, form.id),
-          eq(forms.status, "published"),
-          lt(forms.submissionCount, current.maxSubmissions)
-        )));
-    if (counterUpdate.changes !== 1) throw new BadRequestError("提交人数已满", "FORM_FULL");
+      const counterUpdate = await incrementFormSubmissionCountCond(form.id, current.maxSubmissions, tx);
+      if (counterUpdate.changes !== 1) throw new BadRequestError("提交人数已满", "FORM_FULL");
 
-    await dbRun(tx.insert(formSubmissions).values({
-      formId: form.id,
-      data: JSON.stringify(data),
-      ip: `来源-${networkIdentity.slice(0, 12)}`,
-      submitterId,
-      userAgent: form.storeUserAgent ? (meta.userAgent ?? "").slice(0, 512) || null : null,
-      submittedAt
-    }));
+      await insertSubmission({
+        formId: form.id,
+        data: JSON.stringify(data),
+        ip: `来源-${networkIdentity.slice(0, 12)}`,
+        submitterId,
+        userAgent: form.storeUserAgent ? (meta.userAgent ?? "").slice(0, 512) || null : null,
+        submittedAt
+      }, tx);
     });
   } catch (error) {
     if (error instanceof BadRequestError) throw error;
@@ -574,22 +542,15 @@ export async function submitForm(
     throw error;
   }
 
-  // 返回专属信息（如果有）
   return { ok: true, submittedAt, exclusiveInfo: form.exclusiveInfo };
 }
 
 export async function recalibrateFormSubmissionCounts() {
-  const rows = await dbAll<{ id: number; count: number }>(db
-    .select({ id: forms.id, count: sql<number>`count(${formSubmissions.id})` })
-    .from(forms)
-    .leftJoin(formSubmissions, eq(formSubmissions.formId, forms.id))
-    .groupBy(forms.id));
+  const rows = await recalculateAllFormCounts();
   let changed = 0;
   await dbTransaction(async (tx) => {
     for (const row of rows) {
-      const result = await dbRun(tx.update(forms)
-        .set({ submissionCount: Number(row.count) })
-        .where(and(eq(forms.id, row.id), sql`${forms.submissionCount} <> ${Number(row.count)}`)));
+      const result = await updateFormCountIfMismatch(row.id, row.count, tx);
       changed += result.changes;
     }
   });
@@ -597,30 +558,26 @@ export async function recalibrateFormSubmissionCounts() {
 }
 
 export async function runFormMaintenance() {
-  const rows = await dbAll<typeof forms.$inferSelect>(db.select().from(forms));
+  const allForms = await listAllForms();
   let expiredSubmissions = 0;
-  for (const row of rows) expiredSubmissions += await cleanupExpiredFormSubmissions(safeFormRecord(row));
+  for (const row of allForms) {
+    const form = safeFormRecord(row);
+    expiredSubmissions += await cleanupExpired(form);
+  }
   return { expiredSubmissions, recalibratedForms: await recalibrateFormSubmissionCounts() };
 }
 
 export async function listFormSubmissions(formId: number, actor: Actor, options?: { page?: number; pageSize?: number }) {
   let form = await getForm(formId, actor);
   if (form.retentionDays) {
-    await cleanupExpiredFormSubmissions(form);
+    await cleanupExpired(form);
     form = await getForm(formId, actor);
   }
   const page = Math.max(1, options?.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? 50));
   const offset = (page - 1) * pageSize;
 
-  const rows = await dbAll(
-    db.select().from(formSubmissions)
-      .where(eq(formSubmissions.formId, formId))
-      .orderBy(sql`${formSubmissions.submittedAt} desc`)
-      .limit(pageSize + 1)
-      .offset(offset)
-  );
-
+  const rows = await listSubmissionsByFormId(formId, pageSize, offset);
   const hasMore = rows.length > pageSize;
   const submissions = rows.slice(0, pageSize).map((row): SubmissionRecord => ({
     id: row.id,
@@ -642,16 +599,11 @@ export async function listFormSubmissions(formId: number, actor: Actor, options?
 export async function exportFormSubmissions(formId: number, actor: Actor, format: "csv" | "json" | "xlsx" = "csv") {
   let form = await getForm(formId, actor);
   if (form.retentionDays) {
-    await cleanupExpiredFormSubmissions(form);
+    await cleanupExpired(form);
     form = await getForm(formId, actor);
   }
 
-  const rows = await dbAll(
-    db.select().from(formSubmissions)
-      .where(eq(formSubmissions.formId, formId))
-      .orderBy(sql`${formSubmissions.submittedAt} desc`)
-  );
-
+  const rows = await listAllSubmissionsByFormId(formId);
   const submissions = rows.map((row): SubmissionRecord => ({
     id: row.id,
     formId: row.formId,
@@ -665,7 +617,6 @@ export async function exportFormSubmissions(formId: number, actor: Actor, format
   return { form, submissions, format };
 }
 
-// ===== IP 统计 =====
 export interface IpStats {
   ip: string;
   count: number;
@@ -675,21 +626,7 @@ export interface IpStats {
 
 export async function getFormIpStats(formId: number, actor: Actor) {
   await getForm(formId, actor);
-
-  const rows = await dbAll(
-    db.select({
-      ip: formSubmissions.ip,
-      count: sql<number>`count(*)`,
-      firstAt: sql<Date>`min(${formSubmissions.submittedAt})`,
-      lastAt: sql<Date>`max(${formSubmissions.submittedAt})`
-    })
-      .from(formSubmissions)
-      .where(eq(formSubmissions.formId, formId))
-      .groupBy(formSubmissions.ip)
-      .orderBy(sql`count(*) desc`)
-      .limit(100)
-  );
-
+  const rows = await getFormIpStatsRaw(formId);
   return rows.map(row => ({
     ip: row.ip,
     count: row.count,
@@ -698,16 +635,13 @@ export async function getFormIpStats(formId: number, actor: Actor) {
   })) as IpStats[];
 }
 
-async function cleanupExpiredFormSubmissions(form: FormRecord) {
+async function cleanupExpired(form: FormRecord) {
   if (!form.retentionDays) return 0;
   const cutoff = new Date(Date.now() - form.retentionDays * 24 * 60 * 60 * 1000);
   return await dbTransaction(async (tx) => {
-    const removed = await dbRun(tx.delete(formSubmissions)
-      .where(and(eq(formSubmissions.formId, form.id), lt(formSubmissions.submittedAt, cutoff))));
+    const removed = await cleanupExpiredSubmissions(form.id, cutoff, tx);
     if (removed.changes > 0) {
-      await dbRun(tx.update(forms).set({
-        submissionCount: sql`CASE WHEN ${forms.submissionCount} >= ${removed.changes} THEN ${forms.submissionCount} - ${removed.changes} ELSE 0 END`
-      }).where(eq(forms.id, form.id)));
+      await updateFormSubmissionCount(form.id, -removed.changes, tx);
     }
     return removed.changes;
   });

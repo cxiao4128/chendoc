@@ -60,7 +60,7 @@ test.describe("移动端响应式测试", () => {
 
   test("移动端 FAB 按钮可见性", async ({ page }) => {
     await loginMobile(page);
-    // 在文档首页应显示 FAB（因为不是 docs home）
+    // 在文档首页应显示 FAB
     await expect(page.locator(".mobile-shell__fab")).toBeVisible();
   });
 
@@ -73,7 +73,7 @@ test.describe("移动端响应式测试", () => {
     await expect(page.locator(".mobile-shell__tabbar")).not.toBeVisible();
     await expect(page.locator(".mobile-shell__fab")).not.toBeVisible();
     // 应显示编辑器内容
-    await expect(page.locator(".doc-editor-page__left, .doc-editor-container")).toBeVisible();
+    await expect(page.locator(".doc-editor-page__mobile-canvas")).toBeVisible();
   });
 
   test("移动端视口切换 - 390px 宽度", async ({ page }) => {
@@ -100,10 +100,10 @@ test.describe("移动端响应式测试", () => {
     await loginMobile(page);
     // 导航到表单
     await page.getByRole("link", { name: "收集表" }).click();
-    // 移动端应显示步骤导航
-    await expect(page.getByRole("navigation", { name: "手机端表单编辑步骤" })).toBeVisible();
     // 新建表单
     await page.getByRole("button", { name: "新建表单" }).first().click();
+    // 移动端应显示步骤导航
+    await expect(page.getByRole("navigation", { name: "手机端表单编辑步骤" })).toBeVisible();
     await expect(page.locator(".form-canvas__title-input")).toBeVisible();
     await page.locator(".form-canvas__title-input").fill("移动端测试表单");
     // 题型选择
@@ -117,7 +117,9 @@ test.describe("移动端响应式测试", () => {
 
   test("移动端 SessionStatusBanner 可见", async ({ page }) => {
     await loginMobile(page);
-    // SessionStatusBanner 应显示
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent("chendoc:session-status", { detail: { status: "expiring" } }));
+    });
     await expect(page.locator(".session-status-banner, [class*='session']")).toBeVisible();
   });
 

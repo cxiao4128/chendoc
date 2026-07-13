@@ -24,7 +24,16 @@ const { db, sqlite } = await import("../../db/client.js");
 const { docVersions, operationLogs, shares, users } = await import("../../db/schema.js");
 const { decryptDocumentRecord } = await import("../../utils/documentCrypto.js");
 const { createDoc, getDoc, listDocs, publishDoc, restoreDocVersion, softDeleteDoc, updateDoc } = await import("../docs/docs.service.js");
-const { createOrGetShare, getPublicShare, publicDocPayload, reviewUserShare, updateShare, verifySharePassword } = await import("./shares.service.js");
+const {
+  createOrGetShare,
+  getPublicShare,
+  publicDocPayload,
+  reviewUserShare,
+  updateShare,
+  verifyShareAccessToken,
+  verifySharePassword
+} = await import("./shares.service.js");
+const { renderSharePage } = await import("../public/public.service.js");
 
 const adminId = 1;
 const userId = 2;
@@ -112,11 +121,13 @@ describe("share public access boundary", () => {
 
   test("enabled shares expose docs without extra publish step", async () => {
     const doc = await createDocument();
+    const revisionBeforeSharing = doc.revision;
     const share = await createShare(doc.id, { isEnabled: true });
 
     const draftData = await getPublicShare(share.shareCode);
     expect(draftData?.doc.status).toBe("published");
     expect(draftData?.doc.contentHtml).toBe("<p>private content</p>");
+    expect((await getDoc(doc.id, { id: adminId, role: "admin" })).revision).toBe(revisionBeforeSharing);
 
     await publishDoc(doc.id, adminId);
     const data = await getPublicShare(share.shareCode);
@@ -140,6 +151,18 @@ describe("share public access boundary", () => {
     expect(nextShare.shareCode).toBe(112);
   });
 
+  test("concurrent admin share creation retries share code collisions", async () => {
+    const firstDoc = await createDocument();
+    const secondDoc = await createDocument();
+
+    const created = await Promise.all([
+      createShare(firstDoc.id, { isEnabled: true }),
+      createShare(secondDoc.id, { isEnabled: true })
+    ]);
+
+    expect(created.map((share) => share.shareCode).sort((a, b) => a - b)).toEqual([111, 112]);
+  });
+
   test("public share lookup ignores legacy random share token values", async () => {
     const doc = await createDocument();
     const share = await createShare(doc.id, { isEnabled: true });
@@ -147,6 +170,59 @@ describe("share public access boundary", () => {
 
     expect(await getPublicShare("random-token-should-not-open")).toBeNull();
     expect(await getPublicShare(share.shareCode)).toBeTruthy();
+  });
+
+  test("admin custom slugs resolve public pages and canonical links", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true, customSlug: "My-Doc" });
+
+    expect(share.customSlug).toBe("my-doc");
+    expect((await getPublicShare("my-doc"))?.share.id).toBe(share.id);
+
+    const page = await renderSharePage("my-doc");
+    expect(page.statusCode).toBe(200);
+    expect(page.html).toContain("http://127.0.0.1:8985/r/my-doc");
+  });
+
+  test("admin can change and clear a custom slug", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true, customSlug: "first-slug" });
+
+    await updateShare(share.id, { customSlug: "second-slug" });
+    expect(await getPublicShare("first-slug")).toBeNull();
+    expect((await getPublicShare("second-slug"))?.share.id).toBe(share.id);
+
+    await updateShare(share.id, { customSlug: null });
+    expect(await getPublicShare("second-slug")).toBeNull();
+    expect((await getPublicShare(share.shareCode))?.share.id).toBe(share.id);
+  });
+
+  test("admin can save an unchanged custom slug", async () => {
+    const share = await createShare((await createDocument()).id, {
+      isEnabled: true,
+      customSlug: "stable-slug"
+    });
+
+    await expect(updateShare(share.id, { customSlug: "stable-slug" })).resolves.toBeTruthy();
+    expect((await getPublicShare("stable-slug"))?.share.id).toBe(share.id);
+  });
+
+  test("pure numeric custom slugs cannot shadow generated share codes", async () => {
+    await expect(createShare((await createDocument()).id, {
+      isEnabled: true,
+      customSlug: "112"
+    })).rejects.toMatchObject({ code: "CUSTOM_SLUG_NUMERIC_FORBIDDEN" });
+  });
+
+  test("duplicate custom slugs are rejected before database write", async () => {
+    const first = await createShare((await createDocument()).id, { isEnabled: true, customSlug: "taken-slug" });
+    const secondDoc = await createDocument();
+
+    await expect(createShare(secondDoc.id, { isEnabled: true, customSlug: "taken-slug" }))
+      .rejects.toMatchObject({ code: "CUSTOM_SLUG_TAKEN" });
+
+    const rows = db.select().from(shares).where(eq(shares.customSlug, first.customSlug)).all();
+    expect(rows).toHaveLength(1);
   });
 
   test("public share lookup rejects numeric codes outside both code pools", async () => {
@@ -208,6 +284,20 @@ describe("share public access boundary", () => {
     expect(tokenOf(disabled)).toBeUndefined();
   });
 
+  test("changing a share password invalidates existing access tokens", async () => {
+    const doc = await createDocument();
+    const share = await createShare(doc.id, { isEnabled: true, password: "first password" });
+    const accepted = await verifySharePassword(share.shareCode, "first password");
+    const token = tokenOf(accepted);
+    expect(token).toBeTruthy();
+    expect(verifyShareAccessToken(token, share, doc.id)).toBe(true);
+
+    await updateShare(share.id, { password: "second password" });
+    const updated = db.select().from(shares).where(eq(shares.id, share.id)).limit(1).get()!;
+
+    expect(verifyShareAccessToken(token, updated, doc.id)).toBe(false);
+  });
+
   test("document detail does not expose share password hash", async () => {
     const doc = await createDocument();
     await createShare(doc.id, { isEnabled: true, password: "correct horse" });
@@ -231,7 +321,7 @@ describe("share public access boundary", () => {
     const doc = await createDocument();
     const version = db.select().from(docVersions).where(eq(docVersions.docId, doc.id)).limit(1).get();
 
-    expect(version?.contentHtml).toBe("");
+    expect(version?.contentHtml).toBe("[encrypted]");
     expect(decryptDocumentRecord(version!).contentHtml).toBe("<p></p>");
 
     await restoreDocVersion(doc.id, version!.id, adminId, { id: adminId, role: "admin" });

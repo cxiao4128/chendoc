@@ -3,6 +3,7 @@ import { buildClientRiskHeader } from "../security/runtimeGuard";
 import { gatewayClientRequest, shouldUseGateway } from "../gateway/client";
 import { apiPaths, isCredentialEndpoint, resolveApiPath } from "./endpoints";
 import { recordClientError } from "../utils/clientTelemetry";
+import { backendFetch } from "../config/runtime";
 
 const DEFAULT_ERROR_MESSAGE = "请求失败";
 const LOGIN_NOTICE_KEY = "chendoc_login_notice";
@@ -135,7 +136,7 @@ async function refreshAuthSession() {
 }
 
 async function directRequest(url: string, options: RequestInit, headers: Headers) {
-  const response = await fetch(url, { ...options, headers });
+  const response = await backendFetch(url, { ...options, headers });
   const contentType = response.headers.get("Content-Type") || "";
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
   return { response, payload };

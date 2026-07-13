@@ -1,0 +1,11 @@
+/**
+ * doc-editor-body.css - 编辑正文区域样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./doc-editor-body-layout.css";
+@import "./doc-editor-body-share.css";
+@import "./doc-editor-body-versions.css";
+@import "./doc-editor-body-schedule.css";
+@import "./doc-editor-body-responsive.css";

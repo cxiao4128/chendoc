@@ -1,0 +1,118 @@
+.share-review-page__search {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(126px, 1fr)) auto minmax(180px, 0.8fr);
+  gap: 12px;
+  max-width: none;
+  border: 1px solid var(--cd-border);
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+  padding: 18px 20px;
+}
+
+.share-review-page__search label {
+  display: grid;
+  gap: 6px;
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.share-review-page__search input,
+.share-review-page__search select {
+  height: 36px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fbfcff;
+  color: var(--cd-text);
+  padding: 0 10px;
+}
+
+.share-review-page__search select {
+  cursor: pointer;
+}
+
+.share-review-page__table {
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: #fff;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.share-review-page__table-head,
+.share-review-page__table article {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.05fr) 118px 100px 150px 112px 110px minmax(128px, 0.75fr) minmax(220px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 0 18px;
+}
+
+.share-review-page__table-head {
+  min-height: 50px;
+  border-bottom: 1px solid var(--cd-border);
+  background: #fbfcff;
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.share-review-page__table article {
+  min-height: 62px;
+  border-bottom: 1px solid var(--cd-border);
+  color: var(--cd-muted);
+  font-size: 13px;
+}
+
+.share-review-page__table article:last-child {
+  border-bottom: 0;
+}
+
+.share-review-page__table article:hover {
+  background: #fbfaff;
+}
+
+.share-review-page__table strong {
+  overflow: hidden;
+  color: var(--cd-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-review-page__table .is-scope {
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+  padding: 4px 9px;
+  font-weight: 800;
+}
+
+.share-review-page__table .share-review-page__status {
+  width: fit-content;
+  font-weight: 800;
+}
+
+.share-review-page__table .share-review-page__actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.share-review-page__table .share-review-page__actions .cd-button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.share-review-page__table .share-review-page__actions > button:not(.cd-button) {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cd-muted);
+  cursor: pointer;
+}

@@ -31,7 +31,8 @@ test("登录、编辑、自动保存、分享、退出", async ({ page }) => {
   await shareToggle.check();
   await expect(page.getByText(/公开分享中|等待审核|分享链接/).first()).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole("button", { name: "退出登录" }).first().click();
+  await page.getByRole("button", { name: "当前用户" }).click();
+  await page.getByRole("menuitem", { name: "退出登录" }).click();
   await expect(page).toHaveURL(/\/login/);
 });
 

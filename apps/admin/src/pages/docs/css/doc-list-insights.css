@@ -1,0 +1,61 @@
+/**
+ * doc-list-insights.css - 文档列表页统计卡片样式
+ *
+ * 重构说明：
+ * - 统计概览区域（文档总数、已发布、已分享等）
+ */
+.doc-list-page__insights {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius);
+  background: var(--cd-border);
+  margin-bottom: 18px;
+}
+
+.doc-list-page__insights button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  min-height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: var(--cd-panel);
+  box-shadow: none;
+  padding: 14px 16px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.doc-list-page__insights button:hover,
+.doc-list-page__insights button.is-active {
+  background: var(--cd-primary-soft);
+}
+
+.doc-list-page__insights button.is-active span,
+.doc-list-page__insights button.is-active strong {
+  color: var(--cd-primary-hover);
+}
+
+.doc-list-page__insights span {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.doc-list-page__insights strong {
+  color: var(--cd-ink);
+  font-size: 18px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .doc-list-page__insights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

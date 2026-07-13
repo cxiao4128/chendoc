@@ -1,0 +1,80 @@
+/* ChenDoc 收集表编辑器：沿用全局产品 token。 */
+.form-editor {
+  --form-bg: var(--cd-bg);
+  --form-paper: var(--cd-panel);
+  --form-surface: var(--cd-surface);
+  --form-text: var(--cd-text);
+  --form-text-secondary: var(--cd-text-secondary);
+  --form-text-placeholder: #667085;
+  --form-border: var(--cd-border);
+  --form-border-light: #eef0f5;
+  --form-muted: var(--cd-muted);
+  --form-faint: #667085;
+  --form-primary: var(--cd-primary);
+  --form-primary-hover: var(--cd-primary-hover);
+  --form-primary-soft: var(--cd-primary-soft);
+  --form-accent: var(--cd-accent);
+  --form-accent-hover: var(--cd-accent-hover);
+  --form-accent-soft: var(--cd-accent-soft);
+  --form-danger: var(--cd-danger);
+  --form-danger-soft: var(--cd-danger-soft);
+  --form-warning: var(--cd-warning);
+  --form-success: var(--cd-success);
+  --form-success-soft: var(--cd-success-soft);
+  --form-radius: 8px;
+  --form-radius-lg: 12px;
+  --form-radius-xl: 16px;
+  --form-shadow: var(--cd-shadow-soft);
+  --form-shadow-lg: var(--cd-shadow);
+  --form-shadow-card: var(--cd-shadow-soft);
+  --form-font: var(--cd-font-sans);
+}
+
+/* ============================================
+   主容器
+   ============================================ */
+.form-editor {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--form-bg);
+  font-family: var(--form-font);
+  color: var(--form-text);
+  overflow: hidden;
+}
+
+.form-header__status,
+.form-settings-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid var(--form-border);
+  border-radius: 999px;
+  background: var(--form-bg);
+  color: var(--form-text-secondary);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.form-header__status.is-published {
+  border-color: rgba(5, 150, 105, 0.28);
+  background: var(--form-success-soft);
+  color: var(--form-success);
+}
+
+.form-header__status.is-closed {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: #fffbeb;
+  color: var(--form-warning);
+}
+
+
+/* ============================================
+   编辑器主体
+   ============================================ */
+.form-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}

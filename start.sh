@@ -29,7 +29,7 @@ fi
 
 PM2="$(pwd)/node_modules/.bin/pm2"
 if [ ! -x "$PM2" ]; then
-  echo "Pinned local PM2 is missing. Run npm ci --omit=dev during deployment."
+  echo "Pinned local PM2 is missing. Run npm ci --include=dev --workspaces --include-workspace-root during deployment."
   exit 1
 fi
 

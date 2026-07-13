@@ -7,20 +7,8 @@
  * - 乐观更新
  * - 版本冲突检测
  */
-import { ref, computed } from "vue";
 import { useSWR, type SWROptions } from "./useSWR";
 import type { DocDetail, DocSummary } from "../api/docs";
-
-interface DocCacheOptions {
-  /** 详情缓存 TTL，默认 2 分钟 */
-  detailTtl?: number;
-  /** 列表缓存 TTL，默认 1 分钟 */
-  listTtl?: number;
-  /** 详情缓存最大数量，默认 200 */
-  maxDetailCache?: number;
-  /** 列表缓存最大数量，默认 100 */
-  maxListCache?: number;
-}
 
 // 全局缓存统计
 const cacheStats = {

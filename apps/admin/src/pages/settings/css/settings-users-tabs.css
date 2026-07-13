@@ -1,0 +1,120 @@
+.settings-page__tab-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--cd-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 18px;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.settings-page__tab-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--cd-border);
+  padding-bottom: 14px;
+}
+
+.settings-page__tab-panel-head small {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.settings-page__tab-panel-head h3 {
+  margin: 4px 0 0;
+  color: var(--cd-ink);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.settings-page__tab-panel-head p {
+  max-width: 68ch;
+  margin: 7px 0 0;
+  color: var(--cd-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.settings-page__permission-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-page__permission-grid article {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.settings-page__permission-grid svg {
+  color: var(--cd-primary-hover);
+}
+
+.settings-page__permission-grid strong {
+  color: var(--cd-text);
+  font-size: 14px;
+}
+
+.settings-page__permission-grid span {
+  color: var(--cd-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-page__role-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-page__detail-log-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+}
+
+.settings-page__detail-log-table article {
+  display: grid;
+  grid-template-columns: 180px 128px 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 46px;
+  border-bottom: 1px solid var(--cd-border);
+  padding: 0 12px;
+}
+
+.settings-page__detail-log-table article:last-child {
+  border-bottom: 0;
+}
+
+.settings-page__detail-log-table time,
+.settings-page__detail-log-table span,
+.settings-page__detail-log-table em {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.settings-page__detail-log-table strong {
+  width: fit-content;
+  border-radius: 999px;
+  background: #edfdf5;
+  color: var(--cd-success);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.settings-page__detail-log-table strong.is-danger {
+  background: var(--cd-danger-soft);
+  color: var(--cd-danger);
+}

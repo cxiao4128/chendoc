@@ -16,6 +16,9 @@ import {
 } from "../api/docs";
 import { useDocStore } from "../stores/doc";
 
+const sharedVersions = ref<DocVersion[]>([]);
+const sharedSelectedVersion = ref<DocVersion | null>(null);
+
 export interface UseDocVersionsOptions {
   /** 加载完成回调 */
   onLoaded?: (versions: DocVersion[]) => void;
@@ -43,6 +46,7 @@ export function useDocVersions(options: UseDocVersionsOptions = {}) {
     try {
       const response = await listDocVersionsApi(docUid);
       versions.value = response.versions;
+      sharedVersions.value = response.versions;
       options.onLoaded?.(response.versions);
       return response.versions;
     } catch (err) {
@@ -58,6 +62,7 @@ export function useDocVersions(options: UseDocVersionsOptions = {}) {
   // ============= 加载版本预览 =============
   async function previewVersion(docUid: string, version: DocVersion): Promise<DocVersionPreview> {
     selectedVersion.value = version;
+    sharedSelectedVersion.value = version;
     previewLoading.value = true;
     error.value = null;
 
@@ -133,13 +138,16 @@ export function useDocVersions(options: UseDocVersionsOptions = {}) {
   // ============= 清除选择 =============
   function clearSelection(): void {
     selectedVersion.value = null;
+    sharedSelectedVersion.value = null;
     versionPreview.value = null;
   }
 
   // ============= 重置状态 =============
   function reset(): void {
     versions.value = [];
+    sharedVersions.value = [];
     selectedVersion.value = null;
+    sharedSelectedVersion.value = null;
     versionPreview.value = null;
     loading.value = false;
     previewLoading.value = false;
@@ -149,16 +157,18 @@ export function useDocVersions(options: UseDocVersionsOptions = {}) {
 
   // ============= 辅助方法 =============
   function getVersionById(id: number): DocVersion | undefined {
-    return versions.value.find((v) => v.id === id);
+    const source = versions.value.length ? versions.value : sharedVersions.value;
+    return source.find((v) => v.id === id);
   }
 
   function getLatestVersion(): DocVersion | undefined {
-    if (versions.value.length === 0) return undefined;
-    return versions.value[0];
+    const source = versions.value.length ? versions.value : sharedVersions.value;
+    if (source.length === 0) return undefined;
+    return source[0];
   }
 
   function isCurrentVersion(version: DocVersion): boolean {
-    return selectedVersion.value?.id === version.id;
+    return selectedVersion.value?.id === version.id || sharedSelectedVersion.value?.id === version.id;
   }
 
   // ============= 格式化 =============

@@ -1,0 +1,14 @@
+@media (max-width: 540px) {
+  .public-form-main {
+    width: min(100% - 24px, 680px);
+    padding: 32px 0 48px;
+  }
+
+  .public-form-card,
+  .public-form-state {
+    border-radius: 14px;
+    padding: 20px;
+  }
+
+  .public-form-city { grid-template-columns: 1fr; }
+}

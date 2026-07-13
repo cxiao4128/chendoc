@@ -362,6 +362,105 @@ function migrateSqlite() {
       created_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#3b82f6',
+      parent_id INTEGER,
+      owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      doc_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tag_hierarchy (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      parent_tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      child_tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_uid TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT,
+      html TEXT NOT NULL DEFAULT '',
+      content_json TEXT,
+      sort INTEGER NOT NULL DEFAULT 0,
+      tags TEXT NOT NULL DEFAULT '[]',
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      is_built_in INTEGER NOT NULL DEFAULT 0,
+      usage_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS access_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      visitor_hash TEXT,
+      ip_hash TEXT,
+      user_agent TEXT,
+      device TEXT,
+      viewed_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS jwt_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key_id TEXT NOT NULL UNIQUE,
+      secret TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS totp_failures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      dimension TEXT NOT NULL,
+      dimension_value TEXT NOT NULL,
+      fail_count INTEGER NOT NULL DEFAULT 1,
+      first_failed_at INTEGER NOT NULL,
+      last_failed_at INTEGER NOT NULL,
+      locked_until INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS search_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      query TEXT NOT NULL,
+      query_hash TEXT NOT NULL,
+      search_mode TEXT NOT NULL DEFAULT 'fulltext',
+      result_count INTEGER NOT NULL DEFAULT 0,
+      search_time INTEGER NOT NULL DEFAULT 0,
+      ip_hash TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS doc_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_uid TEXT NOT NULL REFERENCES docs(doc_uid) ON DELETE CASCADE,
+      parent_id INTEGER,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      selection_start INTEGER,
+      selection_end INTEGER,
+      selection_text TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS doc_comment_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      comment_id INTEGER NOT NULL REFERENCES doc_comments(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reaction TEXT NOT NULL DEFAULT 'like',
+      created_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS docs_parent_idx ON docs(parent_id);
     CREATE INDEX IF NOT EXISTS docs_deleted_idx ON docs(deleted_at);
     CREATE INDEX IF NOT EXISTS docs_space_idx ON docs(space_id);
@@ -395,7 +494,38 @@ function migrateSqlite() {
     CREATE INDEX IF NOT EXISTS logs_action_created_idx ON logs(action, created_at);
     CREATE INDEX IF NOT EXISTS logs_doc_uid_idx ON logs(doc_uid);
     CREATE INDEX IF NOT EXISTS logs_created_idx ON logs(created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_tags_name_owner ON tags(name, owner_id);
+    CREATE INDEX IF NOT EXISTS tags_owner_idx ON tags(owner_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_tag_hierarchy_parent_child ON tag_hierarchy(parent_tag_id, child_tag_id);
+    CREATE INDEX IF NOT EXISTS tag_hierarchy_parent_idx ON tag_hierarchy(parent_tag_id);
+    CREATE INDEX IF NOT EXISTS tag_hierarchy_child_idx ON tag_hierarchy(child_tag_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_templates_name_owner ON templates(title, owner_id);
+    CREATE INDEX IF NOT EXISTS templates_owner_idx ON templates(owner_id);
+    CREATE INDEX IF NOT EXISTS access_logs_target_idx ON access_logs(target_type, target_id);
+    CREATE INDEX IF NOT EXISTS access_logs_ip_hash_idx ON access_logs(ip_hash);
+    CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(viewed_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_jwt_keys_key_id ON jwt_keys(key_id);
+    CREATE INDEX IF NOT EXISTS jwt_keys_active_idx ON jwt_keys(is_active);
+    CREATE INDEX IF NOT EXISTS totp_failures_user_idx ON totp_failures(user_id);
+    CREATE INDEX IF NOT EXISTS totp_failures_time_idx ON totp_failures(last_failed_at);
+    CREATE INDEX IF NOT EXISTS search_history_user_idx ON search_history(user_id);
+    CREATE INDEX IF NOT EXISTS search_history_query_hash_idx ON search_history(query_hash);
+    CREATE INDEX IF NOT EXISTS search_history_created_idx ON search_history(created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_search_history_user_query ON search_history(user_id, query_hash);
+    CREATE INDEX IF NOT EXISTS doc_comments_doc_uid_idx ON doc_comments(doc_uid);
+    CREATE INDEX IF NOT EXISTS doc_comments_user_idx ON doc_comments(user_id);
+    CREATE INDEX IF NOT EXISTS doc_comments_parent_idx ON doc_comments(parent_id);
+    CREATE INDEX IF NOT EXISTS doc_comments_created_idx ON doc_comments(created_at);
+    CREATE INDEX IF NOT EXISTS doc_comment_reactions_comment_idx ON doc_comment_reactions(comment_id);
+    CREATE INDEX IF NOT EXISTS doc_comment_reactions_user_idx ON doc_comment_reactions(user_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_comment_reaction_user_comment ON doc_comment_reactions(comment_id, user_id);
   `);
+  const tagColumns = sqlite.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
+  if (!tagColumns.some((column) => column.name === "parent_id")) sqlite.exec("ALTER TABLE tags ADD COLUMN parent_id INTEGER");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS tags_parent_idx ON tags(parent_id)");
+  const templateColumns = sqlite.prepare("PRAGMA table_info(templates)").all() as Array<{ name: string }>;
+  if (!templateColumns.some((column) => column.name === "tags")) sqlite.exec("ALTER TABLE templates ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+  if (!templateColumns.some((column) => column.name === "usage_count")) sqlite.exec("ALTER TABLE templates ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0");
   for (const statement of SQLITE_QUERY_INDEX_STATEMENTS) {
     sqlite.exec(statement);
   }
@@ -435,14 +565,23 @@ function migrateSqlite() {
   if (!hasColumn("scheduled_at")) sqlite.exec("ALTER TABLE docs ADD COLUMN scheduled_at INTEGER");
   if (!hasColumn("expires_at")) sqlite.exec("ALTER TABLE docs ADD COLUMN expires_at INTEGER");
   if (!hasColumn("auto_archive")) sqlite.exec("ALTER TABLE docs ADD COLUMN auto_archive INTEGER NOT NULL DEFAULT 0");
-  const sqliteDocIdentityStats = backfillSqliteDocumentIdentity();
-  const orphanOwnerCount = Number((sqlite.prepare("SELECT COUNT(*) AS count FROM docs WHERE owner_id IS NULL").get() as { count: number }).count);
-  if (orphanOwnerCount > 0) {
-    const fallbackOwner = sqlite.prepare("SELECT id FROM users WHERE lower(username) = lower(?) ORDER BY id LIMIT 1").get(env.defaultAdminUsername) as { id: number } | undefined;
-    if (!fallbackOwner) throw new Error("Cannot enforce docs.owner_id: orphan documents exist and the default super admin is missing.");
-    sqlite.prepare("UPDATE docs SET owner_id = ?, owner_role = 'super_admin', scope = 'admin', is_super_admin_doc = 1, visibility = 'private' WHERE owner_id IS NULL").run(fallbackOwner.id);
+  let sqliteDocIdentityStats: ReturnType<typeof emptyDocIdentityStats>;
+  const sqliteForeignKeysEnabled = Boolean(sqlite.pragma("foreign_keys", { simple: true }));
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    sqliteDocIdentityStats = backfillSqliteDocumentIdentity();
+    const orphanOwnerCount = Number((sqlite.prepare("SELECT COUNT(*) AS count FROM docs WHERE owner_id IS NULL").get() as { count: number }).count);
+    if (orphanOwnerCount > 0) {
+      const fallbackOwner = sqlite.prepare("SELECT id FROM users WHERE lower(username) = lower(?) ORDER BY id LIMIT 1").get(env.defaultAdminUsername) as { id: number } | undefined;
+      if (!fallbackOwner) throw new Error("Cannot enforce docs.owner_id: orphan documents exist and the default super admin is missing.");
+      sqlite.prepare("UPDATE docs SET owner_id = ?, owner_role = 'super_admin', scope = 'admin', is_super_admin_doc = 1, visibility = 'private' WHERE owner_id IS NULL").run(fallbackOwner.id);
+    }
+    sqlite.prepare("DELETE FROM doc_comments WHERE doc_uid NOT IN (SELECT doc_uid FROM docs)").run();
+    sqlite.prepare("DELETE FROM doc_comment_reactions WHERE comment_id NOT IN (SELECT id FROM doc_comments)").run();
+    sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uk_documents_doc_uid ON docs(doc_uid)");
+  } finally {
+    sqlite.pragma(`foreign_keys = ${sqliteForeignKeysEnabled ? "ON" : "OFF"}`);
   }
-  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uk_documents_doc_uid ON docs(doc_uid)");
   sqlite.exec(`
     CREATE TRIGGER IF NOT EXISTS docs_doc_uid_required_insert
     BEFORE INSERT ON docs
@@ -599,6 +738,9 @@ async function migrateMysql() {
   await addMysqlColumnIfMissing(databaseName, "forms", "store_user_agent", "TINYINT(1) NOT NULL DEFAULT 0");
   await addMysqlColumnIfMissing(databaseName, "form_submissions", "submitter_id", "VARCHAR(64) NULL");
   await addMysqlColumnIfMissing(databaseName, "uploads", "detached_at", "DATETIME(3) NULL");
+  await addMysqlColumnIfMissing(databaseName, "tags", "parent_id", "INT NULL");
+  await addMysqlColumnIfMissing(databaseName, "templates", "tags", "TEXT NULL");
+  await addMysqlColumnIfMissing(databaseName, "templates", "usage_count", "INT NOT NULL DEFAULT 0");
   await mysqlPool.query("UPDATE form_submissions s JOIN forms f ON f.id = s.form_id SET s.submitter_id = NULL WHERE f.allow_multiple = 1");
   await mysqlPool.query("ALTER TABLE form_submissions DROP INDEX form_submissions_identity_idx").catch(() => undefined);
   await addMysqlUniqueIndexIfMissing(databaseName, "form_submissions", "form_submissions_identity_unique", "`form_id`, `submitter_id`");
@@ -608,6 +750,12 @@ async function migrateMysql() {
   await mysqlPool.query("DELETE s FROM shares s JOIN shares keep ON keep.doc_id = s.doc_id AND keep.id < s.id");
   await mysqlPool.query("ALTER TABLE shares DROP INDEX shares_doc_idx").catch(() => undefined);
   await addMysqlUniqueIndexIfMissing(databaseName, "shares", "shares_doc_unique", "`doc_id`");
+  await addMysqlUniqueIndexIfMissing(databaseName, "tags", "uk_tags_name_owner", "`name`, `owner_id`");
+  await addMysqlUniqueIndexIfMissing(databaseName, "tag_hierarchy", "uk_tag_hierarchy_parent_child", "`parent_tag_id`, `child_tag_id`");
+  await addMysqlUniqueIndexIfMissing(databaseName, "templates", "uk_templates_name_owner", "`title`, `owner_id`");
+  await addMysqlUniqueIndexIfMissing(databaseName, "jwt_keys", "uk_jwt_keys_key_id", "`key_id`");
+  await addMysqlUniqueIndexIfMissing(databaseName, "search_history", "uk_search_history_user_query", "`user_id`, `query_hash`");
+  await addMysqlUniqueIndexIfMissing(databaseName, "doc_comment_reactions", "uk_comment_reaction_user_comment", "`comment_id`, `user_id`");
 
   await addMysqlIndexesIfMissing(databaseName, MYSQL_INDEXES);
   await addMysqlFulltextIndexesIfMissing(databaseName);
@@ -807,6 +955,13 @@ async function addMysqlForeignKeys(databaseName: string) {
   await mysqlPool.query("UPDATE shares s LEFT JOIN users u ON u.id = s.requested_by SET s.requested_by = NULL WHERE s.requested_by IS NOT NULL AND u.id IS NULL");
   await mysqlPool.query("UPDATE shares s LEFT JOIN users u ON u.id = s.reviewed_by SET s.reviewed_by = NULL WHERE s.reviewed_by IS NOT NULL AND u.id IS NULL");
   await mysqlPool.query("DELETE f FROM forms f LEFT JOIN users u ON u.id = f.owner_id WHERE u.id IS NULL");
+  await mysqlPool.query("DELETE t FROM tags t LEFT JOIN users u ON u.id = t.owner_id WHERE t.owner_id IS NOT NULL AND u.id IS NULL");
+  await mysqlPool.query("DELETE h FROM tag_hierarchy h LEFT JOIN tags p ON p.id = h.parent_tag_id LEFT JOIN tags c ON c.id = h.child_tag_id LEFT JOIN users u ON u.id = h.owner_id WHERE p.id IS NULL OR c.id IS NULL OR u.id IS NULL");
+  await mysqlPool.query("DELETE t FROM templates t LEFT JOIN users u ON u.id = t.owner_id WHERE u.id IS NULL");
+  await mysqlPool.query("DELETE f FROM totp_failures f LEFT JOIN users u ON u.id = f.user_id WHERE u.id IS NULL");
+  await mysqlPool.query("DELETE h FROM search_history h LEFT JOIN users u ON u.id = h.user_id WHERE u.id IS NULL");
+  await mysqlPool.query("DELETE c FROM doc_comments c LEFT JOIN docs d ON d.doc_uid = c.doc_uid LEFT JOIN users u ON u.id = c.user_id WHERE d.id IS NULL OR u.id IS NULL");
+  await mysqlPool.query("DELETE r FROM doc_comment_reactions r LEFT JOIN doc_comments c ON c.id = r.comment_id LEFT JOIN users u ON u.id = r.user_id WHERE c.id IS NULL OR u.id IS NULL");
   const constraints: MysqlForeignKeySpec[] = [
     { table: "auth_sessions", name: "fk_auth_sessions_user", column: "user_id", target: "users(id)" },
     { table: "spaces", name: "fk_spaces_owner", column: "owner_id", target: "users(id)", onDelete: "SET NULL" },
@@ -824,7 +979,18 @@ async function addMysqlForeignKeys(databaseName: string) {
     { table: "forms", name: "fk_forms_owner", column: "owner_id", target: "users(id)", onDelete: "CASCADE" },
     { table: "form_submissions", name: "fk_form_submissions_form", column: "form_id", target: "forms(id)", onDelete: "CASCADE" },
     { table: "shares", name: "fk_shares_requested_by", column: "requested_by", target: "users(id)", onDelete: "SET NULL" },
-    { table: "shares", name: "fk_shares_reviewed_by", column: "reviewed_by", target: "users(id)", onDelete: "SET NULL" }
+    { table: "shares", name: "fk_shares_reviewed_by", column: "reviewed_by", target: "users(id)", onDelete: "SET NULL" },
+    { table: "tags", name: "fk_tags_owner", column: "owner_id", target: "users(id)" },
+    { table: "tag_hierarchy", name: "fk_tag_hierarchy_parent", column: "parent_tag_id", target: "tags(id)" },
+    { table: "tag_hierarchy", name: "fk_tag_hierarchy_child", column: "child_tag_id", target: "tags(id)" },
+    { table: "tag_hierarchy", name: "fk_tag_hierarchy_owner", column: "owner_id", target: "users(id)" },
+    { table: "templates", name: "fk_templates_owner", column: "owner_id", target: "users(id)" },
+    { table: "totp_failures", name: "fk_totp_failures_user", column: "user_id", target: "users(id)" },
+    { table: "search_history", name: "fk_search_history_user", column: "user_id", target: "users(id)" },
+    { table: "doc_comments", name: "fk_doc_comments_doc", column: "doc_uid", target: "docs(doc_uid)" },
+    { table: "doc_comments", name: "fk_doc_comments_user", column: "user_id", target: "users(id)" },
+    { table: "doc_comment_reactions", name: "fk_doc_comment_reactions_comment", column: "comment_id", target: "doc_comments(id)" },
+    { table: "doc_comment_reactions", name: "fk_doc_comment_reactions_user", column: "user_id", target: "users(id)" }
   ];
   for (const item of constraints) {
     const [rows] = await mysqlPool.query(

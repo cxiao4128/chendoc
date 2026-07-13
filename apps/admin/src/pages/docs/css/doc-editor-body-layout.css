@@ -1,0 +1,140 @@
+/**
+ * doc-editor-body.css - 文档编辑器主体区域和侧边面板样式
+ *
+ * 重构说明：
+ * - 主体区域布局（画布 + 侧边）
+ * - 侧边面板（分享、定时、历史版本）
+ * - 表单元素
+ */
+
+/* 主体区域 */
+.doc-editor-page__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: calc(100dvh - var(--cd-header) - 58px);
+}
+
+.doc-editor-page__body.has-aside {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.doc-editor-page__canvas {
+  min-width: 0;
+}
+
+.doc-editor-page__body.has-aside .doc-editor-page__canvas {
+  border-right: 1px solid var(--cd-border);
+}
+
+/* 侧边面板 */
+.doc-editor-page__aside {
+  position: sticky;
+  top: calc(var(--cd-header) + 58px);
+  align-self: start;
+  max-height: calc(100dvh - var(--cd-header) - 58px);
+  overflow: auto;
+  border-left: 1px solid var(--cd-border);
+  background: #fbfdff;
+  padding: 16px;
+}
+
+.doc-editor-page__aside section {
+  border-bottom: 1px solid var(--cd-border);
+  padding: 0 0 16px;
+  margin-bottom: 16px;
+}
+
+.doc-editor-page__aside h2 {
+  margin: 0 0 12px;
+  color: var(--cd-ink);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+/* 表单元素 */
+.doc-editor-page__aside label,
+.doc-editor-page__mobile-form label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.doc-editor-page__aside input,
+.doc-editor-page__aside textarea,
+.doc-editor-page__mobile-form input,
+.doc-editor-page__mobile-form textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  color: var(--cd-text);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+}
+
+.doc-editor-page__aside input:focus,
+.doc-editor-page__aside textarea:focus,
+.doc-editor-page__mobile-form input:focus,
+.doc-editor-page__mobile-form textarea:focus,
+.doc-editor-page__mobile-title:focus {
+  border-color: var(--cd-accent);
+  box-shadow: 0 0 0 3px var(--cd-focus);
+}
+
+/* 复选框样式 */
+.doc-editor-page__check {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-direction: row;
+  gap: 8px !important;
+  align-items: center;
+  min-height: 44px;
+  color: var(--cd-text) !important;
+  font-size: 13px !important;
+  cursor: pointer;
+}
+
+.doc-editor-page__check input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+/* 密码输入行 */
+.doc-editor-page__password-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.doc-editor-page__password-row .cd-button {
+  height: 40px;
+  white-space: nowrap;
+}
+
+/* 文本按钮 */
+.doc-editor-page__text-button {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--cd-accent);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doc-editor-page__text-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

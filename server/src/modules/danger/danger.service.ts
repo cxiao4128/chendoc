@@ -1,24 +1,9 @@
-import { and, eq, isNull } from "drizzle-orm";
-import { db, dbGet, dbRun, dbTransaction } from "../../db/client.js";
-import { docs, shares } from "../../db/schema.js";
-import { now } from "../../utils/date.js";
+import { dbTransaction } from "../../db/client.js";
+import { findDocByUid as findDocByUidFromRepo, softDeleteDocByUid } from "./danger.repo.js";
 import { enqueueLog } from "../../utils/asyncLogQueue.js";
 
 export async function findDocByUid(docUid: string) {
-  const doc = await dbGet(db
-    .select({
-      docUid: docs.docUid,
-      title: docs.title,
-      createdAt: docs.createdAt,
-      updatedAt: docs.updatedAt,
-      deletedAt: docs.deletedAt,
-      shareCode: shares.shareCode
-    })
-    .from(docs)
-    .leftJoin(shares, eq(docs.id, shares.docId))
-    .where(eq(docs.docUid, docUid))
-    .limit(1));
-  return doc ?? null;
+  return findDocByUidFromRepo(docUid);
 }
 
 export async function dangerDeleteDoc(input: {
@@ -28,7 +13,7 @@ export async function dangerDeleteDoc(input: {
   userAgent?: string;
 }) {
   await dbTransaction(async (tx) => {
-    await dbRun(tx.update(docs).set({ deletedAt: now(), updatedAt: now() }).where(and(eq(docs.docUid, input.docUid), isNull(docs.deletedAt))));
+    await softDeleteDocByUid(input.docUid, tx);
   });
   enqueueLog({
     type: "operation_log",

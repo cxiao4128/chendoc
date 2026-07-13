@@ -1,3 +1,51 @@
+:root:has(.admin-layout),
+:root:has(.mobile-shell) {
+  color-scheme: light;
+  --cd-bg: #fbfcff;
+  --cd-bg-plain: #ffffff;
+  --cd-surface: #f7f8ff;
+  --cd-panel: #ffffff;
+  --cd-paper: #fbfcff;
+  --cd-paper-soft: #f7f8ff;
+  --cd-ink: #16213d;
+  --cd-text: #24304d;
+  --cd-text-secondary: #56627f;
+  --cd-border: #e4e7f4;
+  --cd-border-strong: #c8cdec;
+  --cd-muted: #657191;
+  --cd-faint: #657191;
+  --cd-primary: #2563eb;
+  --cd-primary-hover: #1d4ed8;
+  --cd-primary-soft: #eff6ff;
+  --cd-accent: #2563eb;
+  --cd-accent-hover: #1d4ed8;
+  --cd-accent-soft: #eef2ff;
+  --cd-brand-accent: #047857;
+  --cd-brand-accent-soft: #ecfdf5;
+  --cd-danger: #b42318;
+  --cd-danger-soft: #fef2f2;
+  --cd-warning: #a64b06;
+  --cd-warning-soft: #fff7ed;
+  --cd-success: #047857;
+  --cd-success-soft: #ecfdf5;
+  --cd-aura: #f2efff;
+  --cd-aura-strong: #7d6be8;
+  --cd-lilac: #f2efff;
+  --cd-shadow: 0 4px 8px rgba(15, 23, 42, 0.1);
+  --cd-shadow-soft: 0 2px 6px rgba(15, 23, 42, 0.07);
+  --cd-shadow-card: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --cd-focus: rgba(37, 99, 235, 0.28);
+  --cd-scrollbar-track: #f1f3f9;
+  --cd-scrollbar-thumb: #c8cdec;
+  --cd-scrollbar-thumb-hover: #9aa5c5;
+}
+
+body:has(.admin-layout),
+body:has(.mobile-shell) {
+  background: var(--cd-bg);
+  color: var(--cd-text);
+}
+
 .admin-layout {
   --cd-bg: #fbfcff;
   --cd-surface: #f7f8ff;
@@ -11,9 +59,9 @@
   --cd-primary: #2563eb;
   --cd-primary-hover: #1d4ed8;
   --cd-primary-soft: #eff6ff;
-  --cd-accent: #7d6be8;
-  --cd-accent-hover: #6652d4;
-  --cd-accent-soft: #f2efff;
+  --cd-accent: #2563eb;
+  --cd-accent-hover: #1d4ed8;
+  --cd-accent-soft: #eef2ff;
   --cd-shadow: 0 4px 8px rgba(15, 23, 42, 0.10);
   --cd-shadow-soft: 0 2px 6px rgba(15, 23, 42, 0.07);
   --cd-radius: 12px;
@@ -21,6 +69,7 @@
   position: relative;
   min-height: 100dvh;
   background: var(--cd-bg);
+  color: var(--cd-text);
   isolation: isolate;
 }
 
@@ -76,7 +125,7 @@
 .admin-layout .cd-button.primary,
 .mobile-shell .cd-button.primary {
   border-color: var(--cd-primary);
-  background: linear-gradient(135deg, #8d7df2, #6752d8);
+  background: var(--cd-primary);
   color: #fff;
 }
 

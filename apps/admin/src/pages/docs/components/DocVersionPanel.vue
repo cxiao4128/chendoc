@@ -8,11 +8,10 @@
  * - 恢复版本操作
  * - 复制为新文档
  */
-import { computed } from "vue";
 import { Eye } from "lucide-vue-next";
-import type { DocVersion, DocVersionPreview } from "../../../api/docs";
+import type { DocVersion, DocVersionPreview } from "@/services/api";
 
-const props = defineProps<{
+const _props = defineProps<{
   versions: DocVersion[];
   selectedVersion: DocVersion | null;
   versionPreview: DocVersionPreview | null;

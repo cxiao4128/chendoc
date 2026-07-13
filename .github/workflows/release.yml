@@ -20,6 +20,11 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+
       - id: release-commit
         run: |
           if git log -1 --pretty=%s | grep -Eq '^Release ChenDoc v[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -47,24 +52,18 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Package public release
+      - name: Package Cloudflare and server deployments
         if: steps.existing.outputs.found == 'false'
         env:
           VERSION: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
+          BACKEND_ORIGIN: ${{ vars.CHENDOC_BACKEND_ORIGIN || 'https://api.w92.pw' }}
+          PUBLIC_ORIGIN: ${{ vars.CHENDOC_PUBLIC_ORIGIN || 'https://d.w92.pw' }}
         run: |
-          mkdir -p release
-          git archive --format=zip --output="release/chendoc-$VERSION-public.zip" HEAD
-          unzip -Z1 "release/chendoc-$VERSION-public.zip" > release/entries.txt
-          grep -qx 'deploy.sh' release/entries.txt
-          grep -qx 'package.json' release/entries.txt
-          grep -qx 'apps/' release/entries.txt
-          grep -qx 'server/' release/entries.txt
-          grep -qx '.env.example' release/entries.txt
-          if grep -Eq '(^|/)node_modules/|^(data|\.tmp|backups|logs|release)/|(^|/)\.env$|(^|/)\.env\.local$|\.sqlite$|\.log$|^docs/' release/entries.txt; then
-            echo 'Release archive contains a forbidden path.' >&2
-            exit 1
-          fi
+          npm ci --workspaces --include-workspace-root
+          node scripts/release.js --backend-origin="$BACKEND_ORIGIN" --public-origin="$PUBLIC_ORIGIN"
+          unzip -Z1 "release/chendoc-$VERSION-cloudflare-pages.zip" | grep -qx 'index.html'
+          unzip -Z1 "release/chendoc-$VERSION-server.zip" | grep -qx 'deploy.sh'
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
           const version = process.env.VERSION;
@@ -87,7 +86,9 @@ jobs:
           TARGET: ${{ github.event.workflow_run.head_sha }}
         run: >-
           gh release create "$TAG"
-          "release/chendoc-$VERSION-public.zip"
+          "release/chendoc-$VERSION-cloudflare-pages.zip"
+          "release/chendoc-$VERSION-server.zip"
+          "release/chendoc-$VERSION-SHA256SUMS.txt"
           --target "$TARGET"
           --title "ChenDoc v$VERSION"
           --notes-file release/release-notes.md

@@ -28,9 +28,13 @@ import { settingsRoutes } from "./modules/settings/settings.routes.js";
 import { sharesRoutes } from "./modules/shares/shares.routes.js";
 import { spacesRoutes } from "./modules/spaces/spaces.routes.js";
 import { uploadsRoutes } from "./modules/uploads/uploads.routes.js";
+import { tagsRoutes } from "./modules/tags/tags.routes.js";
+import { templatesRoutes } from "./modules/templates/templates.routes.js";
+import { statsRoutes } from "./modules/stats/stats.routes.js";
 import { currentRequestTiming, enterRequestTiming } from "./utils/requestTiming.js";
-import { isHttpsRequest } from "./utils/httpsRequest.js";
+import { httpsRedirectOrigin, isHttpsRequest } from "./utils/httpsRequest.js";
 import { dbHealthCheck } from "./db/client.js";
+import { registerAdminCors } from "./plugins/admin-cors.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -96,9 +100,11 @@ export async function buildApp() {
   app.addHook("preValidation", unpackGatewayRequest);
   app.addHook("onSend", packGatewayReply);
 
+  const shouldSendHttpsOnlyHeaders = env.nodeEnv === "production" && env.forceHttps;
   await app.register(fastifyHelmet, {
     frameguard: { action: "sameorigin" },
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    strictTransportSecurity: shouldSendHttpsOnlyHeaders ? undefined : false,
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
@@ -107,7 +113,8 @@ export async function buildApp() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
         connectSrc: ["'self'", ...env.cspConnectSources],
-        frameAncestors: ["'self'"]
+        frameAncestors: ["'self'"],
+        upgradeInsecureRequests: shouldSendHttpsOnlyHeaders ? [] : null
       }
     },
     global: true
@@ -123,12 +130,21 @@ export async function buildApp() {
     });
     if (env.nodeEnv === "production" && env.forceHttps && !secureRequest) {
       if (request.method === "GET" || request.method === "HEAD") {
-        const publicOrigin = new URL(env.publicSiteUrl).origin;
-        return reply.redirect(`${publicOrigin}${request.url}`, 308);
+        const redirectOrigin = httpsRedirectOrigin({
+          requestUrl: request.url,
+          publicSiteUrl: env.publicSiteUrl,
+          apiOrigin: env.apiOrigin,
+        });
+        return reply.redirect(`${redirectOrigin}${request.url}`, 308);
       }
       return reply.code(426).send({ code: "HTTPS_REQUIRED", message: "HTTPS is required." });
     }
   });
+
+  const developmentAdminOrigins = env.nodeEnv === "production"
+    ? []
+    : ["http://127.0.0.1:5175", "http://localhost:5175"];
+  registerAdminCors(app, [new URL(env.publicSiteUrl).origin, ...env.adminOrigins, ...developmentAdminOrigins]);
 
   const requestStartedAt = new WeakMap<object, number>();
   app.addHook("onRequest", async (request) => {
@@ -161,8 +177,8 @@ export async function buildApp() {
     return reply.header("Cache-Control", "no-store").send({ ok: true, database: "ok" });
   });
 
-  await app.register(publicRoutes);
-  await app.register(formsPublicRoutes);
+  if (env.serveAdmin) await app.register(publicRoutes);
+  await app.register(formsPublicRoutes, { serveLegacyPages: env.serveAdmin });
   await app.register(cryptoRoutes);
   await app.register(captchaRoutes);
   await app.register(gatewayRoutes);
@@ -177,15 +193,27 @@ export async function buildApp() {
   await app.register(dangerRoutes);
   await app.register(commentsRoutes);
   await app.register(exportsRoutes);
+  await app.register(tagsRoutes);
+  await app.register(templatesRoutes);
+  await app.register(statsRoutes);
 
   const adminRoot = resolve(env.paths.serverDir, "public/admin");
-  if (existsSync(adminRoot)) {
+  if (env.serveAdmin && existsSync(adminRoot)) {
     await app.register(fastifyStatic, {
       root: adminRoot,
       prefix: "/",
       decorateReply: false,
       index: false,
+      cacheControl: false,
       setHeaders: (res, pathName) => {
+        if (pathName.endsWith("chendoc-runtime-config.js")) {
+          res.setHeader("Cache-Control", "no-store");
+          return;
+        }
+        if (pathName.endsWith("route-preloads.js")) {
+          res.setHeader("Cache-Control", "no-cache");
+          return;
+        }
         if (/\.(?:avif|css|gif|jpe?g|js|png|svg|webp|woff2?)$/i.test(pathName)) {
           res.setHeader("Cache-Control", pathName.includes("site-assets")
             ? "public, max-age=3600, must-revalidate"
@@ -195,14 +223,22 @@ export async function buildApp() {
     });
   }
 
-  app.get("/", async (_request, reply) => reply.redirect("/login"));
+  app.get("/", async (_request, reply) => {
+    if (env.serveAdmin) return reply.redirect("/login");
+    return reply.code(404).send({ message: "管理端由独立静态站点托管" });
+  });
 
   app.setNotFoundHandler(async (request, reply) => {
     if (request.url.startsWith("/api/")) {
       return reply.code(404).send({ message: "接口不存在" });
     }
     if (request.url.startsWith("/r/")) {
+      if (!env.serveAdmin) return reply.code(404).send({ message: "页面由独立静态站点托管" });
       return reply.code(404).type("text/html; charset=utf-8").send("分享不存在");
+    }
+
+    if (!env.serveAdmin) {
+      return reply.code(404).send({ message: "页面不存在" });
     }
 
     const indexPath = resolve(adminRoot, "index.html");

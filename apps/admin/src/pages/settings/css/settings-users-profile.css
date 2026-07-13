@@ -1,0 +1,12 @@
+/**
+ * settings-users-profile.css - 用户详情面板样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./settings-users-profile-shell.css";
+@import "./settings-users-profile-summary.css";
+@import "./settings-users-profile-sections.css";
+@import "./settings-users-profile-assets.css";
+@import "./settings-users-profile-activity.css";
+@import "./settings-users-profile-side.css";

@@ -2,6 +2,7 @@
 // ChenDoc v3.0.0 - 导出菜单组件
 import { ref } from "vue";
 import { Download, FileText, FileCode, FileJson, Loader2 } from "lucide-vue-next";
+import { getExportContentApi, type ExportFormat } from "../../services/api/export.api";
 
 const props = defineProps<{
   docUid: string;
@@ -11,8 +12,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
 }>();
-
-type ExportFormat = "markdown" | "html" | "json";
 
 const loading = ref<ExportFormat | null>(null);
 const error = ref("");
@@ -28,17 +27,11 @@ async function handleExport(format: ExportFormat) {
   error.value = "";
 
   try {
-    const response = await fetch(
-      `/api/export/content?docUid=${encodeURIComponent(props.docUid)}&format=${format}&metadata=true`,
-      { credentials: "include" }
-    );
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "导出失败");
-    }
-
-    const data = await response.json();
+    const data = await getExportContentApi({
+      docUid: props.docUid,
+      format,
+      includeMetadata: true
+    });
 
     // 创建下载
     const blob = new Blob([data.content], { type: data.contentType });
@@ -52,8 +45,8 @@ async function handleExport(format: ExportFormat) {
     URL.revokeObjectURL(url);
 
     emit("close");
-  } catch (e: any) {
-    error.value = e.message || "导出失败";
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "导出失败";
   } finally {
     loading.value = null;
   }

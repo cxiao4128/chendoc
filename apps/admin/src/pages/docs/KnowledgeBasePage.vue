@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Search } from "lucide-vue-next";
-import { listDocsApi, type DocSummary } from "../../api/docs";
+import { listDocsApi, type DocSummary } from "@/services/api";
 import { useWorkspaceRoutes } from "../../composables/useWorkspaceRoutes";
+import { shareKeyOf } from "../../utils/sharePath";
 import "./css/utility-pages.css";
 
 const { docPath } = useWorkspaceRoutes();
@@ -22,7 +23,7 @@ const filteredDocs = computed(() => {
   const q = keyword.value.trim().toLowerCase();
   const source = knowledgeDocs.value.filter((doc) => (doc.status === "published" || doc.shareEnabled) && (activeTag.value === "all" || tagsOf(doc).includes(activeTag.value)));
   if (!q) return source;
-  return source.filter((doc) => doc.title.toLowerCase().includes(q) || String(doc.shareCode || "").includes(q));
+  return source.filter((doc) => doc.title.toLowerCase().includes(q) || shareKeyOf(doc).toLowerCase().includes(q));
 });
 
 const sharedDocs = computed(() => filteredDocs.value.filter((doc) => doc.shareCode && doc.shareEnabled));
@@ -61,7 +62,7 @@ onMounted(async () => {
       <section>
         <strong>公开知识</strong>
         <RouterLink v-for="doc in sharedDocs" :key="doc.docUid" :to="docPath(doc.docUid)">
-          {{ doc.title }}<span>/r/{{ doc.shareCode }}</span>
+          {{ doc.title }}<span>/r/{{ shareKeyOf(doc) }}</span>
         </RouterLink>
         <p v-if="!sharedDocs.length">暂无公开知识。</p>
       </section>

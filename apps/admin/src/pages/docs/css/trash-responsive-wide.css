@@ -1,0 +1,18 @@
+/* ========================================
+   trash-responsive.css
+   响应式断点：1200px → 900px → 680px
+   ======================================== */
+
+/* ========================================
+   平板/中屏 max-width: 1200px
+   ======================================== */
+@media (max-width: 1200px) {
+  .trash-page__stats,
+  .trash-page__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .trash-page__aside {
+    position: static;
+  }
+}

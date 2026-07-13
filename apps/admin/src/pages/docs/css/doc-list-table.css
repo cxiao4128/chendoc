@@ -1,0 +1,11 @@
+/**
+ * doc-list-table.css - 文档列表表格样式入口
+ *
+ * 本文件只做 @import；具体样式按页面区域拆分。
+ */
+
+@import "./doc-list-table-shell.css";
+@import "./doc-list-table-text.css";
+@import "./doc-list-table-meta.css";
+@import "./doc-list-table-actions.css";
+@import "./doc-list-table-states.css";

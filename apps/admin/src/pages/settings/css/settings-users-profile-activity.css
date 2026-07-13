@@ -1,0 +1,37 @@
+.settings-page__activity-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+}
+
+.settings-page__activity-table article {
+  display: grid;
+  grid-template-columns: 170px 120px 130px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+  border-bottom: 1px solid var(--cd-border);
+  padding: 0 12px;
+}
+
+.settings-page__activity-table article:last-child {
+  border-bottom: 0;
+}
+
+.settings-page__activity-table time,
+.settings-page__activity-table span,
+.settings-page__activity-table em {
+  color: var(--cd-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.settings-page__activity-table strong {
+  width: fit-content;
+  border-radius: 999px;
+  background: #edfdf5;
+  color: var(--cd-success);
+  padding: 3px 8px;
+  font-size: 11px;
+}

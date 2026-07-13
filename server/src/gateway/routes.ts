@@ -143,6 +143,13 @@ function actionTarget(actionCode: GatewayActionCode, payload: GatewayPayload): G
     case "r4":
       return { method: "GET", url: "/api/docs/trash/stats" };
 
+    case "e1":
+      return { method: "GET", url: `/api/export/content${queryString(payload)}` };
+    case "e2":
+      return { method: "POST", url: `/api/export/docs${queryString(payload)}`, body: bodyOf(payload) };
+    case "e3":
+      return { method: "GET", url: `/api/export/doc/${param(payload, "docId")}${queryString(payload)}` };
+
     case "h1":
       return { method: "POST", url: `/api/docs/${param(payload, "docUid")}/share`, body: bodyOf(payload) };
     case "h2":
@@ -263,6 +270,67 @@ function actionTarget(actionCode: GatewayActionCode, payload: GatewayPayload): G
       return { method: "POST", url: "/api/admin/security/totp/reset", body: bodyOf(payload) };
     case "y8":
       return { method: "POST", url: "/api/security/danger-verify", body: bodyOf(payload) };
+
+    case "q1":
+      if (target(payload) === "quick") return { method: "GET", url: `/api/docs/search/quick${queryString(payload)}` };
+      if (target(payload) === "suggestions") return { method: "GET", url: `/api/docs/search/suggestions${queryString(payload)}` };
+      if (target(payload) === "history") return { method: "GET", url: `/api/docs/search/history${queryString(payload)}` };
+      if (target(payload) === "clearHistory") return { method: "DELETE", url: "/api/docs/search/history" };
+      if (target(payload) === "deleteHistory") return { method: "DELETE", url: `/api/docs/search/history/${param(payload, "id")}` };
+      break;
+
+    case "j1":
+      if (target(payload) === "getSchedule") return { method: "GET", url: `/api/docs/${param(payload, "docUid")}/schedule` };
+      if (target(payload) === "setSchedule") return { method: "PUT", url: `/api/docs/${param(payload, "docUid")}/schedule`, body: bodyOf(payload) };
+      if (target(payload) === "deleteSchedule") return { method: "DELETE", url: `/api/docs/${param(payload, "docUid")}/schedule` };
+      if (target(payload) === "versionPreview") {
+        return { method: "GET", url: `/api/docs/${param(payload, "docUid")}/versions/${param(payload, "versionId")}` };
+      }
+      if (target(payload) === "restoreCopy") {
+        return { method: "POST", url: `/api/docs/${param(payload, "docUid")}/versions/${param(payload, "versionId")}/restore-copy`, body: {} };
+      }
+      break;
+
+    case "m1":
+      if (target(payload) === "docComments") return { method: "GET", url: `/api/docs/${param(payload, "docUid")}/comments` };
+      if (target(payload) === "createComment") return { method: "POST", url: `/api/docs/${param(payload, "docUid")}/comments`, body: bodyOf(payload) };
+      if (target(payload) === "commentReaction") return { method: "POST", url: `/api/comments/${param(payload, "id")}/reactions`, body: bodyOf(payload) };
+      if (target(payload) === "updateComment") return { method: "PATCH", url: `/api/comments/${param(payload, "id")}`, body: bodyOf(payload) };
+      if (target(payload) === "deleteComment") return { method: "DELETE", url: `/api/comments/${param(payload, "id")}` };
+      if (target(payload) === "adminComments") return { method: "GET", url: `/api/admin/comments${queryString(payload)}` };
+      if (target(payload) === "adminBatchDelete") return { method: "POST", url: "/api/admin/comments/batch-delete", body: bodyOf(payload) };
+      if (target(payload) === "adminDelete") return { method: "DELETE", url: `/api/admin/comments/${param(payload, "id")}` };
+      break;
+
+    case "v1":
+      if (target(payload) === "track") return { method: "POST", url: "/api/stats/track", body: bodyOf(payload) };
+      if (target(payload) === "recent") return { method: "GET", url: `/api/stats/${param(payload, "type")}/${param(payload, "id")}/recent${queryString(payload)}` };
+      if (target(payload) === "stats") return { method: "GET", url: `/api/stats/${param(payload, "type")}/${param(payload, "id")}${queryString(payload)}` };
+      break;
+
+    case "t1":
+      if (target(payload) === "tree") return { method: "GET", url: "/api/tags/tree" };
+      if (target(payload) === "stats") return { method: "GET", url: "/api/tags/stats" };
+      if (target(payload) === "colors") return { method: "GET", url: "/api/tags/colors" };
+      if (target(payload) === "list") return { method: "GET", url: "/api/tags" };
+      if (target(payload) === "create") return { method: "POST", url: "/api/tags", body: bodyOf(payload) };
+      if (target(payload) === "merge") return { method: "POST", url: "/api/tags/merge", body: bodyOf(payload) };
+      if (target(payload) === "addDocs") return { method: "POST", url: "/api/tags/docs/add", body: bodyOf(payload) };
+      if (target(payload) === "removeDocs") return { method: "POST", url: "/api/tags/docs/remove", body: bodyOf(payload) };
+      if (target(payload) === "rename") return { method: "POST", url: `/api/tags/${param(payload, "id")}/rename`, body: bodyOf(payload) };
+      if (target(payload) === "detail") return { method: "GET", url: `/api/tags/${param(payload, "id")}` };
+      if (target(payload) === "update") return { method: "PATCH", url: `/api/tags/${param(payload, "id")}`, body: bodyOf(payload) };
+      if (target(payload) === "delete") return { method: "DELETE", url: `/api/tags/${param(payload, "id")}` };
+      break;
+
+    case "k1":
+      if (target(payload) === "builtin") return { method: "GET", url: "/api/templates/builtin" };
+      if (target(payload) === "list") return { method: "GET", url: "/api/templates" };
+      if (target(payload) === "create") return { method: "POST", url: "/api/templates", body: bodyOf(payload) };
+      if (target(payload) === "detail") return { method: "GET", url: `/api/templates/${param(payload, "id")}` };
+      if (target(payload) === "update") return { method: "PATCH", url: `/api/templates/${param(payload, "id")}`, body: bodyOf(payload) };
+      if (target(payload) === "delete") return { method: "DELETE", url: `/api/templates/${param(payload, "id")}` };
+      break;
   }
 
   throw new BadRequestError("Unknown gateway action.", "INVALID_GATEWAY_ACTION");

@@ -1,0 +1,78 @@
+.stats-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.stats-panel {
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background: var(--cd-bg);
+  border-radius: var(--cd-radius-lg);
+  box-shadow: var(--cd-shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--cd-border);
+}
+
+.stats-panel__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--cd-ink);
+}
+
+.stats-panel__close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--cd-radius);
+  background: transparent;
+  color: var(--cd-muted);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.stats-panel__close:hover {
+  background: var(--cd-panel);
+  color: var(--cd-text);
+}
+
+.stats-panel__loading {
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.stats-skeleton {
+  height: 80px;
+  background: var(--cd-panel);
+  border-radius: var(--cd-radius);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.stats-panel__error {
+  padding: 20px;
+  text-align: center;
+  color: var(--cd-danger);
+}

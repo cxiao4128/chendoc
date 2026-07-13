@@ -19,9 +19,16 @@ const router = createRouter({
     { path: "/login", component: () => import("../pages/login/LoginPage.vue"), meta: { public: true } },
     { path: "/forgot-password", component: () => import("../pages/login/ForgotPasswordPage.vue"), meta: { public: true } },
     { path: "/register", component: () => import("../pages/register/RegisterPage.vue"), meta: { public: true } },
+    { path: "/f/:formUid", component: () => import("../pages/forms/PublicFormPage.vue"), meta: { standalonePublic: true } },
+    {
+      path: "/r/:shareKey",
+      component: () => import("../pages/public/PublicSharePage.vue"),
+      meta: { publicShare: true }
+    },
+    { path: "/documents", redirect: "/admin/docs" },
     {
       path: "/admin",
-      component: () => import("../pages/admin/AdminLayout.vue"),
+      component: () => import("../layouts/AdminLayout.vue"),
       meta: { auth: true, admin: true },
       children: [
         { path: "", redirect: "/admin/docs" },
@@ -46,7 +53,7 @@ const router = createRouter({
     },
     {
       path: "/users",
-      component: () => import("../pages/admin/AdminLayout.vue"),
+      component: () => import("../layouts/UserLayout.vue"),
       meta: { auth: true, userWorkspace: true },
       children: [
         { path: "", redirect: "/users/docs" },
@@ -61,6 +68,10 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
+  // Public shares must stay independent from the admin session bootstrap. This
+  // keeps /r/:shareKey usable for signed-in visitors and as a standalone Pages route.
+  if (to.meta.publicShare || to.meta.standalonePublic) return true;
+
   if (to.path === "/login" && (Object.keys(to.query).length > 0 || to.hash)) {
     return { path: "/login", replace: true };
   }

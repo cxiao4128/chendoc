@@ -1,0 +1,180 @@
+.doc-editor-mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--cd-bg, #fff);
+}
+
+/* 顶部栏 */
+.doc-editor-mobile__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cd-border-color, #e5e7eb);
+  background: var(--cd-bg, #fff);
+}
+
+.doc-editor-mobile__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: var(--cd-bg-secondary, #f3f4f6);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--cd-text, #374151);
+}
+
+.doc-editor-mobile__headline {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.doc-editor-mobile__headline > span:first-child {
+  font-size: 12px;
+  color: var(--cd-text-secondary, #6b7280);
+}
+
+.doc-editor-mobile__headline > strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--cd-text, #374151);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-editor-mobile__save {
+  font-size: 13px;
+  color: var(--cd-error, #ef4444);
+  white-space: nowrap;
+}
+
+/* 加载状态 */
+.doc-editor-mobile__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 16px;
+}
+
+.doc-editor-mobile__loading .cd-skeleton {
+  height: 24px;
+  border-radius: 4px;
+}
+
+.doc-editor-mobile__loading .cd-skeleton:nth-child(1) { width: 70%; }
+.doc-editor-mobile__loading .cd-skeleton:nth-child(2) { width: 50%; }
+.doc-editor-mobile__loading .cd-skeleton:nth-child(3) { width: 30%; }
+
+/* 错误状态 */
+.doc-editor-mobile__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.doc-editor-mobile__error strong {
+  font-size: 16px;
+  color: var(--cd-error, #ef4444);
+}
+
+.doc-editor-mobile__error p {
+  font-size: 14px;
+  color: var(--cd-text-secondary, #6b7280);
+  margin: 0;
+}
+
+/* 摘要区 */
+.doc-editor-mobile__summary {
+  padding: 16px;
+  border-bottom: 1px solid var(--cd-border-color, #e5e7eb);
+}
+
+.doc-editor-mobile__title {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--cd-border-color, #e5e7eb);
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--cd-bg, #fff);
+}
+
+.doc-editor-mobile__title:focus {
+  outline: none;
+  border-color: var(--cd-primary, #3b82f6);
+}
+
+.doc-editor-mobile__meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--cd-text-secondary, #6b7280);
+}
+
+/* 保存错误 */
+.doc-editor-mobile__save-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.05);
+  border-bottom: 1px solid var(--cd-border-color, #e5e7eb);
+}
+
+.doc-editor-mobile__save-error span {
+  font-size: 13px;
+  color: var(--cd-error, #ef4444);
+}
+
+/* 操作按钮栏 */
+.doc-editor-mobile__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cd-border-color, #e5e7eb);
+  background: var(--cd-bg, #fff);
+}
+
+.doc-editor-mobile__actions button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--cd-border-color, #e5e7eb);
+  border-radius: 8px;
+  background: var(--cd-bg, #fff);
+  font-size: 14px;
+  color: var(--cd-text, #374151);
+  cursor: pointer;
+}
+
+.doc-editor-mobile__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.doc-editor-mobile__actions button:not(:disabled):hover {
+  background: var(--cd-bg-secondary, #f3f4f6);
+}
+
+/* 编辑器画布 */
+.doc-editor-mobile__canvas {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 面板遮罩 */

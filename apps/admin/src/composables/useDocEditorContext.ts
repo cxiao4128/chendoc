@@ -13,6 +13,7 @@ export interface DocEditorContext {
   current: Ref<any>;
   loading: Ref<boolean>;
   error: Ref<string>;
+  hydrating: Ref<boolean>;
 
   // 文档内容
   title: Ref<string>;
@@ -68,6 +69,7 @@ const context: DocEditorContext = {
   current: ref(null),
   loading: ref(false),
   error: ref(""),
+  hydrating: ref(false),
 
   // 文档内容
   title: ref(""),

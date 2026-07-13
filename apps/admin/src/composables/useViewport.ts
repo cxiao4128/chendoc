@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 export const MOBILE_VIEWPORT_QUERY = "(max-width: 900px)";
 
 export function useViewport(query = MOBILE_VIEWPORT_QUERY) {
-  const matches = ref(false);
+  const matches = ref(typeof window !== "undefined" ? window.matchMedia(query).matches : false);
   let mediaQuery: MediaQueryList | null = null;
 
   const update = () => {

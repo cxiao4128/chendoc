@@ -1,9 +1,6 @@
 import crypto from "crypto";
-import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { db } from "../../db/client.js";
-import { searchHistory } from "../../db/schema.js";
 import { authenticate } from "../../middleware/auth.js";
 import { requireSuperAdmin } from "../../middleware/requireSuperAdmin.js";
 import { requireDangerVerification } from "../auth/dangerVerification.service.js";
@@ -26,7 +23,7 @@ import {
   restoreDocVersionByUid,
   restoreDocVersionAsCopyByUid,
   safeDocListPayload,
-  safeDocPayload,
+  safeDocPayloadForDocWithShare,
   setDocumentSchedule,
   getDocumentSchedule,
   softDeleteDocByUid,
@@ -36,11 +33,10 @@ import {
   clearSearchHistory,
   deleteSearchHistoryItem,
   getSearchHistory,
+  getSearchHistoryItemById,
   getSearchSuggestions,
-  recordSearchHistory,
   searchDocsFullText,
-  searchDocsQuick,
-  searchWithSuggestions
+  searchDocsQuick
 } from "./docs.search.service.js";
 
 export const docUidSchema = z.string().trim().regex(/^[A-Za-z0-9]{16,32}$/);
@@ -115,15 +111,6 @@ export async function docsRoutes(app: FastifyInstance) {
       ipHash
     );
 
-    await recordSearchHistory(
-      user.id,
-      query.q,
-      "fulltext",
-      result.total,
-      result.searchTime,
-      ipHash
-    );
-
     enqueueDocumentLog({
       userId: user.id,
       role: user.role,
@@ -132,7 +119,16 @@ export async function docsRoutes(app: FastifyInstance) {
       request
     });
 
-    return result;
+    return {
+      ...result,
+      docs: result.results,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: result.total,
+        hasMore: result.hasMore
+      }
+    };
   });
 
   app.get("/api/docs/search/quick", { preHandler: authenticate }, async (request) => {
@@ -148,25 +144,26 @@ export async function docsRoutes(app: FastifyInstance) {
         pageSize: query.pageSize,
         sortBy: query.sort,
         sortOrder: query.sortOrder
-      }
-    );
-
-    await recordSearchHistory(
-      user.id,
-      query.q,
-      "quick",
-      result.total,
-      result.searchTime,
+      },
       ipHash
     );
 
-    return result;
+    return {
+      ...result,
+      docs: result.results,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total: result.total,
+        hasMore: result.hasMore
+      }
+    };
   });
 
   app.get("/api/docs/search/suggestions", { preHandler: authenticate }, async (request) => {
     const query = suggestionsQuerySchema.parse(request.query);
     const suggestions = await getSearchSuggestions(
-      request.user!.id,
+      request.user!,
       query.q,
       query.limit
     );
@@ -185,11 +182,9 @@ export async function docsRoutes(app: FastifyInstance) {
 
   app.delete("/api/docs/search/history/:id", { preHandler: authenticate }, async (request) => {
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const result = await db.query.searchHistory.findFirst({
-      where: and(eq(searchHistory.id, params.id), eq(searchHistory.userId, request.user!.id))
-    });
-    if (result) {
-      await deleteSearchHistoryItem(request.user!.id, result.query);
+    const historyItem = await getSearchHistoryItemById(params.id, request.user!.id);
+    if (historyItem) {
+      await deleteSearchHistoryItem(request.user!.id, historyItem.query);
     }
     return { ok: true };
   });
@@ -215,7 +210,7 @@ export async function docsRoutes(app: FastifyInstance) {
       targetId: doc.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
   app.post("/api/docs/bulk-delete", { preHandler: authenticate }, async (request) => {
     const body = trashBulkSchema.parse(request.body);
@@ -312,7 +307,7 @@ export async function docsRoutes(app: FastifyInstance) {
       action: "read",
       request
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
   app.patch("/api/docs/:docUid", { preHandler: authenticate }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
@@ -325,7 +320,7 @@ export async function docsRoutes(app: FastifyInstance) {
       action: "update",
       request
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
   app.delete("/api/docs/:docUid", { preHandler: authenticate }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
@@ -365,7 +360,7 @@ export async function docsRoutes(app: FastifyInstance) {
       targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
   app.delete("/api/admin/docs/:docUid/hard", { preHandler: dangerousSuperAdmin }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
@@ -389,12 +384,12 @@ export async function docsRoutes(app: FastifyInstance) {
       targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
   // 定时发布设置
   app.get("/api/docs/:docUid/schedule", { preHandler: authenticate }, async (request) => {
     const params = docUidParamSchema.parse(request.params);
-    const schedule = await getDocumentSchedule(params.docUid);
+    const schedule = await getDocumentSchedule(params.docUid, request.user!);
     if (!schedule) {
       return { schedule: null };
     }
@@ -467,7 +462,7 @@ export async function docsRoutes(app: FastifyInstance) {
       targetId: doc.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
   app.post("/api/docs/:docUid/versions/:versionId/restore", { preHandler: authenticate }, async (request) => {
     const params = z.object({
@@ -490,6 +485,6 @@ export async function docsRoutes(app: FastifyInstance) {
       targetId: params.docUid,
       ...auditMetaFromRequest(request)
     });
-    return { doc: safeDocPayload(doc) };
+    return { doc: safeDocPayloadForDocWithShare(doc) };
   });
 }

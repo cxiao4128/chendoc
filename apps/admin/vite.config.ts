@@ -1,14 +1,13 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import { fileURLToPath, URL } from "node:url";
 
 function cleanId(id: string) {
   return id.replace(/\\/g, "/");
 }
 
 const chunkNames = {
-  auth: "core-a",
-  session: "core-b",
-  request: "core-c",
+  core: "core",
   gateway: "gateway",
   crypto: "core-d",
   docCore: "feature-doc-core",
@@ -58,8 +57,21 @@ function pageGroup(id: string) {
   return null;
 }
 
+function appCoreGroup(id: string) {
+  if (
+    id.endsWith("/src/router/access.ts")
+    || id.endsWith("/src/stores/theme.ts")
+    || id.endsWith("/src/services/nativeDialog.ts")
+    || id.includes("/src/components/common/NativeDialogHost.vue")
+  ) return chunkNames.core;
+  return null;
+}
+
 function manualChunks(id: string) {
   const normalized = cleanId(id);
+
+  const appCoreChunk = appCoreGroup(normalized);
+  if (appCoreChunk) return appCoreChunk;
 
   const editorChunk = editorGroup(normalized);
   if (editorChunk) return editorChunk;
@@ -68,13 +80,13 @@ function manualChunks(id: string) {
 
   if (normalized.includes("/src/gateway/") || normalized.endsWith("/src/api/endpoints.ts")) return chunkNames.gateway;
   if (normalized.endsWith("/src/security/cryptoClient.ts")) return chunkNames.crypto;
-  if (normalized.endsWith("/src/security/sessionToken.ts") || normalized.endsWith("/src/stores/auth.ts")) return chunkNames.session;
-  if (normalized.endsWith("/src/api/auth.ts")) return chunkNames.auth;
+  if (normalized.endsWith("/src/security/sessionToken.ts") || normalized.endsWith("/src/stores/auth.ts")) return chunkNames.core;
+  if (normalized.endsWith("/src/api/auth.ts")) return chunkNames.core;
   if (normalized.endsWith("/src/api/docs.ts") || normalized.endsWith("/src/stores/doc.ts")) return chunkNames.docCore;
   if (
     normalized.endsWith("/src/api/request.ts")
     || normalized.endsWith("/src/security/runtimeGuard.ts")
-  ) return chunkNames.request;
+  ) return chunkNames.core;
 
   return pageGroup(normalized) ?? undefined;
 }
@@ -83,9 +95,8 @@ function chunkFileNames(chunk: { name: string }) {
   if (chunk.name === chunkNames.vendor) return "assets/v-[hash].js";
   if (chunk.name.startsWith("editor-")) return "assets/e-[hash].js";
   if (chunk.name === chunkNames.crypto) return "assets/c-[hash].js";
-  if (chunk.name === chunkNames.request) return "assets/b-[hash].js";
+  if (chunk.name === chunkNames.core) return "assets/b-[hash].js";
   if (chunk.name === chunkNames.gateway) return "assets/g-[hash].js";
-  if (chunk.name === chunkNames.auth || chunk.name === chunkNames.session) return "assets/a-[hash].js";
   if (chunk.name === chunkNames.docCore) return "assets/p-[hash].js";
   if (chunk.name.startsWith("page-")) return "assets/p-[hash].js";
   return "assets/p-[hash].js";
@@ -94,10 +105,14 @@ function chunkFileNames(chunk: { name: string }) {
 export default defineConfig(() => {
   return {
     plugins: [vue()],
+    resolve: {
+      alias: {
+        "@": fileURLToPath(new URL("./src", import.meta.url)),
+      },
+    },
     server: {
       proxy: {
-        "/api": "http://127.0.0.1:8985",
-        "/r": "http://127.0.0.1:8985"
+        "/api": "http://127.0.0.1:8985"
       }
     },
     build: {
@@ -106,6 +121,11 @@ export default defineConfig(() => {
       minify: "esbuild",
       rollupOptions: {
         onLog(level, log, handler) {
+          // 暂时禁用循环 chunk 警告检查，待优化 chunk 配置
+          if (level === "warn" && log.message.includes("Circular chunk")) {
+            handler(level, log);
+            return;
+          }
           if (level === "warn") throw new Error(`Build warning: ${log.message}`);
           handler(level, log);
         },

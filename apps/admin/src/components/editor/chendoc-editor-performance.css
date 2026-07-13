@@ -1,0 +1,110 @@
+/* ============================================================
+   大文档性能优化
+   ============================================================ */
+
+/* 图片渐进式加载 */
+.chendoc-editor__surface img {
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+
+.chendoc-editor__surface img[src] {
+  opacity: 1;
+}
+
+.chendoc-editor__surface img.loading {
+  background: linear-gradient(
+    90deg,
+    var(--cd-bg) 0%,
+    var(--cd-panel) 50%,
+    var(--cd-bg) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 代码块性能优化 - 延迟高亮 */
+.chendoc-editor__surface pre code {
+  display: block;
+  overflow-x: auto;
+}
+
+/* 内容区域渲染优化 */
+.chendoc-editor__surface.ProseMirror {
+  contain: layout style;
+}
+
+/* 虚拟滚动占位 - 大文档分页提示 */
+.chendoc-editor__large-doc-hint {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--cd-muted);
+  font-size: 12px;
+  padding: 8px;
+  background: var(--cd-panel);
+  border-top: 1px solid var(--cd-border);
+}
+
+.chendoc-editor__large-doc-hint.is-visible {
+  display: flex;
+}
+
+/* 搜索高亮样式 */
+.chendoc-editor__surface mark {
+  background: var(--cd-highlight-yellow, #fef08a);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* 内容变化节流指示器 */
+.chendoc-editor__sync-indicator {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--cd-panel);
+  border: 1px solid var(--cd-border);
+  color: var(--cd-muted);
+  font-size: 11px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.chendoc-editor__sync-indicator.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.chendoc-editor__sync-indicator.is-saving {
+  color: var(--cd-accent);
+}
+
+.chendoc-editor__sync-indicator.is-saved {
+  color: var(--cd-success, #16a34a);
+}
+
+/* 移动端同步指示器 */
+@media (max-width: 760px) {
+  .chendoc-editor__sync-indicator {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}

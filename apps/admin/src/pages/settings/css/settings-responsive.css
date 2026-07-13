@@ -1,0 +1,182 @@
+@media (min-width: 901px) {
+  .settings-page__tabs {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 1360px) {
+  .settings-page__status-grid,
+  .settings-page__overview-grid,
+  .settings-page__metric-grid,
+  .settings-page__deploy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-page__overview-bottom,
+  .settings-page__deploy {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-page__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-page__status-grid,
+  .settings-page__overview-grid,
+  .settings-page__metric-grid,
+  .settings-page__user-stat-grid,
+  .settings-page__appearance,
+  .settings-page__quick,
+  .settings-page__deploy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page__panel-head,
+  .settings-page__version,
+  .settings-page__inline-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-page__users-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-page__user-edit-head {
+    flex-direction: column;
+  }
+
+  .settings-page__user-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page__profile-summary,
+  .settings-page__profile-grid,
+  .settings-page__profile-facts,
+  .settings-page__password-grid,
+  .settings-page__permission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page__profile-facts dl,
+  .settings-page__profile-facts dl + dl {
+    border-right: 0;
+    border-bottom: 1px solid var(--cd-border);
+    padding: 0 0 14px;
+  }
+
+  .settings-page__profile-facts dl:last-child {
+    border-bottom: 0;
+  }
+
+  .settings-page__user-table-shell {
+    overflow-x: auto;
+  }
+
+  .settings-page__user-table {
+    min-width: 920px;
+  }
+
+  .settings-page__log-row,
+  .settings-page__compact-log article,
+  .settings-page__activity-table article,
+  .settings-page__detail-log-table article {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 12px;
+  }
+
+  .settings-page__tab-panel-head {
+    flex-direction: column;
+  }
+
+  .settings-page__definition-grid div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .settings-page__definition-grid dd {
+    text-align: left;
+  }
+
+  .settings-page__version-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page__version-actions .cd-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .settings-page__tab {
+    padding-right: 11px;
+    padding-left: 11px;
+    font-size: 12px;
+  }
+
+  .settings-page__status-grid article {
+    min-height: auto;
+    padding: 15px;
+  }
+
+  .settings-page__status-grid article > svg {
+    width: 42px;
+    height: 42px;
+  }
+
+  .settings-page__panel,
+  .settings-page__version,
+  .settings-page__deploy {
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  .settings-page__user-subtabs {
+    gap: 18px;
+    overflow-x: auto;
+  }
+
+  .settings-page__user-stat-grid article {
+    min-height: 82px;
+    padding: 14px;
+  }
+
+  .settings-page__user-table-footer {
+    flex-direction: column;
+  }
+
+  .settings-page__profile-hero,
+  .settings-page__profile-title,
+  .settings-page__profile-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-page__share-info-preview {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-page__share-info-preview strong {
+    text-align: left;
+  }
+
+  .settings-page__side-list div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .settings-page__side-list dd {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+}

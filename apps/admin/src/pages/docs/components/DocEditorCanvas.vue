@@ -7,21 +7,16 @@
  * - 编辑器 props 传递
  * - TOC 事件处理
  */
-import { computed, defineAsyncComponent } from "vue";
-import type { DocDetail } from "../../../api/docs";
+import { defineAsyncComponent, h } from "vue";
 
 const EditorLoadingSkeleton = {
   name: "EditorLoadingSkeleton",
   setup() {
-    return () => ({
-      type: "div" as const,
-      props: { class: "doc-editor-canvas__skeleton", "aria-label": "编辑器加载中" },
-      children: [
-        { type: "span" as const, props: { class: "cd-skeleton" } },
-        { type: "span" as const, props: { class: "cd-skeleton" } },
-        { type: "span" as const, props: { class: "cd-skeleton" } }
-      ]
-    });
+    return () => h("div", { class: "doc-editor-canvas__skeleton", "aria-label": "编辑器加载中" }, [
+      h("span", { class: "cd-skeleton" }),
+      h("span", { class: "cd-skeleton" }),
+      h("span", { class: "cd-skeleton" })
+    ]);
   }
 };
 
@@ -31,10 +26,10 @@ const ChendocEditor = defineAsyncComponent({
   delay: 120
 });
 
-const props = defineProps<{
+const _props = defineProps<{
   docUid: string;
   contentJson: string;
-  editorKey: string;
+  editorKey?: string;
 }>();
 
 const emit = defineEmits<{

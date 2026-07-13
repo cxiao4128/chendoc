@@ -1,0 +1,17 @@
+.form-submissions .empty-state {
+  padding: 48px;
+  text-align: center;
+  color: var(--cd-muted);
+  background: var(--cd-paper);
+  border: 1px solid var(--cd-border);
+  border-radius: 12px;
+}
+
+.form-submissions .spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

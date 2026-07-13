@@ -55,7 +55,8 @@ export const authSessions = mysqlTable("auth_sessions", {
   keyEncrypted: text("key_encrypted").notNull(),
   expireAt: ts("expire_at").notNull(),
   lastSeenAt: ts("last_seen_at").notNull(),
-  createdAt: ts("created_at").notNull()
+  createdAt: ts("created_at").notNull(),
+  version: int("version").notNull().default(1)
 }, (table) => [
   index("auth_sessions_user_idx").on(table.userId),
   index("auth_sessions_expire_idx").on(table.expireAt)
@@ -428,7 +429,7 @@ export const totpFailures = mysqlTable("totp_failures", {
 // ===== 搜索历史模块 =====
 export const searchHistory = mysqlTable("search_history", {
   id: id(),
-  userId: int("user_id").notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   query: varchar("query", { length: 255 }).notNull(),
   queryHash: varchar("query_hash", { length: 64 }).notNull(),
   searchMode: varchar("search_mode", { length: 16 }).notNull().default("fulltext"),  // fulltext | quick | suggestions
@@ -446,9 +447,9 @@ export const searchHistory = mysqlTable("search_history", {
 // ===== 文档评论模块 =====
 export const docComments = mysqlTable("doc_comments", {
   id: id(),
-  docUid: varchar("doc_uid", { length: 32 }).notNull(),
+  docUid: varchar("doc_uid", { length: 32 }).notNull().references(() => docs.docUid, { onDelete: "cascade" }),
   parentId: int("parent_id"),  // 回复嵌套
-  userId: int("user_id").notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),  // 评论内容（Markdown）
   selectionStart: int("selection_start"),  // 批注起始位置
   selectionEnd: int("selection_end"),      // 批注结束位置
@@ -466,8 +467,8 @@ export const docComments = mysqlTable("doc_comments", {
 // 评论 Reactions（点赞等）
 export const docCommentReactions = mysqlTable("doc_comment_reactions", {
   id: id(),
-  commentId: int("comment_id").notNull(),
-  userId: int("user_id").notNull(),
+  commentId: int("comment_id").notNull().references(() => docComments.id, { onDelete: "cascade" }),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   reaction: varchar("reaction", { length: 16 }).notNull().default("like"),  // like | dislike
   createdAt: ts("created_at").notNull()
 }, (table) => [

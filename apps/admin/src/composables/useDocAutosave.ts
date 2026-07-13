@@ -40,14 +40,12 @@ export function useDocAutosave(options: UseDocAutosaveOptions): UseDocAutosaveRe
     onQueued,
     save,
     networkAware = true,
-    maxRetries = 3,
   } = options;
 
   let timer: ReturnType<typeof globalThis.setTimeout> | null = null;
-  let pendingSave = false;
   let unwatchNetwork: (() => void) | null = null;
 
-  const { status: networkStatus, isOnline } = useNetworkStatus();
+  const { isOnline } = useNetworkStatus();
 
   function clear() {
     if (!timer) return;
@@ -57,18 +55,15 @@ export function useDocAutosave(options: UseDocAutosaveOptions): UseDocAutosaveRe
 
   function doSave() {
     if (isSaving()) {
-      pendingSave = true;
       onQueued?.();
       return;
     }
-    pendingSave = false;
     void save();
   }
 
   function schedule() {
     // 网络离线时不调度，等待网络恢复
     if (networkAware && !isOnline.value) {
-      pendingSave = true;
       // 监听网络恢复
       if (!unwatchNetwork) {
         unwatchNetwork = watch(

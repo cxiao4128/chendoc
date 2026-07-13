@@ -1,0 +1,101 @@
+/**
+ * doc-list-table.css - 文档列表页表格和行样式
+ *
+ * 重构说明：
+ * - 表格容器、表头、行
+ * - 批量选择、状态徽章
+ * - 操作按钮
+ */
+
+/* 表格容器 */
+.doc-list-page__table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__table {
+  border-radius: 12px;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+/* 表格头部 */
+.doc-list-page__table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px 174px minmax(118px, 0.6fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 42px;
+  border-bottom: 1px solid var(--cd-border);
+  background: var(--cd-paper);
+  color: var(--cd-muted);
+  padding: 0 16px 0 18px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__table-head,
+.doc-list-page:not(.is-mobile) .doc-list-page__row {
+  grid-template-columns: 36px minmax(280px, 1.3fr) 90px 160px 170px 80px;
+  gap: 18px;
+  padding-inline: 26px;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__table.has-owner .doc-list-page__table-head,
+.doc-list-page:not(.is-mobile) .doc-list-page__table.has-owner .doc-list-page__row {
+  grid-template-columns: 36px minmax(280px, 1.3fr) 90px 112px 160px 170px 80px;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__table-head {
+  min-height: 52px;
+  background: rgba(251, 252, 255, 0.86);
+}
+
+/* 表格行 */
+.doc-list-page__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px 174px minmax(118px, 0.6fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  min-height: 72px;
+  border: 0;
+  border-bottom: 1px solid var(--cd-border);
+  border-radius: 0;
+  background: var(--cd-panel);
+  box-shadow: none;
+  padding: 13px 16px 13px 18px;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease-out, background-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.doc-list-page__row:last-child {
+  border-bottom: 0;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__row {
+  min-height: 66px;
+  padding-block: 11px;
+}
+
+.doc-list-page__row:hover {
+  background: #fbfdff;
+  box-shadow: none;
+}
+
+/* 批量模式行 */
+.doc-list-page__row.is-bulk {
+  grid-template-columns: 28px minmax(0, 1fr) 108px 174px minmax(118px, 0.6fr);
+}
+
+.doc-list-page__row.is-selected {
+  background: var(--cd-accent-soft);
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__row.is-selected {
+  background: rgba(125, 107, 232, 0.08);
+}

@@ -1,0 +1,100 @@
+/* ========================================
+   小屏平板 max-width: 900px
+   ======================================== */
+@media (max-width: 900px) {
+  .trash-page__stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 0 16px 12px;
+  }
+
+  .trash-page__stats article {
+    min-height: auto;
+    padding: 12px 8px;
+  }
+
+  .trash-page__stats article > span {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+
+  .trash-page__stats strong {
+    font-size: 22px;
+  }
+
+  .trash-page__filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 0 16px 12px;
+    scrollbar-width: none;
+  }
+
+  .trash-page__filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .trash-page__filters button {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 16px;
+    min-height: 32px;
+  }
+
+  .trash-page__toolbar {
+    display: none;
+  }
+
+  .trash-page__table {
+    margin: 0 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .trash-page__bulkbar {
+    display: none;
+  }
+
+  .trash-page__row {
+    grid-template-columns: 40px 1fr;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #fff;
+    border-bottom: 1px solid #f0f2f5;
+  }
+
+  .trash-page__row > span,
+  .trash-page__row > small,
+  .trash-page__row > div:not(.trash-page__actions):not(.trash-page__select) {
+    grid-column: 2;
+    font-size: 12px;
+  }
+
+  .trash-page__row strong {
+    font-size: 15px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trash-page__actions {
+    grid-column: span 2;
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .trash-page__actions .cd-button {
+    flex: 1;
+    min-height: 40px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .trash-page__aside {
+    display: none;
+  }
+}

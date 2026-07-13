@@ -1,393 +1,346 @@
 #!/usr/bin/env node
-/**
- * ChenDoc 发布打包脚本
- * 生成两份压缩包：公共包(不含内部文档) + 服务器包(含内部排查文档)
- * 用法: node scripts/release.js [--skip-build] [--skip-git] [--skip-release]
- */
 
-import JSZip from 'jszip';
-import fs from 'fs';
-import path from 'path';
-import { createHash } from 'crypto';
-import { execSync } from 'child_process';
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  lstatSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
+import JSZip from "jszip";
+import {
+  containsServerSecretAssignment,
+  exactHttpsOrigin,
+  parseConnectOrigins,
+  writeCloudflarePagesFiles,
+} from "./cloudflare-pages-config.js";
 
-const __dirname = import.meta.dirname;
-const rootDir = path.resolve(__dirname, '..');
-
-// 命令行参数
+const rootDir = path.resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
-const skipBuild = args.includes('--skip-build');
-const skipGit = args.includes('--skip-git');
-const skipRelease = args.includes('--skip-release');
+const skipBuild = args.includes("--skip-build");
 
-console.log('=== ChenDoc 发布打包 ===');
-console.log(`工作目录: ${rootDir}`);
+function argument(name) {
+  const inline = args.find((item) => item.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1).trim();
+  const index = args.indexOf(name);
+  return index >= 0 ? String(args[index + 1] || "").trim() : "";
+}
 
-// ========== 1. 读取版本 ==========
-const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+const backendOrigin = exactHttpsOrigin(
+  argument("--backend-origin") || process.env.CHENDOC_CLOUDFLARE_BACKEND_ORIGIN || "",
+  "--backend-origin",
+  "https://api.w92.pw",
+);
+const publicOrigin = exactHttpsOrigin(
+  argument("--public-origin") || process.env.CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN || "",
+  "--public-origin",
+  "https://d.w92.pw",
+);
+const extraConnectOrigins = parseConnectOrigins(
+  argument("--connect-origin") || process.env.CHENDOC_CLOUDFLARE_CONNECT_ORIGINS || "",
+  "--connect-origin",
+);
+
+const pkg = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8"));
 const version = pkg.version;
-console.log(`当前版本: ${version}`);
+const releaseDir = path.join(rootDir, "release");
+const tempDir = path.join(rootDir, ".tmp", `deployments-${version}`);
+const cloudflareStage = path.join(tempDir, "cloudflare-pages");
+const serverStage = path.join(tempDir, "server");
+const cloudflareZip = path.join(releaseDir, `chendoc-${version}-cloudflare-pages.zip`);
+const serverZip = path.join(releaseDir, `chendoc-${version}-server.zip`);
+const checksumsFile = path.join(releaseDir, `chendoc-${version}-SHA256SUMS.txt`);
 
-const publicZip = path.join(rootDir, 'release', `chendoc-${version}-public.zip`);
-const serverZip = path.join(rootDir, 'release', `chendoc-${version}-server.zip`);
-
-// 创建 release 目录
-const releaseDir = path.join(rootDir, 'release');
-if (!fs.existsSync(releaseDir)) {
-  fs.mkdirSync(releaseDir, { recursive: true });
-}
-
-// ========== 2. 构建 ==========
-if (!skipBuild) {
-  console.log('\n[1/5] 执行构建...');
-
-  console.log('  安装依赖...');
-  execSync('npm ci --workspaces --include-workspace-root', {
-    cwd: rootDir,
-    stdio: 'inherit'
-  });
-
-  console.log('  构建前后端...');
-  execSync('npm run build', {
-    cwd: rootDir,
-    stdio: 'inherit'
-  });
-
-  console.log('  构建完成');
-} else {
-  console.log('\n[1/5] 跳过构建');
-}
-
-// ========== 3. 准备打包目录 ==========
-console.log('\n[2/5] 准备打包...');
-
-const tmpDir = path.join(rootDir, '.tmp', `release-${version}`);
-const publicTmp = path.join(tmpDir, 'public-pkg');
-const serverTmp = path.join(tmpDir, 'server-pkg');
-
-// 清理旧临时目录
-if (fs.existsSync(tmpDir)) {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-}
-fs.mkdirSync(publicTmp, { recursive: true });
-fs.mkdirSync(serverTmp, { recursive: true });
-
-// 必须排除的目录和文件
-const mustExcludeDirs = new Set([
-  '.git',
-  'node_modules',
-  'apps/admin/node_modules',
-  'server/node_modules',
-  'data',
-  '.tmp',
-  'backups',
-  'logs',
-  '.claude',
-  '.agents',
-  '.codex',
-  '.playwright-mcp',
-  '.spectrai',
-  '.spectrai-worktrees',
-  '.tools',
-  'reports',
-  'skills',
-  '.vscode',
-  'release'
-]);
-
-// 必须排除的文件
-const mustExcludeFiles = new Set([
-  '.env',
-  '.env.local',
-  '.env.development',
-  '.env.production',
-  'package-lock.json'
-]);
-
-// 扩展名的文件排除
-const excludeExtensions = ['.log', '.sqlite', '.sqlite-shm', '.sqlite-wal'];
-
-// 公共包额外排除的文件和目录
-const publicExclude = new Set([
-  'docs',
-  '超记忆副本.md',
-  '更改必读规范.md',
-  '优化建议.md',
-  '安全审计.md',
-  '开发者-分析报告.md',
-  '用户-分析报告.md',
-  'FILE_GUIDE.md',
-  'AGENTS.md',
-  'DEPLOY_README.md',
-  'DESIGN_LANGUAGE.md',
-  'PRODUCT.md',
-  'FORM_SECURITY.md',
-  'ecosystem.config.cjs',
-  'move-css-files.ps1',
-  'move-css-files.sh',
-  'move-css.bat',
-  '打开CMD.bat',
-  '.gitignore',
-  '.gitattributes',
-  'playwright.config.ts',
-  'vitest.config.ts',
-  'vitest.contig.ts'
-]);
-
-// 公共包额外排除的图片
-const publicExcludePatterns = [
-  /screenshot/i,
-  /截图/i,
-  /\.png$/i,
-  /\.PNG$/i,
-  /\.jpg$/i,
-  /\.jpeg$/i,
-  /\.gif$/i,
-  /\.bmp$/i,
-  /\.ico$/i,
-  /register-page/i,
-  /settings-page/i,
-  /trash-page/i,
-  /desktop-bg\.jpg$/i,
-  /chendoc.*\.log$/i,
-  /console-\d+.*\.log$/i,
-  /dev-server.*\.log$/i,
-  /\.test\.ts$/i,
-  /\.spec\.ts$/i
-];
-
-function shouldExcludePublic(name, fullPath) {
-  if (publicExclude.has(name)) return true;
-  for (const pattern of publicExcludePatterns) {
-    if (pattern.test(name) || pattern.test(fullPath)) return true;
+function runBuild() {
+  if (skipBuild) return;
+  if (process.platform === "win32") {
+    execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm.cmd run build"], { cwd: rootDir, stdio: "inherit" });
+    return;
   }
-  return false;
+  execFileSync("npm", ["run", "build"], { cwd: rootDir, stdio: "inherit" });
 }
 
-// 递归复制并过滤
-function copyFiltered(srcDir, destDir, isPublic) {
-  if (!fs.existsSync(srcDir)) return 0;
+function ensureDir(filePath) {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+}
 
+function copyTree(source, target, filter = () => true) {
   let count = 0;
-  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const srcPath = path.join(srcDir, entry.name);
-    const relPath = path.relative(rootDir, srcPath).replace(/\\/g, '/');
-
-    // 跳过必须排除的目录
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const targetPath = path.join(target, entry.name);
+    if (!filter(sourcePath, entry)) continue;
     if (entry.isDirectory()) {
-      if (mustExcludeDirs.has(entry.name)) continue;
-      // 公共包额外排除目录
-      if (isPublic && publicExclude.has(entry.name)) continue;
-      count += copyFiltered(srcPath, path.join(destDir, entry.name), isPublic);
-      continue;
-    }
-
-    // 是文件
-    if (entry.isFile()) {
-      // 跳过必须排除的文件
-      if (mustExcludeFiles.has(entry.name)) continue;
-
-      // 检查扩展名
-      const ext = path.extname(entry.name).toLowerCase();
-      if (excludeExtensions.includes(ext)) continue;
-
-      // 公共包额外检查
-      if (isPublic && shouldExcludePublic(entry.name, relPath)) continue;
-
-      // 复制文件
-      const destPath = path.join(destDir, relPath);
-      const destFileDir = path.dirname(destPath);
-      if (!fs.existsSync(destFileDir)) {
-        fs.mkdirSync(destFileDir, { recursive: true });
-      }
-      fs.copyFileSync(srcPath, destPath);
-      count++;
+      mkdirSync(targetPath, { recursive: true });
+      count += copyTree(sourcePath, targetPath, filter);
+    } else if (entry.isFile()) {
+      ensureDir(targetPath);
+      copyFileSync(sourcePath, targetPath);
+      count += 1;
     }
   }
-
   return count;
 }
 
-// 复制文件
-console.log('  打包公共包...');
-const publicCount = copyFiltered(rootDir, publicTmp, true);
-console.log(`    公共包: ${publicCount} 文件`);
+function prepareCloudflarePackage() {
+  const adminDist = path.join(rootDir, "apps", "admin", "dist");
+  if (!existsSync(path.join(adminDist, "index.html"))) {
+    throw new Error("Admin dist is missing. Run npm run build first.");
+  }
+  mkdirSync(cloudflareStage, { recursive: true });
+  const count = copyTree(adminDist, cloudflareStage, (sourcePath, entry) => (
+    entry.isDirectory() || path.extname(sourcePath).toLowerCase() !== ".map"
+  ));
+  writeCloudflarePagesFiles({
+    outputDir: cloudflareStage,
+    backendOrigin,
+    publicOrigin,
+    extraConnectOrigins,
+  });
+  return count + 2;
+}
 
-console.log('  打包服务器包...');
-const serverCount = copyFiltered(rootDir, serverTmp, false);
-console.log(`    服务器包: ${serverCount} 文件`);
+const allowedRootDirs = new Set(["apps", "server", "scripts"]);
+const allowedRootFiles = new Set([
+  ".editorconfig",
+  ".env.example",
+  ".node-version",
+  "CHANGELOG.md",
+  "CLOUDFLARE_DEPLOY.md",
+  "LICENSE",
+  "README.md",
+  "deploy.sh",
+  "ecosystem.config.cjs",
+  "package-lock.json",
+  "package.json",
+  "start.sh",
+  "stop.sh",
+]);
+const allowedPackageTrees = [
+  "apps/admin/public",
+  "apps/admin/scripts",
+  "apps/admin/src",
+  "server/scripts",
+  "server/src",
+];
+const allowedPackageFiles = new Set([
+  ...allowedRootFiles,
+  "apps/admin/index.html",
+  "apps/admin/package.json",
+  "apps/admin/tsconfig.json",
+  "apps/admin/vite.config.ts",
+  "server/package.json",
+  "server/tsconfig.json",
+  "scripts/backup-db.js",
+  "scripts/backup-r2.js",
+  "scripts/backup-sqlite.js",
+  "scripts/build-cloudflare-pages.js",
+  "scripts/check-architecture.js",
+  "scripts/cloudflare-pages-config.js",
+  "scripts/copy-admin-dist.js",
+  "scripts/install-maintenance-cron.sh",
+  "scripts/maintenance.sh",
+  "scripts/preflight-deploy.js",
+  "scripts/release.js",
+  "scripts/release.ps1",
+  "scripts/rotate-logs.sh",
+  "scripts/sync-env-example.js",
+  "scripts/verify-backup.js",
+]);
+const excludedSegments = new Set([
+  ".git",
+  ".tmp",
+  "dist",
+  "node_modules",
+  "release",
+]);
+const excludedRuntimePaths = [
+  "server/backups",
+  "server/data",
+  "server/logs",
+];
 
-// ========== 4. 生成压缩包 ==========
-console.log('\n[3/5] 生成压缩包...');
+function isPathOrChild(normalizedPath, excludedPath) {
+  return normalizedPath === excludedPath || normalizedPath.startsWith(`${excludedPath}/`);
+}
+
+function isAllowedPackagePath(normalizedPath, entry) {
+  if (allowedPackageFiles.has(normalizedPath)) return true;
+  if (allowedPackageTrees.some((root) => isPathOrChild(normalizedPath, root))) return true;
+  if (!entry.isDirectory()) return false;
+  return allowedPackageTrees.some((root) => root.startsWith(`${normalizedPath}/`))
+    || [...allowedPackageFiles].some((file) => file.startsWith(`${normalizedPath}/`));
+}
+
+function serverPathAllowed(relativePath, entry) {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  const leaf = segments.at(-1) || "";
+  if (!isAllowedPackagePath(normalized, entry)) return false;
+  if (segments.some((segment) => excludedSegments.has(segment))) return false;
+  if (excludedRuntimePaths.some((excludedPath) => isPathOrChild(normalized, excludedPath))) return false;
+  if (normalized.startsWith("server/public/admin/")) return false;
+  if (leaf.startsWith(".env") && normalized !== ".env.example") return false;
+  if (/\.(?:log|sqlite(?:-shm|-wal)?|zip|map)$/i.test(leaf)) return false;
+  if (/\.(?:spec|test)\.[cm]?[jt]sx?$/i.test(leaf)) return false;
+  if (entry.isDirectory() && ["coverage", "reports"].includes(leaf)) return false;
+  return true;
+}
+
+function copyServerEntry(sourcePath, relativePath) {
+  const entry = lstatSync(sourcePath);
+  if (entry.isSymbolicLink()) {
+    throw new Error(`Refusing to package symbolic link: ${relativePath.replace(/\\/g, "/")}`);
+  }
+  const dirent = {
+    isDirectory: () => entry.isDirectory(),
+    isFile: () => entry.isFile(),
+  };
+  if (!serverPathAllowed(relativePath, dirent)) return 0;
+  if (entry.isDirectory()) {
+    let count = 0;
+    for (const name of readdirSync(sourcePath)) {
+      count += copyServerEntry(path.join(sourcePath, name), path.join(relativePath, name));
+    }
+    return count;
+  }
+  if (!entry.isFile()) return 0;
+  const destination = path.join(serverStage, relativePath);
+  ensureDir(destination);
+  copyFileSync(sourcePath, destination);
+  return 1;
+}
+
+function prepareServerPackage() {
+  mkdirSync(serverStage, { recursive: true });
+  let count = 0;
+  for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && !allowedRootDirs.has(entry.name)) continue;
+    if (entry.isFile() && !allowedRootFiles.has(entry.name)) continue;
+    count += copyServerEntry(path.join(rootDir, entry.name), entry.name);
+  }
+  return count;
+}
 
 async function createZip(sourceDir, outputPath) {
   const zip = new JSZip();
-
-  // 递归添加目录中的文件
-  function addDirToZip(dir, zipDir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      const zipPath = zipDir ? `${zipDir}/${entry.name}` : entry.name;
-
-      if (entry.isDirectory()) {
-        addDirToZip(fullPath, zipPath);
-      } else {
-        const content = fs.readFileSync(fullPath);
-        zip.file(zipPath, content);
+  function addDirectory(directory, prefix = "") {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = path.join(directory, entry.name);
+      const zipPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) addDirectory(fullPath, zipPath);
+      else if (entry.isFile()) {
+        let content = readFileSync(fullPath);
+        if (/\.sh$/i.test(entry.name)) content = Buffer.from(content.toString("utf8").replace(/\r\n/g, "\n"));
+        zip.file(zipPath, content, { unixPermissions: /\.sh$/i.test(entry.name) ? 0o100755 : 0o100644 });
       }
     }
   }
-
-  addDirToZip(sourceDir, '');
-  const buffer = await zip.generateAsync({
-    compression: 'DEFLATE',
+  addDirectory(sourceDir);
+  const output = await zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
     compressionOptions: { level: 9 },
-    type: 'nodebuffer'
+    platform: "UNIX",
   });
-
-  fs.writeFileSync(outputPath, buffer);
-  return buffer.length;
+  writeFileSync(outputPath, output);
+  return output;
 }
 
-// 清理旧压缩包
-if (fs.existsSync(publicZip)) fs.unlinkSync(publicZip);
-if (fs.existsSync(serverZip)) fs.unlinkSync(serverZip);
-
-console.log('  创建公共包...');
-await createZip(publicTmp, publicZip);
-console.log(`  公共包: ${publicZip}`);
-
-console.log('  创建服务器包...');
-await createZip(serverTmp, serverZip);
-console.log(`  服务器包: ${serverZip}`);
-
-// 计算 SHA256
-console.log('\n  SHA-256 校验:');
-
-function sha256(filePath) {
-  const content = fs.readFileSync(filePath);
-  return createHash('sha256').update(content).digest('hex');
-}
-
-console.log('  公共包:');
-console.log(`    ${sha256(publicZip)}`);
-console.log('  服务器包:');
-console.log(`    ${sha256(serverZip)}`);
-
-// 清理临时目录
-fs.rmSync(tmpDir, { recursive: true, force: true });
-
-// ========== 5. Git 提交 ==========
-if (!skipGit) {
-  console.log('\n[4/5] Git 提交...');
-
-  // 检查最新提交
-  const latestCommit = execSync('git log -1 --format=%s', { cwd: rootDir }).toString().trim();
-  const expectedMsg = `Release ChenDoc v${version}`;
-
-  if (latestCommit === expectedMsg) {
-    console.log(`  版本 ${version} 已提交，跳过`);
-  } else {
-    console.log('  创建提交和 tag...');
-
-    // 添加文件并提交
-    execSync('git add -A', { cwd: rootDir });
-    execSync(`git commit -m "${expectedMsg}"`, { cwd: rootDir });
-    execSync(`git tag v${version}`, { cwd: rootDir });
-
-    console.log(`  已提交并创建 tag v${version}`);
-
-    // 推送到 GitHub
-    console.log('  推送到 GitHub...');
-    try {
-      execSync(`git push origin main --tags`, { cwd: rootDir, stdio: 'inherit' });
-      console.log('  推送完成');
-    } catch (e) {
-      console.log('  推送失败，请手动推送');
-      console.log(`  命令: git push origin main --tags`);
+async function verifyZip(buffer, kind) {
+  const zip = await JSZip.loadAsync(buffer);
+  const files = Object.keys(zip.files).filter((name) => !zip.files[name].dir);
+  const required = kind === "cloudflare"
+    ? [
+      "index.html",
+      "chendoc-runtime-config.js",
+      "route-preloads.js",
+      "_headers",
+      "_redirects",
+    ]
+    : [
+      "deploy.sh",
+      "package.json",
+      "package-lock.json",
+      ".env.example",
+      "apps/admin/package.json",
+      "apps/admin/src/features/settings/logs/public-api.ts",
+      "apps/admin/src/features/settings/logs/types.ts",
+      "apps/admin/src/features/settings/logs/hooks/index.ts",
+      "apps/admin/src/features/settings/logs/hooks/useOperationLogs.ts",
+      "apps/admin/src/features/settings/logs/services/logs.service.ts",
+      "server/package.json",
+    ];
+  for (const file of required) {
+    if (!files.includes(file)) throw new Error(`${kind} package is missing ${file}`);
+  }
+  if (kind === "cloudflare" && (!files.some((name) => name.startsWith("assets/")) || !files.some((name) => name.startsWith("site-assets/")))) {
+    throw new Error("Cloudflare package is missing assets or site-assets.");
+  }
+  const forbidden = files.find((name) => (
+    name.startsWith("chendoc/")
+    || name.includes("/node_modules/")
+    || name.startsWith("node_modules/")
+    || (/(^|\/)\.env(\..+)?$/i.test(name) && (kind === "cloudflare" || name !== ".env.example"))
+    || /\.(?:log|sqlite(?:-shm|-wal)?|zip)$/i.test(name)
+    || (kind === "cloudflare" && (name === "_worker.js" || name.endsWith(".map")))
+    || name.includes("apps/admin/apps/admin/")
+    || name.includes("server/server/")
+    || (kind === "cloudflare" && /^(?:apps|server|scripts)\//.test(name))
+  ));
+  if (forbidden) throw new Error(`${kind} package contains forbidden path: ${forbidden}`);
+  if (kind === "cloudflare") {
+    const runtime = await zip.file("chendoc-runtime-config.js")?.async("string");
+    if (!runtime || !runtime.includes(JSON.stringify(backendOrigin)) || !runtime.includes(JSON.stringify(publicOrigin))) {
+      throw new Error("Cloudflare runtime origins do not match the requested API/public origins.");
     }
-  }
-} else {
-  console.log('\n[4/5] 跳过 Git');
-}
-
-// ========== 6. 创建 GitHub Release ==========
-if (!skipRelease) {
-  console.log('\n[5/5] 创建 GitHub Release...');
-
-  let ghAvailable = false;
-  try {
-    execSync('gh --version', { cwd: rootDir, stdio: 'pipe' });
-    ghAvailable = true;
-  } catch {
-    console.log('  gh CLI 不可用，跳过 Release 创建');
-    console.log('  请手动在 GitHub 创建 Release 或等 CI 自动触发');
-  }
-
-  if (ghAvailable) {
-    try {
-      // 检查是否已存在
-      const existing = execSync(`gh release view v${version} 2>/dev/null || true`, {
-        cwd: rootDir
-      }).toString();
-
-      if (existing.includes('v' + version)) {
-        console.log(`  Release v${version} 已存在`);
-      } else {
-        // 生成发布说明
-        const changelog = fs.readFileSync(path.join(rootDir, 'CHANGELOG.md'), 'utf8');
-        const marker = `### ${version}`;
-        const start = changelog.indexOf(marker);
-
-        if (start >= 0) {
-          let rest = changelog.substring(start + marker.length);
-          const end = rest.indexOf('\n###');
-          if (end > 0) {
-            rest = rest.substring(0, end);
-          }
-          const body = rest.trim();
-
-          // 创建 Release Notes 文件
-          const notesFile = path.join(rootDir, '.tmp', 'release-notes.md');
-          fs.mkdirSync(path.dirname(notesFile), { recursive: true });
-          fs.writeFileSync(notesFile, `# ChenDoc v${version}\n\n${body}\n`);
-
-          console.log('  创建 Release...');
-          execSync(`gh release create v${version} --title "ChenDoc v${version}" --notes-file "${notesFile}" --target HEAD`, {
-            cwd: rootDir,
-            stdio: 'inherit'
-          });
-
-          // 上传压缩包
-          console.log('  上传公共包...');
-          execSync(`gh release upload v${version} "${publicZip}" --clobber`, {
-            cwd: rootDir,
-            stdio: 'inherit'
-          });
-
-          console.log('  上传服务器包...');
-          execSync(`gh release upload v${version} "${serverZip}" --clobber`, {
-            cwd: rootDir,
-            stdio: 'inherit'
-          });
-
-          console.log(`  Release 创建完成: https://github.com/cxiao4128/chendoc/releases/tag/v${version}`);
-        } else {
-          console.log(`  找不到 CHANGELOG.md 中 ${version} 的内容`);
-        }
+    const redirects = await zip.file("_redirects")?.async("string");
+    if (redirects?.trim() !== "/* /index.html 200") {
+      throw new Error("Cloudflare package has an invalid SPA fallback.");
+    }
+    for (const name of files.filter((file) => /\.(?:css|html|js|json|txt)$/i.test(file))) {
+      const content = await zip.file(name)?.async("string");
+      if (containsServerSecretAssignment(content)) {
+        throw new Error(`Cloudflare package contains a server-secret assignment: ${name}`);
       }
-    } catch (e) {
-      console.log('  Release 创建失败，请手动创建');
     }
   }
-} else {
-  console.log('\n[5/5] 跳过 Release');
 }
 
-// ========== 完成 ==========
-console.log('\n=== 打包完成 ===');
-console.log(`公共包: ${publicZip}`);
-console.log(`服务器包: ${serverZip}`);
+function sha256(buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+console.log(`ChenDoc v${version} 双部署打包`);
+console.log(`Cloudflare API: ${backendOrigin}`);
+mkdirSync(releaseDir, { recursive: true });
+rmSync(tempDir, { recursive: true, force: true });
+mkdirSync(tempDir, { recursive: true });
+
+try {
+  runBuild();
+  const cloudflareCount = prepareCloudflarePackage();
+  const serverCount = prepareServerPackage();
+  const cloudflareBuffer = await createZip(cloudflareStage, cloudflareZip);
+  const serverBuffer = await createZip(serverStage, serverZip);
+  await verifyZip(cloudflareBuffer, "cloudflare");
+  await verifyZip(serverBuffer, "server");
+
+  const checksums = [
+    `${sha256(cloudflareBuffer)}  ${path.basename(cloudflareZip)}`,
+    `${sha256(serverBuffer)}  ${path.basename(serverZip)}`,
+  ].join("\n") + "\n";
+  writeFileSync(checksumsFile, checksums);
+
+  console.log(`Cloudflare Pages: ${path.relative(rootDir, cloudflareZip)} (${cloudflareCount} files)`);
+  console.log(`Normal server: ${path.relative(rootDir, serverZip)} (${serverCount} files)`);
+  console.log(`SHA-256: ${path.relative(rootDir, checksumsFile)}`);
+} finally {
+  rmSync(tempDir, { recursive: true, force: true });
+}

@@ -1,0 +1,33 @@
+.invite-page__loading {
+  padding: 12px;
+}
+
+.invite-page__loading span {
+  display: block;
+  height: 46px;
+}
+
+.invite-page__loading.is-mobile {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+}
+
+.invite-page__loading.is-mobile span {
+  height: 160px;
+  border-radius: 8px;
+}
+
+@media (max-width: 760px) {
+  .invite-page {
+    padding: 20px 16px;
+  }
+
+  .invite-page h1 {
+    font-size: 30px;
+  }
+
+  .invite-page__tools {
+    grid-template-columns: 1fr;
+  }
+}

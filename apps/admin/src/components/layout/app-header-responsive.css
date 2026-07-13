@@ -1,0 +1,44 @@
+@media (max-width: 900px) {
+  .app-header {
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    padding: 0 max(12px, env(safe-area-inset-left)) 0 max(12px, env(safe-area-inset-right));
+  }
+
+  .app-header__menu {
+    display: grid;
+    place-items: center;
+  }
+
+  .app-header__search {
+    min-width: 0;
+  }
+
+  .app-header__actions {
+    display: none;
+  }
+
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    grid-template-columns: auto 1fr;
+    height: auto;
+    min-height: var(--cd-header);
+    padding-block: 8px;
+  }
+
+  .app-header__menu {
+    width: 38px;
+    height: 38px;
+  }
+
+  .app-header__search {
+    height: 38px;
+    padding-inline: 10px;
+  }
+
+  .app-header__search input {
+    font-size: 13px;
+  }
+}

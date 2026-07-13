@@ -1,0 +1,44 @@
+@media (max-width: 768px) {
+  .form-submissions .stats-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .form-submissions .ip-table {
+    overflow-x: auto;
+  }
+
+  .form-submissions .ip-table table {
+    min-width: 600px;
+  }
+
+  .form-submissions .submissions-table > table { display: none; }
+  .form-submissions .submissions-mobile-list {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+  .form-submissions .submissions-mobile-list article {
+    display: grid;
+    gap: 12px;
+    border: 1px solid var(--cd-border);
+    border-radius: 10px;
+    background: var(--cd-panel);
+    padding: 14px;
+  }
+  .form-submissions .submissions-mobile-list header,
+  .form-submissions .submissions-mobile-list footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .form-submissions .submissions-mobile-list time,
+  .form-submissions .submissions-mobile-list dt {
+    color: var(--cd-muted);
+    font-size: 12px;
+  }
+  .form-submissions .submissions-mobile-list dl { display: grid; gap: 8px; margin: 0; }
+  .form-submissions .submissions-mobile-list dl div { display: grid; gap: 2px; }
+  .form-submissions .submissions-mobile-list dd { margin: 0; color: var(--cd-text); overflow-wrap: anywhere; }
+  .form-submissions .detail-dialog__meta { align-items: flex-start; flex-direction: column; gap: 6px; }
+}

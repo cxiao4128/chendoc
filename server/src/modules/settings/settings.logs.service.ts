@@ -1,1 +1,1 @@
-export { listOperationLogs } from "./settings.service.js";
+export { listOperationLogs } from "./logs.service.js";

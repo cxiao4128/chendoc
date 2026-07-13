@@ -1,0 +1,220 @@
+/**
+ * doc-list-toolbox.css - 文档列表页侧边工具箱样式
+ *
+ * 重构说明：
+ * - 工作区侧边栏
+ * - 工具箱区域（空间、标签、操作）
+ */
+.doc-list-page__workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 284px;
+  gap: 16px;
+  align-items: start;
+}
+
+.doc-list-page__workspace.is-toolbox-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__workspace {
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 42px;
+}
+
+.doc-list-page__ledger {
+  min-width: 0;
+}
+
+/* 工具箱 */
+.doc-list-page__toolbox {
+  position: sticky;
+  top: calc(var(--cd-header) + 16px);
+  display: grid;
+  gap: 12px;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__toolbox {
+  top: calc(var(--cd-header) + 22px);
+  gap: 20px;
+}
+
+.doc-list-page__toolbox section {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-panel);
+  padding: 14px;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__toolbox section {
+  gap: 14px;
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: var(--cd-shadow-soft);
+}
+
+.doc-list-page__toolbox strong {
+  color: var(--cd-ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__toolbox strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 18px;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__toolbox strong a {
+  color: var(--cd-primary-hover);
+  font-size: 12px;
+}
+
+/* 工具箱操作按钮 */
+.doc-list-page__toolbox-action,
+.doc-list-page__toolbox section > button:not(.doc-list-page__toolbox-action) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  background: var(--cd-paper);
+  color: var(--cd-text);
+  padding: 0 11px;
+  font: inherit;
+  font-weight: 760;
+  cursor: pointer;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.doc-list-page:not(.is-mobile) .doc-list-page__toolbox-action,
+.doc-list-page:not(.is-mobile) .doc-list-page__toolbox section > button:not(.doc-list-page__toolbox-action) {
+  justify-content: flex-start;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.doc-list-page__toolbox-action {
+  justify-content: flex-start;
+}
+
+.doc-list-page__toolbox-action:hover,
+.doc-list-page__toolbox section > button:not(.doc-list-page__toolbox-action):hover,
+.doc-list-page__toolbox section > button.is-active {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: var(--cd-primary-soft);
+  color: var(--cd-primary-hover);
+}
+
+.doc-list-page__toolbox-action:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.doc-list-page__toolbox-action.is-primary {
+  border-color: var(--cd-primary);
+  background: var(--cd-primary);
+  color: #fff;
+}
+
+.doc-list-page__toolbox-action.is-primary:hover {
+  border-color: var(--cd-primary-hover);
+  background: var(--cd-primary-hover);
+  color: #fff;
+}
+
+.doc-list-page__toolbox b {
+  color: var(--cd-muted);
+  font-size: 12px;
+}
+
+.doc-list-page__toolbox button.is-active b {
+  color: var(--cd-primary-hover);
+}
+
+.doc-list-page__toolbox-message {
+  display: block;
+  margin: 0;
+  color: var(--cd-success);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* 存储概览 */
+.doc-list-page__storage {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+
+.doc-list-page__storage strong,
+.doc-list-page__storage p,
+.doc-list-page__storage .cd-button {
+  grid-column: 1 / 2;
+}
+
+.doc-list-page__storage p {
+  margin: 0;
+  color: var(--cd-muted);
+  font-size: 13px;
+}
+
+.doc-list-page__ring {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cd-primary-soft);
+}
+
+.doc-list-page__ring span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--cd-ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+/* 工具箱文章列表 */
+.doc-list-page__toolbox article {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: var(--cd-primary-hover);
+}
+
+.doc-list-page__toolbox article span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.doc-list-page__toolbox article b,
+.doc-list-page__toolbox article small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-list-page__toolbox article b {
+  color: var(--cd-text);
+  font-size: 12px;
+}
+
+.doc-list-page__toolbox article small {
+  color: var(--cd-muted);
+  font-size: 11px;
+}

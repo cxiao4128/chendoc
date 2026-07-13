@@ -17,6 +17,7 @@ const { buildApp } = await import("../../app.js");
 const { closeDatabase, db, sqlite } = await import("../../db/client.js");
 const { users } = await import("../../db/schema.js");
 const { createForm, publishForm } = await import("./forms.service.js");
+const { formsPublicRoutes } = await import("./forms.public.routes.js");
 const app = await buildApp();
 const actor = { id: 1, role: "user" } as const;
 
@@ -32,6 +33,15 @@ afterAll(async () => {
 });
 
 describe("public form routes", () => {
+  test("omits legacy display routes in API-only mode", async () => {
+    const Fastify = (await import("fastify")).default;
+    const apiOnlyApp = Fastify();
+    await apiOnlyApp.register(formsPublicRoutes, { serveLegacyPages: false });
+    const response = await apiOnlyApp.inject({ method: "GET", url: "/f/example" });
+    expect(response.statusCode).toBe(404);
+    await apiOnlyApp.close();
+  });
+
   test("accepts multi-letter form gateway actions", async () => {
     const response = await app.inject({
       method: "GET",
@@ -56,6 +66,7 @@ describe("public form routes", () => {
     await publishForm(form.id, actor);
     const response = await app.inject({ method: "GET", url: `/f/${form.formUid}` });
     expect(response.statusCode).toBe(200);
+    expect(response.headers["set-cookie"]).toContain("Path=/f/;");
     const nonce = /<script nonce="([^"]+)">/.exec(response.body)?.[1];
     expect(nonce).toBeTruthy();
     expect(response.headers["content-security-policy"]).toContain(`'nonce-${nonce}'`);
@@ -66,6 +77,12 @@ describe("public form routes", () => {
     expect(response.body).not.toContain('name="section"');
     expect(response.body).toContain("\\u003c/script\\u003e\\u003cimg src=x\\u003e");
     expect(response.body).toContain('"choices":"选择"');
+    expect(response.body).toContain("'/f/' + form.dataset.formUid + '/captcha'");
+
+    const captchaResponse = await app.inject({ method: "GET", url: `/f/${form.formUid}/captcha` });
+    expect(captchaResponse.statusCode).toBe(200);
+    expect(captchaResponse.headers["cache-control"]).toBe("no-store");
+    expect(captchaResponse.json()).toMatchObject({ captchaId: expect.any(String), image: expect.any(String) });
   });
 
   test("rejects fields outside the published contract", async () => {
@@ -77,5 +94,56 @@ describe("public form routes", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().code).toBe("FORM_UNKNOWN_FIELD");
+  });
+
+  test("serves the SPA view without leaking exclusive info and preserves one-submit enforcement", async () => {
+    const form = await createForm(actor, {
+      title: "领取登记",
+      description: "提交后领取",
+      fields: [{ id: "name", type: "text", label: "姓名", required: true, order: 0 }],
+      config: { allowMultiple: false, privacyNotice: "只用于登记", retentionDays: 7 },
+      exclusiveInfo: { "领取码": "SECRET-112" }
+    });
+    await publishForm(form.id, actor);
+
+    const viewResponse = await app.inject({
+      method: "GET",
+      url: `/api/public/forms/${form.formUid}`
+    });
+    expect(viewResponse.statusCode).toBe(200);
+    expect(viewResponse.headers["cache-control"]).toBe("no-store");
+    expect(viewResponse.headers["set-cookie"]).toContain("Path=/api/public/forms/;");
+    expect(viewResponse.headers["set-cookie"]).not.toContain("Path=/;");
+    expect(viewResponse.body).not.toContain("SECRET-112");
+    expect(viewResponse.json()).toMatchObject({
+      form: {
+        formUid: form.formUid,
+        title: "领取登记",
+        privacyNotice: "只用于登记",
+        retentionDays: 7
+      }
+    });
+
+    const cookie = String(viewResponse.headers["set-cookie"]).split(";")[0];
+    const firstSubmit = await app.inject({
+      method: "POST",
+      url: `/api/public/forms/${form.formUid}/submissions`,
+      headers: { cookie },
+      payload: { data: { name: "甲" } }
+    });
+    expect(firstSubmit.statusCode).toBe(200);
+    expect(firstSubmit.json()).toMatchObject({
+      code: 0,
+      data: { ok: true, exclusiveInfo: { "领取码": "SECRET-112" } }
+    });
+
+    const duplicateSubmit = await app.inject({
+      method: "POST",
+      url: `/api/public/forms/${form.formUid}/submissions`,
+      headers: { cookie },
+      payload: { data: { name: "甲" } }
+    });
+    expect(duplicateSubmit.statusCode).toBe(400);
+    expect(duplicateSubmit.json().code).toBe("FORM_DUPLICATE_SUBMISSION");
   });
 });

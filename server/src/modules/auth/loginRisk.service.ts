@@ -180,7 +180,7 @@ export async function recordLoginSuccess(input: LoginRiskInput) {
   }
 }
 
-export async function clearLoginFailuresForUsername(username: string) {
-  await pruneExpiredLoginFailures();
-  await dbRun(db.delete(loginFailures).where(eq(loginFailures.username, normalizedUsername(username))));
+export async function clearLoginFailuresForUsername(username: string, executor: any = db) {
+  if (executor === db) await pruneExpiredLoginFailures();
+  await dbRun(executor.delete(loginFailures).where(eq(loginFailures.username, normalizedUsername(username))));
 }

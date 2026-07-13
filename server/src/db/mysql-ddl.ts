@@ -16,7 +16,16 @@ export const MYSQL_TABLE_NAMES = [
   "login_failures",
   "danger_verifications",
   "audit_logs",
-  "logs"
+  "logs",
+  "tags",
+  "tag_hierarchy",
+  "templates",
+  "access_logs",
+  "jwt_keys",
+  "totp_failures",
+  "search_history",
+  "doc_comments",
+  "doc_comment_reactions"
 ] as const;
 
 const tableOptions = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
@@ -92,6 +101,7 @@ export const MYSQL_CREATE_TABLES = [
     expire_at DATETIME(3) NOT NULL,
     last_seen_at DATETIME(3) NOT NULL,
     created_at DATETIME(3) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
     KEY auth_sessions_user_idx (user_id),
     KEY auth_sessions_expire_idx (expire_at)
@@ -350,6 +360,151 @@ export const MYSQL_CREATE_TABLES = [
     KEY logs_action_created_idx (action, created_at),
     KEY logs_doc_uid_idx (doc_uid),
     KEY logs_created_idx (created_at)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS tags (
+    id INT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(191) NOT NULL,
+    color VARCHAR(16) NOT NULL DEFAULT '#3b82f6',
+    parent_id INT NULL,
+    owner_id INT NULL,
+    doc_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_tags_name_owner (name, owner_id),
+    KEY tags_owner_idx (owner_id),
+    KEY tags_parent_idx (parent_id),
+    CONSTRAINT fk_tags_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS tag_hierarchy (
+    id INT NOT NULL AUTO_INCREMENT,
+    parent_tag_id INT NOT NULL,
+    child_tag_id INT NOT NULL,
+    owner_id INT NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_tag_hierarchy_parent_child (parent_tag_id, child_tag_id),
+    KEY tag_hierarchy_parent_idx (parent_tag_id),
+    KEY tag_hierarchy_child_idx (child_tag_id),
+    CONSTRAINT fk_tag_hierarchy_parent FOREIGN KEY (parent_tag_id) REFERENCES tags(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tag_hierarchy_child FOREIGN KEY (child_tag_id) REFERENCES tags(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tag_hierarchy_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS templates (
+    id INT NOT NULL AUTO_INCREMENT,
+    template_uid VARCHAR(32) NOT NULL,
+    title VARCHAR(191) NOT NULL,
+    summary TEXT NULL,
+    html MEDIUMTEXT NOT NULL,
+    content_json MEDIUMTEXT NULL,
+    sort INT NOT NULL DEFAULT 0,
+    tags TEXT NULL,
+    owner_id INT NOT NULL,
+    is_built_in TINYINT(1) NOT NULL DEFAULT 0,
+    usage_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_templates_name_owner (title, owner_id),
+    KEY templates_owner_idx (owner_id),
+    CONSTRAINT fk_templates_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS access_logs (
+    id INT NOT NULL AUTO_INCREMENT,
+    target_type VARCHAR(16) NOT NULL,
+    target_id INT NOT NULL,
+    visitor_hash VARCHAR(64) NULL,
+    ip_hash VARCHAR(64) NULL,
+    user_agent TEXT NULL,
+    device VARCHAR(32) NULL,
+    viewed_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    KEY access_logs_target_idx (target_type, target_id),
+    KEY access_logs_ip_hash_idx (ip_hash),
+    KEY access_logs_time_idx (viewed_at)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS jwt_keys (
+    id INT NOT NULL AUTO_INCREMENT,
+    key_id VARCHAR(64) NOT NULL,
+    secret TEXT NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME(3) NOT NULL,
+    expires_at DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_jwt_keys_key_id (key_id),
+    KEY jwt_keys_active_idx (is_active)
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS totp_failures (
+    id INT NOT NULL AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    dimension VARCHAR(16) NOT NULL,
+    dimension_value VARCHAR(191) NOT NULL,
+    fail_count INT NOT NULL DEFAULT 1,
+    first_failed_at DATETIME(3) NOT NULL,
+    last_failed_at DATETIME(3) NOT NULL,
+    locked_until DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    KEY totp_failures_user_idx (user_id),
+    KEY totp_failures_time_idx (last_failed_at),
+    CONSTRAINT fk_totp_failures_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS search_history (
+    id INT NOT NULL AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    query VARCHAR(255) NOT NULL,
+    query_hash VARCHAR(64) NOT NULL,
+    search_mode VARCHAR(16) NOT NULL DEFAULT 'fulltext',
+    result_count INT NOT NULL DEFAULT 0,
+    search_time INT NOT NULL DEFAULT 0,
+    ip_hash VARCHAR(64) NULL,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_search_history_user_query (user_id, query_hash),
+    KEY search_history_user_idx (user_id),
+    KEY search_history_query_hash_idx (query_hash),
+    KEY search_history_created_idx (created_at),
+    CONSTRAINT fk_search_history_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS doc_comments (
+    id INT NOT NULL AUTO_INCREMENT,
+    doc_uid VARCHAR(32) NOT NULL,
+    parent_id INT NULL,
+    user_id INT NOT NULL,
+    content TEXT NOT NULL,
+    selection_start INT NULL,
+    selection_end INT NULL,
+    selection_text VARCHAR(1000) NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'active',
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    KEY doc_comments_doc_uid_idx (doc_uid),
+    KEY doc_comments_user_idx (user_id),
+    KEY doc_comments_parent_idx (parent_id),
+    KEY doc_comments_created_idx (created_at),
+    CONSTRAINT fk_doc_comments_doc FOREIGN KEY (doc_uid) REFERENCES docs(doc_uid) ON DELETE CASCADE,
+    CONSTRAINT fk_doc_comments_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ${tableOptions}`,
+
+  `CREATE TABLE IF NOT EXISTS doc_comment_reactions (
+    id INT NOT NULL AUTO_INCREMENT,
+    comment_id INT NOT NULL,
+    user_id INT NOT NULL,
+    reaction VARCHAR(16) NOT NULL DEFAULT 'like',
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_comment_reaction_user_comment (comment_id, user_id),
+    KEY doc_comment_reactions_comment_idx (comment_id),
+    KEY doc_comment_reactions_user_idx (user_id),
+    CONSTRAINT fk_doc_comment_reactions_comment FOREIGN KEY (comment_id) REFERENCES doc_comments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_doc_comment_reactions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   ) ${tableOptions}`
 ] as const;
 
@@ -382,7 +537,27 @@ export const MYSQL_INDEXES = [
   { table: "logs", name: "logs_user_created_idx", columns: "`user_id`, `created_at`" },
   { table: "logs", name: "logs_action_created_idx", columns: "`action`, `created_at`" },
   { table: "logs", name: "logs_doc_uid_idx", columns: "`doc_uid`" },
-  { table: "logs", name: "logs_created_idx", columns: "`created_at`" }
+  { table: "logs", name: "logs_created_idx", columns: "`created_at`" },
+  { table: "tags", name: "tags_owner_idx", columns: "`owner_id`" },
+  { table: "tags", name: "tags_parent_idx", columns: "`parent_id`" },
+  { table: "tag_hierarchy", name: "tag_hierarchy_parent_idx", columns: "`parent_tag_id`" },
+  { table: "tag_hierarchy", name: "tag_hierarchy_child_idx", columns: "`child_tag_id`" },
+  { table: "templates", name: "templates_owner_idx", columns: "`owner_id`" },
+  { table: "access_logs", name: "access_logs_target_idx", columns: "`target_type`, `target_id`" },
+  { table: "access_logs", name: "access_logs_ip_hash_idx", columns: "`ip_hash`" },
+  { table: "access_logs", name: "access_logs_time_idx", columns: "`viewed_at`" },
+  { table: "jwt_keys", name: "jwt_keys_active_idx", columns: "`is_active`" },
+  { table: "totp_failures", name: "totp_failures_user_idx", columns: "`user_id`" },
+  { table: "totp_failures", name: "totp_failures_time_idx", columns: "`last_failed_at`" },
+  { table: "search_history", name: "search_history_user_idx", columns: "`user_id`" },
+  { table: "search_history", name: "search_history_query_hash_idx", columns: "`query_hash`" },
+  { table: "search_history", name: "search_history_created_idx", columns: "`created_at`" },
+  { table: "doc_comments", name: "doc_comments_doc_uid_idx", columns: "`doc_uid`" },
+  { table: "doc_comments", name: "doc_comments_user_idx", columns: "`user_id`" },
+  { table: "doc_comments", name: "doc_comments_parent_idx", columns: "`parent_id`" },
+  { table: "doc_comments", name: "doc_comments_created_idx", columns: "`created_at`" },
+  { table: "doc_comment_reactions", name: "doc_comment_reactions_comment_idx", columns: "`comment_id`" },
+  { table: "doc_comment_reactions", name: "doc_comment_reactions_user_idx", columns: "`user_id`" }
 ] as const;
 
 export const MYSQL_FULLTEXT_INDEXES = [

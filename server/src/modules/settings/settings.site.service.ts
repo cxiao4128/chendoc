@@ -1,1 +1,1 @@
-export { getSiteConfig, saveSiteConfig } from "./settings.service.js";
+export { getSiteConfig, saveSiteConfig } from "./site.service.js";

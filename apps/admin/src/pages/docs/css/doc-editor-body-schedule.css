@@ -1,0 +1,38 @@
+/* 定时发布表单 */
+.doc-editor-page__schedule-form {
+  display: grid;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.doc-editor-page__schedule-field {
+  display: grid;
+  gap: 6px;
+}
+
+.doc-editor-page__schedule-field span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cd-text);
+}
+
+.doc-editor-page__schedule-field small {
+  font-size: 11px;
+  color: var(--cd-muted);
+}
+
+.doc-editor-page__schedule-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cd-primary);
+}
+
+.doc-editor-page__schedule-field input[type="datetime-local"] {
+  width: 100%;
+}
+
+.doc-editor-page__schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}

@@ -23,3 +23,79 @@
   background: #fffbeb;
   color: #b45309;
 }
+
+@media (max-width: 760px) {
+  .form-list-page {
+    padding: 0 16px 96px;
+  }
+
+  .form-list-page .doc-list-page__head,
+  .form-list-page .doc-list-page__filter-tabs,
+  .form-list-page .doc-list-page__workspace,
+  .form-list-page .doc-list-page__table-tools,
+  .form-list-page .doc-list-page__table {
+    display: flex !important;
+  }
+
+  .form-list-page .doc-list-page__head,
+  .form-list-page .doc-list-page__workspace,
+  .form-list-page .doc-list-page__table {
+    flex-direction: column;
+  }
+
+  .form-list-page .doc-list-page__head {
+    gap: 12px;
+    padding: 18px 0 10px;
+  }
+
+  .form-list-page .doc-list-page__filter-tabs,
+  .form-list-page .doc-list-page__table-tools {
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .form-list-page .doc-list-page__actions {
+    position: static;
+    display: flex;
+    width: auto;
+    grid-template-columns: none;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    z-index: auto;
+  }
+
+  .form-list-page .doc-list-page__actions .cd-button,
+  .form-list-page .doc-list-page__actions .cd-button.primary {
+    min-width: max-content;
+    height: 40px;
+    margin: 0;
+    padding: 0 14px;
+    border-radius: 999px;
+    flex-direction: row;
+    font-size: 13px;
+  }
+
+  .form-list-page .doc-list-page__table-head {
+    display: none !important;
+  }
+
+  .form-list-page .doc-list-page__row {
+    display: grid !important;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .form-list-page .doc-list-page__row > span:not(.doc-list-page__row-title):not(.doc-list-page__ops),
+  .form-list-page .doc-list-page__row > code {
+    grid-column: 2 / -1;
+  }
+
+  .form-list-page .doc-list-page__ops {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

@@ -1,0 +1,45 @@
+.login-page,
+.register-page,
+.native-dialog.is-auth {
+  color-scheme: light;
+
+  /* 登录入口固定使用与浅色壁纸一致的低饱和靛蓝体系，不继承后台暗色表面。 */
+  --cd-bg: oklch(97% 0.01 278);
+  --cd-bg-plain: oklch(98.8% 0.006 278);
+  --cd-surface: oklch(98.8% 0.006 278);
+  --cd-panel: oklch(98.8% 0.006 278);
+  --cd-paper: oklch(98.8% 0.006 278);
+  --cd-paper-soft: oklch(96.2% 0.014 278);
+
+  --cd-ink: oklch(28% 0.045 274);
+  --cd-text: oklch(34% 0.04 274);
+  --cd-text-secondary: oklch(44% 0.035 274);
+  --cd-muted: oklch(42% 0.034 274);
+  --cd-faint: oklch(46% 0.03 274);
+
+  --cd-border: oklch(85% 0.025 278);
+  --cd-border-strong: oklch(64% 0.035 276);
+
+  --cd-primary: oklch(48% 0.115 270);
+  --cd-primary-hover: oklch(42% 0.11 270);
+  --cd-primary-soft: oklch(93.5% 0.03 270);
+  --cd-accent: var(--cd-primary);
+  --cd-accent-hover: var(--cd-primary-hover);
+  --cd-accent-soft: var(--cd-primary-soft);
+  --cd-aura: var(--cd-primary-soft);
+  --cd-aura-strong: var(--cd-primary);
+  --cd-lilac: var(--cd-primary-soft);
+
+  --cd-danger: oklch(44% 0.16 25);
+  --cd-danger-soft: oklch(95% 0.025 25);
+  --cd-success: oklch(43% 0.11 155);
+  --cd-success-soft: oklch(95% 0.025 155);
+
+  --cd-shadow-soft: 0 4px 8px oklch(28% 0.04 274 / 0.12);
+  --cd-shadow-card: 0 3px 8px oklch(28% 0.04 274 / 0.1);
+  --cd-focus: var(--cd-primary);
+
+  --auth-control: oklch(99.4% 0.003 278);
+  --auth-danger-border: oklch(78% 0.075 25);
+  --auth-success-border: oklch(78% 0.055 155);
+}

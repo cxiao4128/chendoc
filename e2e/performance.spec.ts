@@ -75,7 +75,7 @@ test.describe("性能测试", () => {
 
     // 等待搜索结果加载
     await page.waitForTimeout(1000);
-    const results = page.locator(".doc-item, .doc-card").first();
+    const results = page.locator(".doc-list-page__row").first();
     await results.waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
 
     const searchTime = Date.now() - startTime;
@@ -186,18 +186,27 @@ test.describe("性能基准测试", () => {
   test("性能基准表", async ({ page }) => {
     const benchmarks: { name: string; target: number; actual: number }[] = [];
 
-    await login(page);
-
     // FCP 测试
     const fcpStart = Date.now();
     await page.goto("/login");
     await page.waitForSelector("input[placeholder*='用户名']", { timeout: 10000 });
     benchmarks.push({ name: "首屏加载 (FCP)", target: 1500, actual: Date.now() - fcpStart });
 
+    await login(page);
+
     // 搜索响应测试
+    await page.getByRole("button", { name: "新建文档" }).first().click();
+    await expect(page).toHaveURL(/\/admin\/docs\/[A-Za-z0-9]+/);
+    await page.getByRole("textbox", { name: /标题|title/i }).first().fill("性能基准搜索文档");
+    await expect(page.getByText(/已保存|自动保存/).first()).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("link", { name: /文档|docs/i }).click();
+    await expect(page).toHaveURL(/\/admin\/docs/);
+
     const searchStart = Date.now();
-    await page.getByPlaceholder(/搜索|search/i).first().fill("测试").press("Enter");
-    await page.waitForTimeout(1000);
+    const benchmarkSearch = page.getByPlaceholder(/搜索|search/i).first();
+    await benchmarkSearch.fill("测试");
+    await benchmarkSearch.press("Enter");
+    await page.locator(".doc-list-page__row, .empty-state").first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
     benchmarks.push({ name: "搜索响应", target: 500, actual: Date.now() - searchStart });
 
     // 输出基准表

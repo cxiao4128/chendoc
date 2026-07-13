@@ -2,11 +2,12 @@
 import { ref } from "vue";
 import { Search, Trash2 } from "lucide-vue-next";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
-import { dangerDeleteDocApi, getDangerDocApi } from "../../api/settings";
+import { dangerDeleteDocApi, getDangerDocApi } from "@/services/api/settings.api";
+import { sharePathOf } from "../../utils/sharePath";
 import "./css/danger.css";
 
 const id = ref("");
-const doc = ref<{ docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; deletedAt?: string | null } | null>(null);
+const doc = ref<{ docUid: string; title: string; createdAt: string; updatedAt: string; shareCode?: number | null; customSlug?: string | null; deletedAt?: string | null } | null>(null);
 const error = ref("");
 const confirmOpen = ref(false);
 
@@ -46,7 +47,7 @@ async function remove() {
         <div><dt>标题</dt><dd>{{ doc.title }}</dd></div>
         <div><dt>创建时间</dt><dd>{{ new Date(doc.createdAt).toLocaleString() }}</dd></div>
         <div><dt>更新时间</dt><dd>{{ new Date(doc.updatedAt).toLocaleString() }}</dd></div>
-        <div><dt>分享编号</dt><dd>{{ doc.shareCode ? `/r/${doc.shareCode}` : "未分享" }}</dd></div>
+        <div><dt>分享编号</dt><dd>{{ sharePathOf(doc) || "未分享" }}</dd></div>
         <div><dt>删除状态</dt><dd>{{ doc.deletedAt ? "已删除" : "未删除" }}</dd></div>
       </dl>
       <button class="cd-button danger" type="button" :disabled="!!doc.deletedAt" @click="confirmOpen = true"><Trash2 :size="16" />删除该文档</button>

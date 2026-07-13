@@ -1,0 +1,165 @@
+/* ============================================
+   顶部导航栏
+   ============================================ */
+.form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 16px;
+  background: var(--form-paper);
+  border-bottom: 1px solid var(--form-border);
+  flex-shrink: 0;
+}
+
+.form-header__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-header__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--form-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-header__back:hover {
+  background: var(--form-border-light);
+  color: var(--form-text);
+}
+
+.form-header__title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-header__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--form-text);
+  border: none;
+  outline: none;
+  background: transparent;
+  min-width: 120px;
+  max-width: 280px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.form-header__title:hover {
+  background: var(--form-border-light);
+}
+
+.form-header__title:focus {
+  background: var(--form-accent-soft);
+}
+
+.form-header__title::placeholder {
+  color: var(--form-text-placeholder);
+}
+
+.form-header__icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-header__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--form-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-header__icon-btn:hover {
+  background: var(--form-border-light);
+  color: var(--form-text);
+}
+
+.form-header__icon-btn.active {
+  color: var(--form-primary);
+}
+
+/* 标签页导航 */
+.form-header__tabs {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.form-tab {
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--form-text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-tab:hover {
+  color: var(--form-text);
+}
+
+.form-tab.active {
+  color: var(--form-text);
+  border-bottom-color: var(--form-text);
+}
+
+.form-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-header__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--form-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.form-header__action:hover {
+  background: var(--form-border-light);
+  color: var(--form-text);
+}
+
+.form-header__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
