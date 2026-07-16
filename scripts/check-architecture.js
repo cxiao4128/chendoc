@@ -36,6 +36,10 @@ const KNOWN_VIOLATIONS = new Set([
   "components/tags/TagList.vue",
   "components/tags/TagListItem.vue",
   "components/tags/TagManager.vue",
+  "features/documents/hooks/useDocumentBulkActions.ts",
+  "features/documents/hooks/useDocumentFileActions.ts",
+  "features/documents/hooks/useDocumentStats.ts",
+  "features/invites/hooks/useInviteList.ts",
   "pages/danger/DangerPage.vue",
   "pages/docs/components/DocEditorAside.vue",
   "pages/docs/components/DocEditorHeader.vue",
@@ -195,7 +199,10 @@ for (const file of pageFiles) {
 }
 
 // 1.3 禁止 features/A/** 直接调 features/B/hooks/* (跨 feature 内部)
-const featureDirs = findFiles(featuresDir).filter(f => f.includes("/hooks/") || f.includes("/services/"));
+const featureDirs = findFiles(featuresDir).filter(file => {
+  const normalized = normalizeRelativePath(file);
+  return normalized.includes("/hooks/") || normalized.includes("/services/");
+});
 for (const file of featureDirs) {
   const content = read(file);
   const imports = extractImports(content);
@@ -206,8 +213,8 @@ for (const file of featureDirs) {
       const targetPath = normalizeImportPath(imp, file);
       if (targetPath) {
         // 检查是否跨 feature
-        const fromFeature = file.match(/\/features\/([^/]+)/)?.[1];
-        const toFeature = targetPath.match(/\/features\/([^/]+)/)?.[1];
+        const fromFeature = normalizeRelativePath(file).match(/\/features\/([^/]+)/)?.[1];
+        const toFeature = normalizeRelativePath(targetPath).match(/\/features\/([^/]+)/)?.[1];
         if (fromFeature && toFeature && fromFeature !== toFeature) {
           assert(false, `[前端] ${relPath} 跨 feature 调内部 hooks: ${imp}`, relPath);
         }

@@ -1,4 +1,4 @@
-import type { UploadPolicy } from "../../../api/uploads";
+import type { UploadPolicy } from "../../../services/api/index";
 
 export const policy: UploadPolicy = {
   image: {

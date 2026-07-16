@@ -1,4 +1,4 @@
-import type { UploadPolicy } from "../../../api/uploads";
+import type { UploadPolicy } from "../../../services/api/index";
 import {
   extensionFromName,
   normalizeClientMimeType,

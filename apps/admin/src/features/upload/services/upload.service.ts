@@ -1,4 +1,4 @@
-import { completeUploadApi, getUploadPolicyApi, presignUploadApi, type UploadPolicy } from "../../../api/uploads";
+import { completeUploadApi, getUploadPolicyApi, presignUploadApi, type UploadPolicy } from "../../../services/api/index";
 import { prepareUpload } from "./upload-preparation";
 
 let policyCache: UploadPolicy | null = null;
