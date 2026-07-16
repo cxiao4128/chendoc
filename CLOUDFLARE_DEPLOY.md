@@ -227,10 +227,10 @@ npm run package:deployments -- --backend-origin=https://api.w92.pw --public-orig
 生成：
 
 ```text
-release/chendoc-3.3.1-cloudflare-pages.zip
-release/chendoc-3.3.1-backend.zip
-release/chendoc-3.3.1-server.zip
-release/chendoc-3.3.1-SHA256SUMS.txt
+release/chendoc-3.4.1-cloudflare-pages.zip
+release/chendoc-3.4.1-backend.zip
+release/chendoc-3.4.1-server.zip
+release/chendoc-3.4.1-SHA256SUMS.txt
 ```
 
 其中 `backend.zip` 是 `api.w92.pw` 的纯后端包。它不含 `apps/`、`server/public/` 或任何前端构建产物。覆盖旧一体化目录部署时，脚本会先保留旧构建、旧依赖和静态目录；只有新 API 通过健康检查且 `/`、`/login` 都确认返回 404 后，才删除旧前端目录。新版本启动失败会自动恢复旧一体化构建，但仍强制使用 API-only 模式并复查这两个前端地址为 404。服务器解压后执行：

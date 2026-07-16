@@ -2,7 +2,7 @@
 
 > 安全边界：单站点、多账号。当前不提供多租户隔离；`tenantKey` 不是租户安全边界。
 
-当前版本 / Current version: `v3.3.1`
+当前版本 / Current version: `v3.4.1`
 
 语言 / Language: [中文](#中文) | [English](#english)
 
@@ -74,10 +74,10 @@ npm run package:deployments -- --backend-origin=https://api.w92.pw --public-orig
 
 生成：
 
-- `release/chendoc-3.3.1-cloudflare-pages.zip`：Cloudflare Pages 完整 SPA，包含后台、分享页和公开表单。
-- `release/chendoc-3.3.1-backend.zip`：纯 API 后端包，不含、不会安装、不会构建或托管前端。
-- `release/chendoc-3.3.1-server.zip`：正常一体化服务器部署包，保留前端回退能力。
-- `release/chendoc-3.3.1-SHA256SUMS.txt`：三包校验值。
+- `release/chendoc-3.4.1-cloudflare-pages.zip`：Cloudflare Pages 完整 SPA，包含后台、分享页和公开表单。
+- `release/chendoc-3.4.1-backend.zip`：纯 API 后端包，不含、不会安装、不会构建或托管前端。
+- `release/chendoc-3.4.1-server.zip`：正常一体化服务器部署包，保留前端回退能力。
+- `release/chendoc-3.4.1-SHA256SUMS.txt`：三包校验值。
 
 Cloudflare Pages 架构在服务器解压 `backend.zip` 后运行 `bash ./deploy-backend.sh`。正常一体化包继续运行 `bash ./deploy.sh`。CORS、R2 来源和唯一展示域名配置见 `CLOUDFLARE_DEPLOY.md`。
 

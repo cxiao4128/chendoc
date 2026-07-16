@@ -274,11 +274,11 @@ export async function insertVersion(executor: any, values: {
   contentJsonCiphertext: string | null;
   contentJsonIv: string | null;
   contentJsonTag: string | null;
-  contentJsonKeyVersion: number | null;
+  contentJsonKeyVersion: string | null;
   contentHtmlCiphertext: string | null;
   contentHtmlIv: string | null;
   contentHtmlTag: string | null;
-  contentHtmlKeyVersion: number | null;
+  contentHtmlKeyVersion: string | null;
   createdBy: number;
   createdAt: Date;
 }): Promise<void> {
@@ -556,11 +556,11 @@ export async function restoreVersionAtomic(
     contentJsonCiphertext: string | null;
     contentJsonIv: string | null;
     contentJsonTag: string | null;
-    contentJsonKeyVersion: number | null;
+    contentJsonKeyVersion: string | null;
     contentHtmlCiphertext: string | null;
     contentHtmlIv: string | null;
     contentHtmlTag: string | null;
-    contentHtmlKeyVersion: number | null;
+    contentHtmlKeyVersion: string | null;
     createdBy: number;
     createdAt: Date;
   }
@@ -620,11 +620,11 @@ export async function createVersionSnapshotAndPrune(
     contentJsonCiphertext: encrypted.contentJsonCiphertext,
     contentJsonIv: encrypted.contentJsonIv,
     contentJsonTag: encrypted.contentJsonTag,
-    contentJsonKeyVersion: encrypted.contentJsonKeyVersion != null ? Number(encrypted.contentJsonKeyVersion) : null,
+    contentJsonKeyVersion: encrypted.contentJsonKeyVersion,
     contentHtmlCiphertext: encrypted.contentHtmlCiphertext,
     contentHtmlIv: encrypted.contentHtmlIv,
     contentHtmlTag: encrypted.contentHtmlTag,
-    contentHtmlKeyVersion: encrypted.contentHtmlKeyVersion != null ? Number(encrypted.contentHtmlKeyVersion) : null,
+    contentHtmlKeyVersion: encrypted.contentHtmlKeyVersion,
   });
   await pruneStaleVersions(executor, docId);
 }

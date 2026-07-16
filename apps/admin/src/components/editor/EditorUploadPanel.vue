@@ -18,13 +18,16 @@ const emit = defineEmits<{
 
 <template>
   <div v-if="uploading || failedUpload || selectedImage" class="chendoc-editor__upload">
-    <span v-if="uploading" class="chendoc-editor__hint">正在上传文件...</span>
+    <span v-if="uploading" class="chendoc-editor__hint" role="status">正在上传…</span>
     <div v-if="failedUpload" class="chendoc-editor__upload-failed" role="alert">
-      <span class="chendoc-editor__error">{{ failedUpload.file.name }}：{{ failedUpload.message }}</span>
-      <div>
+      <span class="chendoc-editor__error">
+        <span class="chendoc-editor__failed-name" :title="failedUpload.file.name">{{ failedUpload.file.name }}</span>
+        <span>{{ failedUpload.message || "上传失败，请重试。" }}</span>
+      </span>
+      <div class="chendoc-editor__upload-failed-actions">
         <button type="button" :disabled="uploading" @click="emit('retry')">重试</button>
-        <button type="button" :disabled="uploading" @click="emit('replace')">替换</button>
-        <button type="button" :disabled="uploading" @click="emit('remove')">删除</button>
+        <button type="button" :disabled="uploading" @click="emit('replace')">换一个</button>
+        <button type="button" :disabled="uploading" @click="emit('remove')">关闭</button>
       </div>
     </div>
     <div v-if="selectedImage" class="chendoc-editor__image-tools">

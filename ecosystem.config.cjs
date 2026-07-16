@@ -13,6 +13,9 @@ module.exports = {
     merge_logs: true,
     out_file: "logs/chendoc-out.log",
     error_file: "logs/chendoc-error.log",
-    env: { NODE_ENV: "production" }
+    env: {
+      NODE_ENV: "production",
+      CHENDOC_SERVE_ADMIN: "true"
+    }
   }]
 };

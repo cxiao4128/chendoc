@@ -14,9 +14,24 @@
 }
 
 .chendoc-editor__error {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 6px;
+  align-items: baseline;
   color: var(--cd-danger);
   font-size: 13px;
   font-weight: 650;
+}
+
+.chendoc-editor__failed-name {
+  display: inline-block;
+  max-width: min(32vw, 260px);
+  overflow: hidden;
+  flex: 0 1 auto;
+  color: var(--cd-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chendoc-editor__upload-failed {
@@ -31,19 +46,45 @@
   padding: 9px 10px;
 }
 
-.chendoc-editor__upload-failed > div {
+.chendoc-editor__upload-failed-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
 }
 
 .chendoc-editor__upload-failed button {
-  min-height: 32px;
+  min-height: 36px;
   border: 1px solid var(--cd-border);
   border-radius: 7px;
   background: var(--cd-panel);
   color: var(--cd-text);
   padding: 0 10px;
   cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .chendoc-editor__upload-failed {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chendoc-editor__error {
+    display: grid;
+    gap: 3px;
+  }
+
+  .chendoc-editor__failed-name {
+    max-width: 100%;
+  }
+
+  .chendoc-editor__upload-failed-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .chendoc-editor__upload-failed button {
+    min-height: 44px;
+  }
 }
 
 .chendoc-editor__image-tools {

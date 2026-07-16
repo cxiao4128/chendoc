@@ -21,7 +21,7 @@ const { migrate } = await import("../../db/migrate.js");
 await migrate();
 
 const { closeDatabase, db, sqlite } = await import("../../db/client.js");
-const { docs, users } = await import("../../db/schema.js");
+const { docs, docVersions, users } = await import("../../db/schema.js");
 const { generateDocUid, isValidDocUid } = await import("../../utils/docUid.js");
 const {
   createDoc,
@@ -278,5 +278,23 @@ describe("document identity and access boundaries", () => {
     await updateDoc(doc.id, userId, { title: "First save", expectedRevision: doc.revision }, userActor);
     await expect(updateDoc(doc.id, userId, { title: "Stale save", expectedRevision: doc.revision }, userActor))
       .rejects.toMatchObject({ code: "DOC_REVISION_CONFLICT", statusCode: 409 });
+  });
+
+  test("preserves string encryption key versions in document snapshots", async () => {
+    const doc = await createDoc(userId, { title: "Version key doc" }, userActor);
+    await updateDoc(doc.id, userId, {
+      contentJson: { type: "doc", content: [{ type: "paragraph" }] },
+      expectedRevision: doc.revision
+    }, userActor);
+
+    const snapshot = db.select({
+      contentJsonKeyVersion: docVersions.contentJsonKeyVersion,
+      contentHtmlKeyVersion: docVersions.contentHtmlKeyVersion
+    }).from(docVersions).where(eq(docVersions.docId, doc.id)).limit(1).get();
+
+    expect(snapshot).toEqual({
+      contentJsonKeyVersion: "v1",
+      contentHtmlKeyVersion: "v1"
+    });
   });
 });

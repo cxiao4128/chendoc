@@ -10,7 +10,7 @@ import { now } from "../../utils/date.js";
 import { decryptDocumentRecord } from "../../utils/documentCrypto.js";
 import { documentReviewHash } from "../../utils/documentReviewHash.js";
 import { hashPassword, verifyPassword } from "../../utils/password.js";
-import { sanitizeDocumentHtml } from "../../utils/sanitize.js";
+import { renderStoredDocumentHtml, sanitizeDocumentHtml } from "../../utils/sanitize.js";
 import { decryptValue, encryptValue } from "../../utils/crypto.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { generateShareToken, isWeakShareToken } from "../../utils/shareToken.js";
@@ -578,7 +578,7 @@ function decryptPublicDoc(record: PublicDocDatabaseRecord): PublicDocRecord {
     title: record.title,
     summary: record.summary,
     coverUrl: record.coverUrl,
-    contentHtml: decrypted.contentHtml,
+    contentHtml: renderStoredDocumentHtml(decrypted.contentJson, decrypted.contentHtml),
     revision: record.revision,
     updatedAt: record.updatedAt,
     status: record.status,

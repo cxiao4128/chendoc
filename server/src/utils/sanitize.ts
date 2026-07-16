@@ -9,6 +9,9 @@ type JsonNode = {
 };
 
 const dangerousTags = new Set(["script", "iframe", "xmp", "svg", "math", "style", "object", "embed"]);
+const strictHexColor = /^#[0-9a-fA-F]{6}$/;
+const strictFontFamily = /^[-,"'\w\s]+(?:,\s*[-,"'\w\s]+)*$/;
+const meaningfulLeafNodes = new Set(["hardBreak", "horizontalRule", "image", "video", "table", "codeBlock"]);
 
 export function sanitizeDocumentHtml(input: string) {
   return sanitizeHtml(input, {
@@ -21,6 +24,7 @@ export function sanitizeDocumentHtml(input: string) {
       "figure",
       "figcaption",
       "span",
+      "mark",
       "label",
       "input",
       "hr",
@@ -38,6 +42,7 @@ export function sanitizeDocumentHtml(input: string) {
       a: ["href", "name", "target", "rel"],
       img: ["src", "alt", "title", "width", "height", "loading"],
       span: ["class", "style"],
+      mark: ["style"],
       video: ["src", "controls", "preload", "poster", "width", "height"],
       source: ["src", "type"],
       input: ["type", "checked", "disabled"],
@@ -47,7 +52,11 @@ export function sanitizeDocumentHtml(input: string) {
     },
     allowedStyles: {
       span: {
-        "font-family": [/^[-,"'\w\s]+(?:,\s*[-,"'\w\s]+)*$/]
+        "font-family": [strictFontFamily],
+        color: [strictHexColor]
+      },
+      mark: {
+        "background-color": [strictHexColor]
       }
     },
     allowedSchemes: ["http", "https", "mailto", "tel"],
@@ -119,6 +128,18 @@ function safeUrl(value: unknown, allowed: Array<"http" | "https" | "mailto" | "t
   }
 }
 
+function safeHexColor(value: unknown) {
+  if (typeof value !== "string") return "";
+  const color = value.trim();
+  return strictHexColor.test(color) ? color : "";
+}
+
+function safeFontFamily(value: unknown) {
+  if (typeof value !== "string") return "";
+  const fontFamily = value.trim();
+  return strictFontFamily.test(fontFamily) ? fontFamily : "";
+}
+
 function renderChildren(node: JsonNode) {
   return (node.content || []).map(renderJsonNode).join("");
 }
@@ -131,7 +152,15 @@ function renderMarkedText(node: JsonNode) {
     else if (mark.type === "underline") out = `<u>${out}</u>`;
     else if (mark.type === "strike") out = `<s>${out}</s>`;
     else if (mark.type === "code") out = `<code>${out}</code>`;
-    else if (mark.type === "link") {
+    else if (mark.type === "textStyle") {
+      const color = safeHexColor(mark.attrs?.color);
+      const fontFamily = safeFontFamily(mark.attrs?.fontFamily);
+      const styles = [color ? `color:${color}` : "", fontFamily ? `font-family:${fontFamily}` : ""].filter(Boolean);
+      if (styles.length) out = `<span style="${styles.join(";")}">${out}</span>`;
+    } else if (mark.type === "highlight") {
+      const color = safeHexColor(mark.attrs?.color);
+      out = color ? `<mark style="background-color:${color}">${out}</mark>` : `<mark>${out}</mark>`;
+    } else if (mark.type === "link") {
       const href = safeUrl(mark.attrs?.href, ["http", "https", "mailto", "tel"]);
       if (href) out = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${out}</a>`;
     }
@@ -185,12 +214,41 @@ function renderJsonNode(node: JsonNode): string {
   return renderChildren(node);
 }
 
-export function renderContentJsonToHtml(input: string) {
-  let parsed: JsonNode;
+function parseContentJson(input: string | null | undefined) {
   try {
-    parsed = JSON.parse(input || "{}") as JsonNode;
+    const parsed = JSON.parse(input || "{}") as JsonNode;
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
-    return "<p></p>";
+    return null;
   }
+}
+
+function hasMeaningfulContent(node: JsonNode): boolean {
+  if (node.type === "text") return typeof node.text === "string" && node.text.length > 0;
+  if (node.type && meaningfulLeafNodes.has(node.type)) return true;
+  if (node.type === "taskItem" && node.attrs?.checked === true) return true;
+  return Array.isArray(node.content) && node.content.some(hasMeaningfulContent);
+}
+
+export function renderContentJsonToHtml(input: string) {
+  const parsed = parseContentJson(input);
+  if (!parsed) return "<p></p>";
   return sanitizeDocumentHtml(renderJsonNode(parsed) || "<p></p>");
+}
+
+/**
+ * Rebuild persisted HTML from canonical TipTap JSON when it contains content.
+ * Legacy HTML-only records fall back to their sanitized HTML instead of being
+ * replaced by the normalized empty-document JSON.
+ */
+export function renderStoredDocumentHtml(contentJson: string | null | undefined, contentHtml: string | null | undefined) {
+  const parsed = parseContentJson(contentJson);
+  if (parsed?.type === "doc" && hasMeaningfulContent(parsed)) {
+    return sanitizeDocumentHtml(renderJsonNode(parsed) || "<p></p>");
+  }
+
+  const safeLegacyHtml = sanitizeDocumentHtml(contentHtml || "");
+  if (safeLegacyHtml.trim()) return safeLegacyHtml;
+  if (parsed?.type === "doc") return sanitizeDocumentHtml(renderJsonNode(parsed) || "<p></p>");
+  return "<p></p>";
 }

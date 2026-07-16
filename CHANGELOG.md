@@ -4,6 +4,36 @@
 
 ## 中文
 
+### 3.4.1
+
+版本号：`3.4.1`
+
+展示版本：`v3.4.1`
+
+**覆盖部署残留文件修复**
+
+- 正常服务器部署在构建前清理已废弃的移动编辑器组件和样式，避免覆盖解压升级后旧文件残留导致 `vue-tsc` 报错。
+- 保留 `.env`、数据库、上传内容和备份目录，仅清理已经从发行版删除的源码文件。
+- 本次 GitHub 发布包含未单独发布的 `3.4.0`：移动端编辑器重构、iOS Safari 上传兼容、上传签名校验与完成竞态修复、分享页颜色/高亮恢复及阅读元信息移除。
+- 修正文档版本加密密钥版本字段类型，避免字符串密钥版本被错误转换为数字。
+
+更新时间：2026-07-15 +08:00
+
+### 3.4.0
+
+版本号：`3.4.0`
+
+展示版本：`v3.4.0`
+
+**移动端编辑与分享显示修复**
+
+- 重做移动端文档编辑器布局，采用全宽白色正文区、紧凑顶栏、底部编辑工具栏，并适配软键盘与安全区。
+- 修复 iOS Safari 等移动浏览器上传图片、视频和附件时的格式识别问题；上传前按文件真实内容校准安全 MIME 与扩展名，服务端继续严格校验文件签名。
+- 分享页恢复正文文字颜色和高亮背景，仅放行受控的十六进制颜色样式。
+- 分享页移除“更新于 · 约 X 分钟阅读”元信息。
+
+更新时间：2026-07-15 +08:00
+
 ### 3.3.1
 
 版本号：`3.3.1`
@@ -516,6 +546,36 @@
 文档官网：[https://d.w92.pw/](https://d.w92.pw/)
 
 ## English
+
+### 3.4.1
+
+Version: `3.4.1`
+
+Display version: `v3.4.1`
+
+**In-place deployment stale-file fix**
+
+- The normal server deployment now removes retired mobile-editor components and styles before building, preventing stale files from older overlaid archives from breaking `vue-tsc`.
+- `.env`, databases, uploads, and backup directories remain untouched; only source files removed from the release are pruned.
+- This GitHub release includes the previously unpublished `3.4.0`: the mobile-editor redesign, iOS Safari upload compatibility, upload signature/finalization race fixes, restored shared-page colors and highlights, and removal of reading metadata.
+- Fixed document-version encryption key-version types so string key versions are no longer coerced to numbers.
+
+Updated: 2026-07-15 +08:00
+
+### 3.4.0
+
+Version: `3.4.0`
+
+Display version: `v3.4.0`
+
+**Mobile editing and shared-page rendering fixes**
+
+- Redesigned the mobile document editor with a full-width white canvas, compact header, bottom editing toolbar, keyboard avoidance, and safe-area support.
+- Fixed image, video, and attachment uploads from mobile browsers such as iOS Safari by normalizing safe MIME types and extensions from actual file content while retaining strict server-side signature validation.
+- Restored text colors and highlight backgrounds on shared pages with an allowlist limited to controlled hexadecimal color values.
+- Removed the “Updated · X min read” metadata from shared pages.
+
+Updated: 2026-07-15 +08:00
 
 ### 3.3.1
 

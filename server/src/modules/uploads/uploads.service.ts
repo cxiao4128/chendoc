@@ -24,6 +24,12 @@ import type { R2Config } from "../settings/types.js";
 import { now } from "../../utils/date.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { canAccessDocument } from "../docs/documentAccess.js";
+import {
+  contentMatchesExtension,
+  hasDangerousDoubleExtension,
+  normalizeUploadMimeType
+} from "./upload-validation.js";
+import { finalizeUploadRecord } from "./upload-finalize.js";
 
 const presignSchema = z.object({
   fileName: z.string().min(1).max(220),
@@ -130,14 +136,10 @@ function unique(values: string[]) {
   return Array.from(new Set(values));
 }
 
-function normalizeMimeType(mimeType: string) {
-  return mimeType.split(";")[0]?.trim().toLowerCase() || "";
-}
-
 function normalizeUploadInput<T extends z.infer<typeof presignSchema>>(body: T): T {
   return {
     ...body,
-    mimeType: normalizeMimeType(body.mimeType)
+    mimeType: normalizeUploadMimeType(body.mimeType)
   } as T;
 }
 
@@ -175,15 +177,13 @@ export function getUploadPolicy() {
 function validateFile(body: z.infer<typeof presignSchema>) {
   const policy = uploadPolicy[body.kind];
   const ext = extname(body.fileName).toLowerCase();
-  const allowedMime = policy.mimeByExtension[ext];
-  if (!allowedMime) throw new BadRequestError("文件后缀不允许", "UPLOAD_EXTENSION_NOT_ALLOWED");
-  if (!allowedMime.includes(normalizeMimeType(body.mimeType))) throw new BadRequestError("文件 MIME 类型与后缀不匹配", "UPLOAD_MIME_MISMATCH");
-  if (body.size > policy.maxMb * 1024 * 1024) throw new BadRequestError("文件超过大小限制", "UPLOAD_TOO_LARGE");
-
-  const finalExt = extname(body.fileName.replace(/^.*\./, "").toLowerCase());
-  if (finalExt && finalExt !== ext) {
+  if (hasDangerousDoubleExtension(body.fileName)) {
     throw new BadRequestError("文件名包含可疑后缀", "UPLOAD_DOUBLE_EXTENSION_BLOCKED");
   }
+  const allowedMime = policy.mimeByExtension[ext];
+  if (!allowedMime) throw new BadRequestError("文件后缀不允许", "UPLOAD_EXTENSION_NOT_ALLOWED");
+  if (!allowedMime.includes(normalizeUploadMimeType(body.mimeType))) throw new BadRequestError("文件 MIME 类型与后缀不匹配", "UPLOAD_MIME_MISMATCH");
+  if (body.size > policy.maxMb * 1024 * 1024) throw new BadRequestError("文件超过大小限制", "UPLOAD_TOO_LARGE");
 }
 
 function validateCompletedObject(expected: z.infer<typeof uploadTokenSchema>, object: HeadObjectCommandOutput) {
@@ -191,11 +191,11 @@ function validateCompletedObject(expected: z.infer<typeof uploadTokenSchema>, ob
     throw new BadRequestError("R2 对象大小与上传凭证不匹配", "UPLOAD_SIZE_MISMATCH");
   }
 
-  const actualMimeType = normalizeMimeType(object.ContentType ?? "");
+  const actualMimeType = normalizeUploadMimeType(object.ContentType ?? "");
   if (!actualMimeType) {
     throw new BadRequestError("R2 对象缺少 Content-Type", "UPLOAD_CONTENT_TYPE_MISSING");
   }
-  if (actualMimeType !== normalizeMimeType(expected.mimeType)) {
+  if (actualMimeType !== normalizeUploadMimeType(expected.mimeType)) {
     throw new BadRequestError("R2 对象 Content-Type 与上传凭证不匹配", "UPLOAD_CONTENT_TYPE_MISMATCH");
   }
   validateFile({ ...expected, mimeType: actualMimeType });
@@ -221,36 +221,12 @@ function verifyUploadToken(token: string) {
   return uploadTokenSchema.parse(decoded);
 }
 
-function startsWithBytes(bytes: Uint8Array, signature: number[]) {
-  return signature.every((value, index) => bytes[index] === value);
-}
-
-function contentMatchesExtension(fileName: string, bytes: Uint8Array) {
-  const ext = extname(fileName).toLowerCase();
-  const text = Buffer.from(bytes).toString("ascii");
-  if (ext === ".png") return startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47]);
-  if (ext === ".jpg" || ext === ".jpeg") return startsWithBytes(bytes, [0xff, 0xd8, 0xff]);
-  if (ext === ".gif") return text.startsWith("GIF87a") || text.startsWith("GIF89a");
-  if (ext === ".webp") return text.startsWith("RIFF") && text.slice(8, 12) === "WEBP";
-  if (ext === ".avif") return text.slice(4, 12) === "ftypavif" || text.slice(4, 12) === "ftypavis";
-  if (ext === ".pdf") return text.startsWith("%PDF-");
-  if ([".zip", ".docx", ".xlsx", ".pptx"].includes(ext)) {
-    return startsWithBytes(bytes, [0x50, 0x4b, 0x03, 0x04]) || startsWithBytes(bytes, [0x50, 0x4b, 0x05, 0x06]);
-  }
-  if ([".doc", ".xls", ".ppt"].includes(ext)) return startsWithBytes(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
-  if ([".mp4", ".mov", ".m4v"].includes(ext)) return text.slice(4, 8) === "ftyp";
-  if (ext === ".webm") return startsWithBytes(bytes, [0x1a, 0x45, 0xdf, 0xa3]);
-  if (ext === ".ogv") return text.startsWith("OggS");
-  if (ext === ".txt" || ext === ".md") return !bytes.includes(0);
-  return false;
-}
-
 async function validateObjectSignature(client: ReturnType<typeof createR2Client>, config: R2Config, expected: z.infer<typeof uploadTokenSchema>) {
   const { GetObjectCommand } = await import("@aws-sdk/client-s3");
   const response = await client.send(new GetObjectCommand({
     Bucket: config.bucket,
     Key: expected.objectKey,
-    Range: "bytes=0-4095"
+    Range: "bytes=0-65535"
   }));
   const body = response.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
   const bytes = body?.transformToByteArray ? await body.transformToByteArray() : new Uint8Array();
@@ -357,8 +333,8 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
     Bucket: config.bucket,
     Key: tokenPayload.objectKey
   }));
-  validateCompletedObject(tokenPayload, uploadedObject);
   try {
+    validateCompletedObject(tokenPayload, uploadedObject);
     await validateObjectSignature(client, config, tokenPayload);
   } catch (error) {
     await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
@@ -382,9 +358,9 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
       if (raced.userId !== userId || raced.docId !== docId) throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
       return { id: raced.id, publicUrl: raced.publicUrl };
     }
-    await assertUploadQuota(userId, tokenPayload.size);
-    try {
-      return await insertUpload({
+    return finalizeUploadRecord({
+      assertQuota: () => assertUploadQuota(userId, tokenPayload.size),
+      insert: () => insertUpload({
         userId,
         docId,
         objectKey: tokenPayload.objectKey,
@@ -394,18 +370,16 @@ export async function completeUpload(userId: number, actor: Actor, input: unknow
         kind: tokenPayload.kind,
         originalName: tokenPayload.fileName,
         createdAt: now()
-      });
-    } catch (error) {
-      const committed = await getUploadByObjectKey(tokenPayload.objectKey);
-      if (committed) {
+      }),
+      findCommitted: () => getUploadByObjectKey(tokenPayload.objectKey),
+      resolveCommitted: (committed) => {
         if (committed.userId !== userId || committed.docId !== docId) {
           throw new ForbiddenError("上传对象已被占用", "UPLOAD_OBJECT_FORBIDDEN");
         }
         return { id: committed.id, publicUrl: committed.publicUrl };
-      }
-      await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey })).catch(() => undefined);
-      throw error;
-    }
+      },
+      cleanup: () => client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: tokenPayload.objectKey }))
+    });
   });
 }
 

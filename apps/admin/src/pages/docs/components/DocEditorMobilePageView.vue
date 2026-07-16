@@ -1,11 +1,45 @@
 <script setup lang="ts">
+import { ref, watch } from "vue";
+import { Copy, Download, Save, Settings2, Trash2 } from "lucide-vue-next";
 import ConfirmDialog from "../../../components/common/ConfirmDialog.vue";
+import ExportMenu from "../../../components/docs/ExportMenu.vue";
 import DocEditorCanvas from "./DocEditorCanvas.vue";
+import DocEditorMobileSheet from "./DocEditorMobileSheet.vue";
+import DocEditorMobileTop from "./DocEditorMobileTop.vue";
 import DocEditorSharePanel from "./DocEditorSharePanel.vue";
-import { Save } from "lucide-vue-next";
 import { useDocEditorPageContext } from "../docEditorPageContext";
 
+type MobilePagePanel = "share" | "more" | null;
+
 const page = useDocEditorPageContext();
+const panel = ref<MobilePagePanel>(null);
+
+function openShare() {
+  page.sharePanelOpen = true;
+  panel.value = "share";
+}
+
+function openMore() {
+  page.sharePanelOpen = false;
+  panel.value = "more";
+}
+
+function closePanel() {
+  if (panel.value === "share") page.sharePanelOpen = false;
+  panel.value = null;
+}
+
+function openExport() {
+  closePanel();
+  page.exportMenuOpen = true;
+}
+
+function openDelete() {
+  closePanel();
+  page.deleteOpen = true;
+}
+
+watch(() => page.docUid, closePanel);
 </script>
 
 <template>
@@ -22,87 +56,99 @@ const page = useDocEditorPageContext();
   </div>
 
   <template v-else-if="page.current">
-    <header class="doc-editor-page__mobile-top">
-      <button class="doc-editor-page__mobile-back" type="button" @click="page.router.push(page.docsPath)">←</button>
-      <div class="doc-editor-page__mobile-headline">
-        <span>文档编辑</span>
-        <strong>{{ page.title || "未命名文档" }}</strong>
-      </div>
-      <span v-if="page.saveState === 'error'" class="doc-editor-page__mobile-save is-error">{{ page.saveError }}</span>
-    </header>
+    <DocEditorMobileTop
+      :title="page.title"
+      :save-state="page.saveState"
+      :save-error="page.saveError"
+      @back="page.router.push(page.docsPath)"
+      @share="openShare"
+      @more="openMore"
+      @retry-save="page.retrySave"
+    />
 
-    <section class="doc-editor-page__mobile-summary">
-      <input v-model="page.title" class="doc-editor-page__mobile-title" aria-label="文档标题" />
-      <div class="doc-editor-page__mobile-meta">
-        <span>{{ page.current?.status === 'published' ? '已发布' : '草稿' }}</span>
-        <span>{{ page.documentWordCount }} 字</span>
-      </div>
+    <section class="doc-editor-page__mobile-document">
+      <input
+        v-model="page.title"
+        class="doc-editor-page__mobile-title"
+        aria-label="文档标题"
+        placeholder="请输入标题"
+      />
+      <main class="doc-editor-page__mobile-canvas">
+        <DocEditorCanvas
+          :key="page.editorKey"
+          :doc-uid="page.current.docUid"
+          :content-json="page.editorContentJson"
+          @change="page.onEditorChange"
+          @toc="(items) => { page.ctx.toc = items; }"
+        />
+      </main>
     </section>
 
-    <div v-if="page.saveState === 'error'" class="doc-editor-page__save-error is-mobile">
-      <span>{{ page.saveError || "保存失败" }}</span>
-      <button class="cd-button primary" type="button" @click="page.retrySave">重试保存</button>
-    </div>
+    <DocEditorMobileSheet :panel="panel" :title="page.title" @close="closePanel">
+      <template #share>
+        <div class="doc-editor-page__mobile-form">
+          <DocEditorSharePanel
+            v-model:share-enabled="page.shareEnabled"
+            v-model:share-code-input="page.shareCodeInput"
+            v-model:custom-slug-input="page.customSlugInput"
+            v-model:share-password="page.sharePassword"
+            mobile
+            :is-admin="page.ctx.auth?.isAdmin ?? false"
+            :share="page.share ?? null"
+            :share-url="page.shareUrl"
+            :share-loading="page.shareLoading"
+            :share-has-password="page.shareHasPassword"
+            :share-state-text="page.shareStateText"
+            :share-access-text="page.shareAccessText"
+            :share-expiry-text="page.shareExpiryText"
+            :share-message="page.shareMessage"
+            :share-status-is-error="page.shareStatusIsError"
+            :share-review-text="page.shareReviewText"
+            :copied="page.copied"
+            @confirm-password="page.confirmSharePassword"
+            @clear-password="page.clearSharePassword"
+            @password-input="page.onPasswordInput"
+            @save-custom-slug="page.saveCustomSlug"
+            @copy="page.copyShare"
+            @resubmit="page.resubmitRejectedShare"
+          />
+        </div>
+      </template>
 
-    <div class="doc-editor-page__mobile-actions">
-      <button type="button" :disabled="page.saveState === 'saving'" @click="page.flushPendingSave">
-        <Save :size="16" />
-        {{ page.saveState === 'saving' ? '保存中' : page.saveState === 'pending' ? '待保存' : page.saveState === 'error' ? '重试' : '已保存' }}
-      </button>
-      <button type="button" @click="page.sharePanelOpen = true">分享</button>
-    </div>
+      <template #more>
+        <div class="doc-editor-page__mobile-more-actions">
+          <button type="button" :disabled="page.saveState === 'saving'" @click="page.flushPendingSave">
+            <Save :size="20" /><span>立即保存</span>
+          </button>
+          <button type="button" @click="openShare">
+            <Settings2 :size="20" /><span>分享设置</span>
+          </button>
+          <button type="button" :disabled="!page.shareUrl" @click="page.copyShare">
+            <Copy :size="20" /><span>{{ page.copied ? "已复制链接" : "复制分享链接" }}</span>
+          </button>
+          <button type="button" @click="openExport">
+            <Download :size="20" /><span>导出文档</span>
+          </button>
+          <button class="is-danger" type="button" @click="openDelete">
+            <Trash2 :size="20" /><span>删除文档</span>
+          </button>
+        </div>
+      </template>
+    </DocEditorMobileSheet>
 
-    <main class="doc-editor-page__mobile-canvas">
-      <DocEditorCanvas
-        v-if="page.current"
-        :key="page.editorKey"
-        :doc-uid="page.current.docUid"
-        :content-json="page.editorContentJson"
-        @change="page.onEditorChange"
-        @toc="(items) => { page.ctx.toc = items; }"
-      />
-    </main>
-
-    <aside
-      v-if="page.sharePanelOpen"
-      class="doc-editor-page__mobile-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="doc-editor-mobile-publish-title"
-    >
-      <header class="doc-editor-page__mobile-sheet-head">
-        <strong id="doc-editor-mobile-publish-title">发布设置</strong>
-        <button type="button" aria-label="关闭发布设置" @click="page.sharePanelOpen = false">✕</button>
-      </header>
-      <div class="doc-editor-page__mobile-sheet-content">
-        <DocEditorSharePanel
-          v-model:share-enabled="page.shareEnabled"
-          v-model:share-code-input="page.shareCodeInput"
-          v-model:custom-slug-input="page.customSlugInput"
-          v-model:share-password="page.sharePassword"
-          mobile
-          :is-admin="page.ctx.auth?.isAdmin ?? false"
-          :share="page.share ?? null"
-          :share-url="page.shareUrl"
-          :share-loading="page.shareLoading"
-          :share-has-password="page.shareHasPassword"
-          :share-state-text="page.shareStateText"
-          :share-access-text="page.shareAccessText"
-          :share-expiry-text="page.shareExpiryText"
-          :share-message="page.shareMessage"
-          :share-status-is-error="page.shareStatusIsError"
-          :share-review-text="page.shareReviewText"
-          :copied="page.copied"
-          @confirm-password="page.confirmSharePassword"
-          @clear-password="page.clearSharePassword"
-          @password-input="page.onPasswordInput"
-          @save-custom-slug="page.saveCustomSlug"
-          @copy="page.copyShare"
-          @resubmit="page.resubmitRejectedShare"
-        />
-      </div>
-    </aside>
-
-    <ConfirmDialog v-model="page.deleteOpen" danger title="删除文档" message="确定删除吗？" confirm-text="删除" @confirm="page.remove" />
+    <ExportMenu
+      v-if="page.exportMenuOpen"
+      :doc-uid="page.current.docUid"
+      :doc-title="page.current.title"
+      @close="page.exportMenuOpen = false"
+    />
+    <ConfirmDialog
+      v-model="page.deleteOpen"
+      danger
+      title="删除文档"
+      message="文档会移到回收站，确定删除吗？"
+      confirm-text="删除"
+      @confirm="page.remove"
+    />
   </template>
 </template>

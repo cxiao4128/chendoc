@@ -1,56 +1,65 @@
 @media (max-width: 900px) {
-  .editor-toolbar-wrap {
-    position: sticky;
-    top: var(--doc-editor-toolbar-top, 0px);
-    z-index: 18;
-    border-bottom-color: var(--cd-border);
+  .doc-editor-page.is-mobile .editor-toolbar-wrap {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: var(--mobile-keyboard-offset, 0px);
+    left: 0;
+    z-index: 60;
+    border-top: 1px solid var(--cd-border);
+    border-bottom: 0;
     background: var(--cd-panel);
+    padding-bottom: env(safe-area-inset-bottom);
+    transition: bottom 120ms ease-out;
   }
 
-  .editor-toolbar {
-    gap: 4px;
-    min-height: var(--doc-editor-toolbar-height, 54px);
-    padding: 8px 10px;
-    scroll-padding-inline: 10px;
+  .doc-editor-page.is-mobile .editor-toolbar-wrap.has-keyboard {
+    padding-bottom: 0;
   }
 
-  .editor-toolbar button,
-  .editor-toolbar select {
-    border-color: var(--cd-border);
+  .doc-editor-page.is-mobile .editor-toolbar {
+    display: block;
+    min-height: 56px;
+    overflow: visible;
+    padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left));
+  }
+
+  .doc-editor-page.is-mobile .editor-toolbar__primary--mobile {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(6, minmax(44px, 1fr));
+    gap: 2px;
+  }
+
+  .doc-editor-page.is-mobile .editor-toolbar__primary--mobile button {
+    width: 100%;
+    min-width: 44px;
+    height: 44px;
+    border: 0;
     border-radius: 8px;
-    background: var(--cd-panel);
+    background: transparent;
+    color: var(--cd-text);
     box-shadow: none;
   }
 
-  .editor-toolbar button.active {
-    border-color: rgba(37, 99, 235, 0.34);
-    background: var(--cd-accent-soft);
-    color: var(--cd-accent-hover);
+  .doc-editor-page.is-mobile .editor-toolbar__primary--mobile button:active {
+    background: var(--cd-bg-plain);
   }
 
+  .doc-editor-page.is-mobile .editor-toolbar__primary--mobile button:focus-visible {
+    outline: 3px solid var(--cd-focus);
+    outline-offset: -2px;
+  }
+
+  .editor-toolbar__mobile-aa {
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.04em;
+  }
 }
 
-@media (max-width: 560px) {
-  .editor-toolbar {
-    flex-wrap: nowrap;
-    min-height: var(--doc-editor-toolbar-height, 54px);
-    overflow-y: hidden;
-    padding-inline: 10px;
-  }
-
-  .editor-toolbar button {
-    width: 34px;
-    height: 34px;
-  }
-
-  .editor-toolbar select {
-    min-width: 80px;
-    height: 34px;
-    padding-inline: 8px;
-  }
-
-  .editor-toolbar__sep {
-    height: 18px;
-    margin-inline: 1px;
+@media (prefers-reduced-motion: reduce) {
+  .doc-editor-page.is-mobile .editor-toolbar-wrap {
+    transition-duration: 1ms;
   }
 }

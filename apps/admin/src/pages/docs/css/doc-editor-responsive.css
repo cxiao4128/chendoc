@@ -4,7 +4,7 @@
  * 重构说明：
  * - 中等断点（1180px）
  * - 小断点（980px）
- * - 移动端断点（760px）
+ * - 移动端断点（900px）
  */
 
 /* ===== 中等断点 ===== */
@@ -45,7 +45,7 @@
 }
 
 /* ===== 移动端断点 ===== */
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .doc-editor-page__password-row,
   .doc-editor-page__mobile-share-actions {
     grid-template-columns: 1fr;

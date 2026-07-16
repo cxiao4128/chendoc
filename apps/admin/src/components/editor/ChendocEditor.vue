@@ -26,6 +26,7 @@ import "./chendoc-editor.css";
 type EditorHiddenFileInputsHandle = {
   openImage: () => void;
   openVideo: () => void;
+  openAttachment: () => void;
   openReplacement: () => void;
   clearVideo: () => void;
 };
@@ -209,12 +210,14 @@ onBeforeUnmount(() => {
       :editor="editor"
       @upload-image="openImagePicker"
       @upload-video="openVideoPicker"
+      @upload-attachment="fileInputs?.openAttachment()"
       @style-change="applyStylePatch"
     />
     <EditorHiddenFileInputs
       ref="fileInputs"
       @image="onImageFile"
       @video="onVideoFile"
+      @attachment="uploadAndInsertFile"
       @replacement="onReplacementFile"
     />
     <EditorUploadPanel

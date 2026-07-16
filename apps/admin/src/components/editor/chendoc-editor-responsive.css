@@ -3,6 +3,10 @@
     background: transparent;
   }
 
+  .chendoc-editor__block-handle {
+    display: none !important;
+  }
+
   .chendoc-editor__upload {
     gap: 8px;
     padding: 8px 12px;
@@ -14,8 +18,13 @@
   }
 
   .chendoc-editor__image-tools input {
+    min-height: 44px;
     min-width: 0;
     width: 100%;
+  }
+
+  .chendoc-editor__image-tools button {
+    min-height: 44px;
   }
 
   .chendoc-editor__slash {
@@ -26,29 +35,42 @@
   }
 
   .chendoc-editor__slash button {
-    min-height: 32px;
+    min-height: 44px;
     border-radius: 8px;
     padding: 0 12px;
   }
 
   .chendoc-editor__surface {
     max-width: none;
-    min-height: calc(100dvh - 220px);
-    margin: 12px;
-    border-radius: 8px;
-    padding: 28px 24px 124px 52px;
+    min-height: calc(100dvh - 176px - env(safe-area-inset-top));
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 8px 28px calc(128px + env(safe-area-inset-bottom));
+    padding-right: max(28px, env(safe-area-inset-right));
+    padding-left: max(28px, env(safe-area-inset-left));
     font-size: 16px;
   }
 
   .chendoc-editor__runtime-state {
     max-width: none;
-    min-height: calc(100dvh - 220px);
-    margin: 12px;
-    padding: 28px 24px 124px 52px;
+    min-height: calc(100dvh - 176px - env(safe-area-inset-top));
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 8px 28px calc(128px + env(safe-area-inset-bottom));
+    padding-right: max(28px, env(safe-area-inset-right));
+    padding-left: max(28px, env(safe-area-inset-left));
   }
 
   .chendoc-editor__surface h1 {
     font-size: 26px;
+  }
+
+  .tiptap p.is-editor-empty:first-child::before {
+    color: #c8cdd4;
   }
 
   .chendoc-editor__surface h2 {
@@ -71,20 +93,18 @@
 }
 
 @media (max-width: 560px) {
-  .chendoc-editor__block-handle {
-    width: 26px;
-    height: 30px;
-    letter-spacing: 0;
-  }
-
   .chendoc-editor__surface {
-    margin: 10px 8px;
-    padding: 24px 14px 118px 42px;
+    min-height: calc(100dvh - 156px - env(safe-area-inset-top));
+    padding: 8px 20px calc(120px + env(safe-area-inset-bottom));
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-left: max(20px, env(safe-area-inset-left));
   }
 
   .chendoc-editor__runtime-state {
-    margin: 10px 8px;
-    padding: 24px 14px 118px 42px;
+    min-height: calc(100dvh - 156px - env(safe-area-inset-top));
+    padding: 8px 20px calc(120px + env(safe-area-inset-bottom));
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-left: max(20px, env(safe-area-inset-left));
   }
 }
 
@@ -117,21 +137,6 @@
   .chendoc-editor button:active {
     transform: scale(0.96);
     opacity: 0.8;
-  }
-}
-
-/* 键盘弹出时布局调整 */
-@media (max-height: 500px) and (orientation: portrait) {
-  .chendoc-editor__surface {
-    min-height: calc(100dvh - 320px);
-    margin-bottom: 80px;
-  }
-}
-
-/* 移动端安全区域 */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .chendoc-editor__surface {
-    padding-bottom: calc(80px + env(safe-area-inset-bottom));
   }
 }
 

@@ -133,7 +133,7 @@ export function createChendocEditor(options: Record<string, unknown>) {
       Color,
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
-        placeholder: "正文"
+        placeholder: "请输入正文"
       })
     ] as any,
     // TipTap 编辑器性能配置

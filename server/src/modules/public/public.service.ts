@@ -136,8 +136,7 @@ export async function renderSharePage(shareKey: string | number, accessToken?: s
     contentHtml: resolved.doc.contentHtml,
     shareUrl,
     ...brand,
-    scriptNonce: CSP_NONCE_PLACEHOLDER,
-    updatedAt: resolved.doc.updatedAt
+    scriptNonce: CSP_NONCE_PLACEHOLDER
   });
   const contentHash = hashShareHtml(html);
   const etag = shareEtag(contentHash);

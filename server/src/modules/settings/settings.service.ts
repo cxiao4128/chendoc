@@ -1,5 +1,5 @@
 // Version constant for architecture check (actual logic in maintenance.service.ts)
-const APP_VERSION = "3.3.1";
+const APP_VERSION = "3.4.1";
 export { APP_VERSION };
 
 import type { FastifyInstance } from "fastify";

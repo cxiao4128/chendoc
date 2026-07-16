@@ -3,20 +3,22 @@ import { onMounted, onUnmounted, ref } from "vue";
 import type { CSSProperties } from "vue";
 import type { Editor } from "@tiptap/vue-3";
 import { nativePrompt } from "../../services/nativeDialog";
-import type { EditorStylePatch, TipTapCommandChain } from "./editor-types";
-import ToolbarMoreMenu from "./ToolbarMoreMenu.vue";
+import type { EditorStylePatch, MobileToolbarSheet, TipTapCommandChain } from "./editor-types";
+import ToolbarMobileSheet from "./ToolbarMobileSheet.vue";
 import ToolbarPrimaryGroup from "./ToolbarPrimaryGroup.vue";
 import ToolbarSecondaryGroup from "./ToolbarSecondaryGroup.vue";
+import { useVisualViewportInset } from "./useVisualViewportInset";
 import "./editor-toolbar.css";
 
 const props = defineProps<{ editor: Editor | null }>();
 const emit = defineEmits<{
   uploadImage: [];
   uploadVideo: [];
+  uploadAttachment: [];
   styleChange: [patch: EditorStylePatch];
 }>();
 
-const showMoreMenu = ref(false);
+const mobileSheet = ref<MobileToolbarSheet | null>(null);
 const textColorOpen = ref(false);
 const highlightOpen = ref(false);
 const textColorStyle = ref<CSSProperties>({});
@@ -67,19 +69,10 @@ function openHighlightPicker(event: MouseEvent) {
   }
 }
 
-function toggleMoreMenu() {
-  showMoreMenu.value = !showMoreMenu.value;
-}
-
-function closeMoreMenu() {
-  showMoreMenu.value = false;
-}
+const { keyboardInset, keyboardInsetStyle } = useVisualViewportInset();
 
 function handleClickOutside(event: MouseEvent) {
   const target = event.target as HTMLElement;
-  if (!target.closest(".editor-toolbar__more-menu") && !target.closest(".editor-toolbar__more-btn")) {
-    closeMoreMenu();
-  }
   if (!target.closest(".editor-toolbar__color-picker")) {
     textColorOpen.value = false;
     highlightOpen.value = false;
@@ -153,12 +146,12 @@ function getCurrentHighlight() {
 </script>
 
 <template>
-  <div class="editor-toolbar-wrap">
+  <div class="editor-toolbar-wrap" :class="{ 'has-keyboard': keyboardInset > 0 }" :style="keyboardInsetStyle">
     <div class="editor-toolbar" role="toolbar" aria-label="编辑工具栏">
       <ToolbarPrimaryGroup
         :editor="editor"
         @upload-image="emit('uploadImage')"
-        @toggle-more-menu="toggleMoreMenu"
+        @open-sheet="mobileSheet = $event"
       />
 
       <ToolbarSecondaryGroup
@@ -181,15 +174,17 @@ function getCurrentHighlight() {
         @set-highlight="setHighlight"
       />
 
-      <ToolbarMoreMenu
-        :show="showMoreMenu"
+      <ToolbarMobileSheet
+        :sheet="mobileSheet"
         :editor="editor"
-        @close="closeMoreMenu"
+        :keyboard-inset="keyboardInset"
+        @close="mobileSheet = null"
         @prompt-for-link="promptForLink"
+        @upload-image="emit('uploadImage')"
         @upload-video="emit('uploadVideo')"
+        @upload-attachment="emit('uploadAttachment')"
         @set-text-color="setTextColor"
         @set-highlight="setHighlight"
-        @set-font-family="setFontFamily"
         @insert-table="insertTable"
         @style-change="emit('styleChange', $event)"
       />

@@ -12,6 +12,8 @@ export interface EditorStylePatch {
   paragraphGap?: string;
 }
 
+export type MobileToolbarSheet = "format" | "list" | "insert";
+
 export type InsertCommand =
   | "paragraph"
   | "h1"

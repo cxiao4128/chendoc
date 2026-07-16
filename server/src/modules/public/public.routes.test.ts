@@ -22,7 +22,8 @@ await migrate();
 
 const { buildApp } = await import("../../app.js");
 const { closeDatabase, db, sqlite } = await import("../../db/client.js");
-const { shares, users } = await import("../../db/schema.js");
+const { docs, shares, users } = await import("../../db/schema.js");
+const { encryptDocumentContent } = await import("../../utils/documentCrypto.js");
 const { createDoc, updateDoc } = await import("../docs/docs.service.js");
 const { createOrGetShare, invalidateDecryptedDocCache } = await import("../shares/shares.service.js");
 const { invalidateShareHtmlCache } = await import("./share-html-cache.js");
@@ -75,6 +76,33 @@ async function createPublicShare(contentHtml: string) {
   return { doc, share };
 }
 
+async function createLegacyPublicShare(contentJson: string, contentHtml: string) {
+  const doc = await createDoc(adminId, { title: "Legacy share doc" });
+  const storedContent = contentJson
+    ? encryptDocumentContent(contentJson, contentHtml)
+    : {
+        contentJson: "",
+        contentHtml,
+        contentJsonCiphertext: null,
+        contentJsonIv: null,
+        contentJsonTag: null,
+        contentJsonKeyVersion: null,
+        contentHtmlCiphertext: null,
+        contentHtmlIv: null,
+        contentHtmlTag: null,
+        contentHtmlKeyVersion: null
+      };
+  db.update(docs).set({
+    ...storedContent,
+    revision: 2,
+    updatedAt: new Date(Date.now() + 1_000)
+  }).where(eq(docs.id, doc.id)).run();
+  invalidateDecryptedDocCache(doc.id);
+  const share = await createOrGetShare(doc.id, { isEnabled: true }, adminActor);
+  if (!share) throw new Error("legacy share was not created");
+  return { doc, share };
+}
+
 describe("public share route cache headers", () => {
   test("returns content hash ETag and 304 on If-None-Match", async () => {
     const { share } = await createPublicShare("<p>first content</p>");
@@ -99,6 +127,65 @@ describe("public share route cache headers", () => {
     expect(cached.body).toBe("");
     expect(cached.headers.etag).toBe(etag);
     expect(cached.headers["cache-control"]).toBe("private, no-cache, must-revalidate");
+  });
+
+  test("preserves safe text highlights without rendering reading metadata", async () => {
+    const { share } = await createPublicShare(
+      '<p><mark style="background-color:#FFF176"><span style="color:#D7263D">highlighted</span></mark></p>'
+    );
+    const page = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('style="background-color:#FFF176"');
+    expect(page.body).toContain('style="color:#D7263D"');
+    expect(page.body).not.toContain("share-document-meta");
+    expect(page.body).not.toContain("更新于");
+    expect(page.body).not.toContain("分钟阅读");
+
+    const api = await app.inject({ method: "GET", url: `/api/public/r/${share.shareCode}` });
+    expect(api.statusCode).toBe(200);
+    expect(api.json().doc.updatedAt).toBeTypeOf("string");
+  });
+
+  test("rebuilds a legacy flattened share from contentJson without exposing the JSON", async () => {
+    const contentJson = JSON.stringify({
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [{
+          type: "text",
+          text: "旧文档重点",
+          marks: [
+            { type: "textStyle", attrs: { color: "#D7263D" } },
+            { type: "highlight", attrs: { color: "#FFF176" } }
+          ]
+        }]
+      }]
+    });
+    const { share } = await createLegacyPublicShare(contentJson, "<p>旧文档重点</p>");
+
+    const page = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('style="background-color:#FFF176"');
+    expect(page.body).toContain('style="color:#D7263D"');
+
+    const api = await app.inject({ method: "GET", url: `/api/public/r/${share.shareCode}` });
+    expect(api.statusCode).toBe(200);
+    expect(api.json().doc.contentHtml).toContain('style="background-color:#FFF176"');
+    expect(api.json().doc).not.toHaveProperty("contentJson");
+  });
+
+  test("keeps sanitized HTML-only legacy documents instead of replacing them with an empty paragraph", async () => {
+    const { share } = await createLegacyPublicShare(
+      "",
+      '<p>HTML-only 正文 <span style="color:#D7263D">保留</span></p><script>alert(1)</script>'
+    );
+
+    const page = await app.inject({ method: "GET", url: `/r/${share.shareCode}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain("HTML-only 正文");
+    expect(page.body).toContain('style="color:#D7263D"');
+    expect(page.body).not.toMatch(/<script|alert\(1\)/i);
   });
 
   test("revalidates public share JSON and keeps 304 responses private", async () => {

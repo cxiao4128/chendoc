@@ -1,9 +1,1 @@
-/**
- * doc-editor-mobile.css - 移动端样式入口
- *
- * 本文件只做 @import；具体样式按旧页面移动端、组件外壳、底部面板拆分。
- */
-
 @import "./doc-editor-mobile-page.css";
-@import "./doc-editor-mobile-shell.css";
-@import "./doc-editor-mobile-sheet.css";

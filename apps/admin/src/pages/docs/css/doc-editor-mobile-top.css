@@ -1,120 +1,119 @@
-/**
- * doc-editor-mobile.css - 文档编辑器移动端样式
- *
- * 重构说明：
- * - 顶部导航栏
- * - 摘要和元数据
- * - 操作按钮
- * - 画布区域
- * - 底部浮动工具栏
- * - 弹出面板（分享等）
- */
-
-/* 顶部导航栏 */
 .doc-editor-page__mobile-top {
   position: sticky;
   top: 0;
-  z-index: 34;
+  z-index: 40;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  gap: 2px;
   align-items: center;
-  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+  min-height: calc(60px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--cd-border);
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(20px) saturate(140%);
+  background: var(--cd-panel);
+  padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
 }
 
-/* 返回按钮 */
-.doc-editor-page__mobile-back {
+.doc-editor-page__mobile-icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--cd-border);
+  width: 44px;
+  height: 44px;
+  border: 0;
   border-radius: 8px;
-  background: var(--cd-panel);
-  color: var(--cd-text);
+  background: transparent;
+  color: var(--cd-ink);
+  cursor: pointer;
+  transition: background-color 160ms ease-out, color 160ms ease-out;
 }
 
-/* 标题区域 */
+.doc-editor-page__mobile-icon:active {
+  background: var(--cd-bg-plain);
+}
+
+.doc-editor-page__mobile-icon:focus-visible {
+  outline: 3px solid var(--cd-focus);
+  outline-offset: -2px;
+}
+
 .doc-editor-page__mobile-headline {
-  min-width: 0;
   display: grid;
-  gap: 4px;
-}
-
-.doc-editor-page__mobile-headline span {
-  color: var(--cd-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  min-width: 0;
+  justify-items: center;
+  gap: 1px;
+  padding-inline: 4px;
 }
 
 .doc-editor-page__mobile-headline strong {
+  width: 100%;
   overflow: hidden;
   color: var(--cd-ink);
-  font-size: 17px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-editor-page__mobile-save {
+  max-width: 100%;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--cd-muted);
+  padding: 0;
+  font-size: 11px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 保存状态标签 */
-.doc-editor-page__mobile-save {
-  display: inline-flex;
+.doc-editor-page__mobile-save.is-error {
+  display: flex;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
-  border: 1px solid var(--cd-border);
-  border-radius: 999px;
-  background: var(--cd-panel);
-  color: var(--cd-muted);
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: right;
-  white-space: nowrap;
+  color: var(--cd-danger);
+  padding: 0 8px;
+  cursor: pointer;
 }
 
-/* 摘要区域 */
-.doc-editor-page__mobile-summary {
-  display: grid;
-  gap: 8px;
-  margin: 10px 12px 0;
-  border: 1px solid var(--cd-border);
-  border-radius: 8px;
-  background: var(--cd-panel);
-  padding: 14px;
-}
-
-/* 标题输入 */
 .doc-editor-page__mobile-title {
-  min-width: 0;
-  min-height: 44px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--cd-paper);
+  display: block;
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  background: transparent;
   color: var(--cd-ink);
-  font-size: 20px;
-  font-weight: 900;
-  padding: 0 12px;
-}
-
-/* 元数据标签 */
-.doc-editor-page__mobile-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.doc-editor-page__mobile-meta span {
-  border-radius: 999px;
-  background: var(--cd-brand-accent-soft);
-  color: var(--cd-brand-accent);
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 52px 28px 8px;
+  padding-right: max(28px, env(safe-area-inset-right));
+  padding-left: max(28px, env(safe-area-inset-left));
+  font-family: var(--cd-font-sans);
+  font-size: 30px;
   font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-align: left;
+  outline: 0;
 }
 
-/* 操作按钮行 */
+input.doc-editor-page__mobile-title:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+input.doc-editor-page__mobile-title:not([type="checkbox"]):not([type="radio"]):not([type="file"])::placeholder {
+  text-align: left;
+}
+
+.doc-editor-page__mobile-title::placeholder {
+  color: #c8cdd4;
+  opacity: 1;
+}
+
+.doc-editor-page__mobile-title:focus {
+  box-shadow: none;
+}
+
+@media (max-width: 560px) {
+  .doc-editor-page__mobile-title {
+    padding: 50px 20px 8px;
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-left: max(20px, env(safe-area-inset-left));
+  }
+}

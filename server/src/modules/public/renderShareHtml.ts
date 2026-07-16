@@ -66,16 +66,12 @@ export function renderShareHtml(input: {
   shareUrl: string;
   siteName: string;
   logoUrl: string;
-  updatedAt: Date;
   shareFooterText?: string;
   scriptNonce?: string;
 }) {
   const title = escapeHtml(input.title);
   const coverUrl = input.coverUrl ? escapeHtml(input.coverUrl) : "";
   const contentHtml = input.contentHtml ? sanitizeDocumentHtml(input.contentHtml) : "";
-  const plainTextLength = contentHtml.replace(/<[^>]+>/g, " ").replace(/&[^;]+;/g, " ").replace(/\s+/g, "").length;
-  const readingMinutes = Math.max(1, Math.ceil(plainTextLength / 400));
-  const updatedText = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(input.updatedAt);
   const imageMeta = coverUrl
     ? `<meta property="og:image" content="${coverUrl}">
   <meta name="twitter:image" content="${coverUrl}">`
@@ -91,7 +87,6 @@ export function renderShareHtml(input: {
     scriptNonce: input.scriptNonce,
     body: `<header>
       <h1>${title}</h1>
-      <p class="share-document-meta">更新于 ${escapeHtml(updatedText)} · 约 ${readingMinutes} 分钟阅读</p>
     </header>
     <article class="content">${contentHtml || '<div class="empty">这篇文档还没有内容。</div>'}</article>
     ${renderShareFooter(input.shareFooterText)}`

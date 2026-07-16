@@ -1,13 +1,12 @@
 import { eq } from "drizzle-orm";
 import { closeDatabase, db, dbAll, dbRun } from "../db/client.js";
 import { docs, docVersions } from "../db/schema.js";
-import { renderContentJsonToHtml, sanitizeDocumentHtml } from "../utils/sanitize.js";
+import { renderStoredDocumentHtml } from "../utils/sanitize.js";
 import { now } from "../utils/date.js";
 import { decryptDocumentRecord, encryptDocumentContent } from "../utils/documentCrypto.js";
 
 function cleanedHtml(row: { contentJson?: string | null; contentHtml: string }) {
-  if (row.contentJson) return renderContentJsonToHtml(row.contentJson);
-  return sanitizeDocumentHtml(row.contentHtml);
+  return renderStoredDocumentHtml(row.contentJson, row.contentHtml);
 }
 
 async function resanitizeDocs() {

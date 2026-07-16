@@ -63,7 +63,26 @@ describe("PublicSharePage", () => {
     expect(wrapper.get("h1").text()).toBe("公开正文");
     expect(wrapper.get("article").html()).toContain("<strong>正文内容</strong>");
     expect(wrapper.text()).toContain("保留作者署名");
+    expect(wrapper.text()).not.toContain("更新于");
+    expect(wrapper.text()).not.toContain("分钟阅读");
     expect(document.title).toBe("公开正文 - 陈书");
+  });
+
+  test("keeps server-sanitized text color and highlight markup", async () => {
+    mocks.getPublicShareApi.mockResolvedValue({
+      ...unlockedShare,
+      doc: {
+        ...unlockedShare.doc,
+        contentHtml: '<p><mark style="background-color:#FFF176"><span style="color:#D7263D">重点</span></mark></p>'
+      }
+    });
+
+    const wrapper = mount(PublicSharePage);
+    await flushPromises();
+
+    expect(wrapper.get("article mark").attributes("style")).toContain("background-color");
+    expect(wrapper.get("article span").attributes("style")).toContain("color");
+    expect(wrapper.get("article mark").text()).toBe("重点");
   });
 
   test("keeps the password token in memory and unlocks through p2 then p3", async () => {

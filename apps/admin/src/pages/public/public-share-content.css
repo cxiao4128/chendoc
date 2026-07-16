@@ -68,6 +68,10 @@
   font-family: Consolas, "SFMono-Regular", ui-monospace, monospace;
 }
 
+.public-share-page__content mark {
+  color: inherit;
+}
+
 .public-share-page__content [data-type="taskList"] {
   padding-left: 0;
   list-style: none;

@@ -37,17 +37,6 @@ const site = reactive<PublicShareSiteConfig>({
 const shareKey = computed(() => String(route.params.shareKey || "").trim());
 const siteName = computed(() => site.shortName?.trim() || site.brandName?.trim() || "陈书");
 const shareUrl = computed(() => typeof window === "undefined" ? `/r/${shareKey.value}` : window.location.href);
-const updatedText = computed(() => {
-  if (!doc.value?.updatedAt) return "";
-  const updatedAt = new Date(doc.value.updatedAt);
-  if (Number.isNaN(updatedAt.getTime())) return "";
-  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(updatedAt);
-});
-const readingMinutes = computed(() => {
-  const html = doc.value?.contentHtml || "";
-  const textLength = html.replace(/<[^>]+>/g, " ").replace(/&[^;]+;/g, " ").replace(/\s+/g, "").length;
-  return Math.max(1, Math.ceil(textLength / 400));
-});
 
 function updateDocumentMeta() {
   const pageTitle = doc.value?.title || (state.value === "protected" ? "受保护的分享" : "公开分享");
@@ -215,9 +204,6 @@ watch(shareKey, () => void loadShare(), { immediate: true });
         <section class="public-share-page__intro">
           <h1>{{ doc.title }}</h1>
           <p v-if="doc.summary" class="public-share-page__summary">{{ doc.summary }}</p>
-          <p v-if="updatedText" class="public-share-page__meta">
-            更新于 {{ updatedText }} · 约 {{ readingMinutes }} 分钟阅读
-          </p>
         </section>
         <img
           v-if="doc.coverUrl"

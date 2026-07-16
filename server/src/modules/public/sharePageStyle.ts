@@ -93,7 +93,6 @@ export const sharePageStyle = `
     letter-spacing: 0;
   }
   .lead { margin: 14px 0 0; color: var(--muted); font-size: 16px; }
-  .share-document-meta { margin: 14px 0 0; color: var(--muted); font-size: 14px; }
   .content {
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -125,6 +124,7 @@ export const sharePageStyle = `
   .content th { background: var(--accent-soft); }
   .content pre { overflow-x: auto; background: #111827; color: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
   .content code { font-family: var(--font-mono); }
+  .content mark { color: inherit; }
   .empty { border: 1px solid var(--border); background: var(--paper-soft); border-radius: 8px; padding: 22px; color: var(--muted); }
   .share-native-info {
     display: flex;

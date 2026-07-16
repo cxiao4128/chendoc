@@ -21,6 +21,12 @@ LEGACY_SOURCE_FILES=(
   "apps/admin/public/site-assets/chendoc-logo-192.png"
   "apps/admin/public/site-assets/desktop-bg.png"
   "apps/admin/public/site-assets/chendoc-wallpaper-mirrored.jpg"
+  "apps/admin/src/components/editor/ToolbarMoreMenu.vue"
+  "apps/admin/src/pages/docs/components/DocEditorMobile.types.ts"
+  "apps/admin/src/pages/docs/components/DocEditorMobile.vue"
+  "apps/admin/src/pages/docs/components/DocEditorMobileActions.vue"
+  "apps/admin/src/pages/docs/css/doc-editor-mobile-sheet.css"
+  "apps/admin/src/pages/docs/css/doc-editor-mobile-shell.css"
 )
 for legacy_file in "${LEGACY_SOURCE_FILES[@]}"; do
   if [ -f "$legacy_file" ]; then
