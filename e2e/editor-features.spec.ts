@@ -10,6 +10,7 @@ const testImageBuffer = Buffer.from(
 );
 const testImageUrl = `data:image/png;base64,${testImageBuffer.toString("base64")}`;
 const testVideoUrl = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVl";
+const testVideoBuffer = Buffer.from(testVideoUrl.split(",")[1]!, "base64");
 
 async function mockUploads(page: Page) {
   await page.route("**/api/uploads/presign", async (route) => {
@@ -185,7 +186,7 @@ test.describe("编辑器功能测试", () => {
     await fileInput.setInputFiles({
       name: "test.mp4",
       mimeType: "video/mp4",
-      buffer: Buffer.alloc(1024)
+      buffer: testVideoBuffer
     });
 
     // 等待上传

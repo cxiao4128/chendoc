@@ -50,5 +50,5 @@ jobs:
           CHENDOC_CLOUDFLARE_BACKEND_ORIGIN: https://api.w92.pw
           CHENDOC_CLOUDFLARE_PUBLIC_ORIGIN: https://d.w92.pw
       - run: npm --prefix server run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e

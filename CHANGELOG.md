@@ -16,7 +16,7 @@
 - 保留 `.env`、数据库、上传内容和备份目录，仅清理已经从发行版删除的源码文件。
 - 本次 GitHub 发布包含未单独发布的 `3.4.0`：移动端编辑器重构、iOS Safari 上传兼容、上传签名校验与完成竞态修复、分享页颜色/高亮恢复及阅读元信息移除。
 - 修正文档版本加密密钥版本字段类型，避免字符串密钥版本被错误转换为数字。
-- 修复架构检查器在 Linux CI 中无法匹配既有违规白名单的问题，保证 GitHub 发布流水线与 Windows 本地检查结果一致。
+- 修复架构检查器在 Linux CI 中无法匹配既有违规白名单的问题；CI 补装 WebKit，并把视频 E2E 夹具改为有效 MP4 文件头。
 
 更新时间：2026-07-15 +08:00
 
@@ -560,7 +560,7 @@ Display version: `v3.4.1`
 - `.env`, databases, uploads, and backup directories remain untouched; only source files removed from the release are pruned.
 - This GitHub release includes the previously unpublished `3.4.0`: the mobile-editor redesign, iOS Safari upload compatibility, upload signature/finalization race fixes, restored shared-page colors and highlights, and removal of reading metadata.
 - Fixed document-version encryption key-version types so string key versions are no longer coerced to numbers.
-- Fixed architecture-check allowlist matching on Linux CI so GitHub release checks agree with Windows local checks.
+- Fixed architecture-check allowlist matching on Linux CI, installed WebKit in CI, and replaced the video E2E fixture with a valid MP4 header.
 
 Updated: 2026-07-15 +08:00
 
