@@ -73,7 +73,11 @@ const KNOWN_VIOLATIONS = new Set([
   "stores/doc.spec.ts",
   "stores/doc.state.ts",
   "stores/doc.ts",
-].map(p => p.replace(/\//g, "\\"))); // 统一成 Windows 路径格式
+]);
+
+function normalizeRelativePath(path) {
+  return path.replace(/\\/g, "/");
+}
 
 function read(path) {
   try {
@@ -86,7 +90,7 @@ function read(path) {
 function assert(condition, message, fileHint = null) {
   if (!condition) {
     // 在非严格模式下，检查是否是已知违规
-    if (!isStrictMode && fileHint && KNOWN_VIOLATIONS.has(fileHint)) {
+    if (!isStrictMode && fileHint && KNOWN_VIOLATIONS.has(normalizeRelativePath(fileHint))) {
       warnings.push(`[已记录] ${message}`);
       return;
     }
